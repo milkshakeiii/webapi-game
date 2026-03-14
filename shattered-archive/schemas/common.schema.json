@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shattered-archive.local/schemas/common.schema.json",
+  "$defs": {
+    "essenceName": {
+      "type": "string",
+      "enum": ["lumen", "echo", "motive", "veil"]
+    },
+    "essences": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lumen", "echo", "motive", "veil"],
+      "properties": {
+        "lumen": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "echo": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "motive": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "veil": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "tag": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/tag"
+      },
+      "uniqueItems": true
+    }
+  }
+}

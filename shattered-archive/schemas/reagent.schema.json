@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shattered-archive.local/schemas/reagent.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "essences", "tags", "cost", "count"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "essences": {
+      "$ref": "./common.schema.json#/$defs/essences"
+    },
+    "tags": {
+      "$ref": "./common.schema.json#/$defs/tags"
+    },
+    "cost": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}

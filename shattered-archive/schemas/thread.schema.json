@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shattered-archive.local/schemas/thread.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["essences", "tags", "fray"],
+  "properties": {
+    "essences": {
+      "$ref": "./common.schema.json#/$defs/essences"
+    },
+    "tags": {
+      "$ref": "./common.schema.json#/$defs/tags"
+    },
+    "fray": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

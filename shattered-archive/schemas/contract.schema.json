@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shattered-archive.local/schemas/contract.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "minimum_essences", "max_fray"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "minimum_essences": {
+      "$ref": "./common.schema.json#/$defs/essences"
+    },
+    "maximum_essences": {
+      "$ref": "./common.schema.json#/$defs/essences"
+    },
+    "required_tags": {
+      "$ref": "./common.schema.json#/$defs/tags"
+    },
+    "forbidden_tags": {
+      "$ref": "./common.schema.json#/$defs/tags"
+    },
+    "max_fray": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}

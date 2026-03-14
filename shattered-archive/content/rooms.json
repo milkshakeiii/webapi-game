@@ -1,0 +1,99 @@
+[
+  {
+    "room_id": "lower_stacks_entry",
+    "title": "Lower Stacks Entry",
+    "description": "A vaulted corridor of cracked stone. A broken lantern bowl hangs from a brass chain above a dark stairway descending to the north. The air smells of dust and old ink.",
+    "exits": [
+      {
+        "exit_id": "north_stair",
+        "label": "north",
+        "target_room_id": "deep_stacks",
+        "locked": true,
+        "reason": "The lantern is unlit. The stairway is too dark to descend."
+      }
+    ],
+    "interactables": [
+      {
+        "id": "lantern_bowl",
+        "label": "lantern bowl",
+        "kind": "puzzle_anchor",
+        "description": "The lantern bowl is etched with a contract circle and three reagent slots. A faint residue of old lumen clings to the rim.",
+        "puzzle_id": "lower_stacks_lantern"
+      },
+      {
+        "id": "brass_chain",
+        "label": "brass chain",
+        "kind": "decoration",
+        "description": "A heavy brass chain suspends the lantern bowl from the ceiling. The links are green with age.",
+        "puzzle_id": null
+      }
+    ]
+  },
+  {
+    "room_id": "deep_stacks",
+    "title": "Deep Stacks",
+    "description": "Rows of collapsed shelving stretch into the dark. A rusted iron seal blocks the passage east. The south stairway leads back up to the entry.",
+    "exits": [
+      {
+        "exit_id": "south_stair",
+        "label": "south",
+        "target_room_id": "lower_stacks_entry",
+        "locked": false,
+        "reason": null
+      },
+      {
+        "exit_id": "east_gate",
+        "label": "east",
+        "target_room_id": "index_chamber",
+        "locked": true,
+        "reason": "The iron seal holds firm. Its wards still glow faintly."
+      }
+    ],
+    "interactables": [
+      {
+        "id": "iron_seal",
+        "label": "iron seal",
+        "kind": "puzzle_anchor",
+        "description": "A heavy iron disc set into the wall, inscribed with a motive-class ward. Three reagent grooves radiate from its center.",
+        "puzzle_id": "iron_seal_ward"
+      },
+      {
+        "id": "collapsed_shelf",
+        "label": "collapsed shelf",
+        "kind": "lore",
+        "description": "A shelf that buckled under its own weight long ago. Among the debris you find fragments of a catalogue page listing reagent properties.",
+        "puzzle_id": null
+      }
+    ]
+  },
+  {
+    "room_id": "index_chamber",
+    "title": "Index Chamber",
+    "description": "A circular room with a domed ceiling. The Archive Index floats in the center, its pages turning silently. The west passage leads back to the deep stacks.",
+    "exits": [
+      {
+        "exit_id": "west_gate",
+        "label": "west",
+        "target_room_id": "deep_stacks",
+        "locked": false,
+        "reason": null
+      }
+    ],
+    "interactables": [
+      {
+        "id": "archive_index",
+        "label": "archive index",
+        "kind": "puzzle_anchor",
+        "description": "The Archive Index is a floating codex of translucent pages. Many are blank or torn. A contract circle on its binding awaits a restoration compound.",
+        "puzzle_id": "index_restoration"
+      },
+      {
+        "id": "floating_pages",
+        "label": "floating pages",
+        "kind": "decoration",
+        "description": "Loose pages drift in slow circles near the ceiling, their text too faded to read.",
+        "puzzle_id": null
+      }
+    ]
+  }
+]

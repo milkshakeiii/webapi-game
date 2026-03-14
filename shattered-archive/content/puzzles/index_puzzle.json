@@ -1,0 +1,105 @@
+{
+  "id": "index_restoration",
+  "name": "Restoration of the Archive Index",
+  "bench_capacity": 4,
+  "step_limit": 8,
+  "contract": {
+    "id": "balanced_codex",
+    "name": "Balanced Codex",
+    "minimum_essences": {
+      "lumen": 3,
+      "echo": 3,
+      "motive": 2,
+      "veil": 2
+    },
+    "maximum_essences": {
+      "lumen": 99,
+      "echo": 99,
+      "motive": 99,
+      "veil": 99
+    },
+    "required_tags": ["ink", "mineral"],
+    "forbidden_tags": [],
+    "max_fray": 2
+  },
+  "reagents": [
+    {
+      "id": "deep_ink",
+      "name": "Deep Ink",
+      "essences": {
+        "lumen": 0,
+        "echo": 2,
+        "motive": 0,
+        "veil": 1
+      },
+      "tags": ["ink"],
+      "cost": 2,
+      "count": 1
+    },
+    {
+      "id": "slate_powder",
+      "name": "Slate Powder",
+      "essences": {
+        "lumen": 1,
+        "echo": 0,
+        "motive": 1,
+        "veil": 1
+      },
+      "tags": ["mineral"],
+      "cost": 2,
+      "count": 1
+    },
+    {
+      "id": "binding_gum",
+      "name": "Binding Gum",
+      "essences": {
+        "lumen": 0,
+        "echo": 1,
+        "motive": 1,
+        "veil": 0
+      },
+      "tags": ["ink", "mineral"],
+      "cost": 3,
+      "count": 1
+    },
+    {
+      "id": "prism_chip",
+      "name": "Prism Chip",
+      "essences": {
+        "lumen": 2,
+        "echo": 0,
+        "motive": 0,
+        "veil": 1
+      },
+      "tags": ["mineral", "relic"],
+      "cost": 3,
+      "count": 1
+    },
+    {
+      "id": "whisper_leaf",
+      "name": "Whisper Leaf",
+      "essences": {
+        "lumen": 1,
+        "echo": 1,
+        "motive": 0,
+        "veil": 0
+      },
+      "tags": ["botanic"],
+      "cost": 1,
+      "count": 1
+    },
+    {
+      "id": "forge_ash",
+      "name": "Forge Ash",
+      "essences": {
+        "lumen": 0,
+        "echo": 0,
+        "motive": 2,
+        "veil": 0
+      },
+      "tags": ["metal"],
+      "cost": 1,
+      "count": 1
+    }
+  ]
+}

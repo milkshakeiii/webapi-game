@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shattered-archive.local/schemas/state.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["step", "remaining_reagents", "threads", "history"],
+  "properties": {
+    "step": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "remaining_reagents": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      },
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_-]*$"
+      }
+    },
+    "threads": {
+      "type": "array",
+      "items": {
+        "$ref": "./thread.schema.json"
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "$ref": "./action.schema.json"
+      }
+    }
+  }
+}

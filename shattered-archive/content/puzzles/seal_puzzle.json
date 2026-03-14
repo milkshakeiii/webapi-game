@@ -1,0 +1,92 @@
+{
+  "id": "iron_seal_ward",
+  "name": "Ward of the Iron Seal",
+  "bench_capacity": 3,
+  "step_limit": 7,
+  "contract": {
+    "id": "motive_ward",
+    "name": "Motive Ward",
+    "minimum_essences": {
+      "lumen": 2,
+      "echo": 0,
+      "motive": 5,
+      "veil": 0
+    },
+    "maximum_essences": {
+      "lumen": 99,
+      "echo": 99,
+      "motive": 99,
+      "veil": 2
+    },
+    "required_tags": ["metal"],
+    "forbidden_tags": [],
+    "max_fray": 2
+  },
+  "reagents": [
+    {
+      "id": "iron_filings",
+      "name": "Iron Filings",
+      "essences": {
+        "lumen": 0,
+        "echo": 0,
+        "motive": 2,
+        "veil": 0
+      },
+      "tags": ["metal"],
+      "cost": 2,
+      "count": 1
+    },
+    {
+      "id": "lodite_shard",
+      "name": "Lodite Shard",
+      "essences": {
+        "lumen": 1,
+        "echo": 0,
+        "motive": 1,
+        "veil": 1
+      },
+      "tags": ["metal", "mineral"],
+      "cost": 3,
+      "count": 1
+    },
+    {
+      "id": "copper_wire",
+      "name": "Copper Wire",
+      "essences": {
+        "lumen": 0,
+        "echo": 1,
+        "motive": 1,
+        "veil": 0
+      },
+      "tags": ["metal"],
+      "cost": 1,
+      "count": 1
+    },
+    {
+      "id": "spark_resin",
+      "name": "Spark Resin",
+      "essences": {
+        "lumen": 2,
+        "echo": 0,
+        "motive": 0,
+        "veil": 0
+      },
+      "tags": ["botanic"],
+      "cost": 2,
+      "count": 1
+    },
+    {
+      "id": "ghost_oil",
+      "name": "Ghost Oil",
+      "essences": {
+        "lumen": 0,
+        "echo": 2,
+        "motive": 0,
+        "veil": 1
+      },
+      "tags": ["spectral"],
+      "cost": 2,
+      "count": 1
+    }
+  ]
+}

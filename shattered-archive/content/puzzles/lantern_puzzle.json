@@ -1,0 +1,105 @@
+{
+  "id": "lower_stacks_lantern",
+  "name": "Lantern of the Lower Stacks",
+  "bench_capacity": 3,
+  "step_limit": 6,
+  "contract": {
+    "id": "wisp_lantern",
+    "name": "Wisp Lantern",
+    "minimum_essences": {
+      "lumen": 6,
+      "echo": 4,
+      "motive": 0,
+      "veil": 0
+    },
+    "maximum_essences": {
+      "lumen": 99,
+      "echo": 99,
+      "motive": 99,
+      "veil": 1
+    },
+    "required_tags": ["relic"],
+    "forbidden_tags": ["spectral"],
+    "max_fray": 1
+  },
+  "reagents": [
+    {
+      "id": "mirror_dust",
+      "name": "Mirror Dust",
+      "essences": {
+        "lumen": 2,
+        "echo": 1,
+        "motive": 0,
+        "veil": 1
+      },
+      "tags": ["relic", "mineral"],
+      "cost": 3,
+      "count": 1
+    },
+    {
+      "id": "archive_dust",
+      "name": "Archive Dust",
+      "essences": {
+        "lumen": 1,
+        "echo": 2,
+        "motive": 0,
+        "veil": 0
+      },
+      "tags": ["ink"],
+      "cost": 2,
+      "count": 1
+    },
+    {
+      "id": "catalogue_oil",
+      "name": "Catalogue Oil",
+      "essences": {
+        "lumen": 0,
+        "echo": 1,
+        "motive": 1,
+        "veil": 0
+      },
+      "tags": ["ink", "relic"],
+      "cost": 2,
+      "count": 1
+    },
+    {
+      "id": "brass_filament",
+      "name": "Brass Filament",
+      "essences": {
+        "lumen": 1,
+        "echo": 0,
+        "motive": 2,
+        "veil": 0
+      },
+      "tags": ["relic", "metal"],
+      "cost": 3,
+      "count": 1
+    },
+    {
+      "id": "sunleaf",
+      "name": "Sunleaf",
+      "essences": {
+        "lumen": 2,
+        "echo": 0,
+        "motive": 1,
+        "veil": 0
+      },
+      "tags": ["botanic"],
+      "cost": 1,
+      "count": 1
+    },
+    {
+      "id": "hush_salt",
+      "name": "Hush Salt",
+      "essences": {
+        "lumen": 0,
+        "echo": 1,
+        "motive": 0,
+        "veil": 1
+      },
+      "tags": ["mineral"],
+      "cost": 1,
+      "count": 1
+    }
+  ]
+}

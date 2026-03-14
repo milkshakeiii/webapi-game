@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://shattered-archive.local/schemas/action.schema.json",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "reagent_id"],
+      "properties": {
+        "op": {
+          "const": "add"
+        },
+        "reagent_id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "left_thread", "right_thread"],
+      "properties": {
+        "op": {
+          "const": "bind"
+        },
+        "left_thread": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "right_thread": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "bonus_essence": {
+          "$ref": "./common.schema.json#/$defs/essenceName"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "thread", "essence"],
+      "properties": {
+        "op": {
+          "const": "distill"
+        },
+        "thread": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "essence": {
+          "$ref": "./common.schema.json#/$defs/essenceName"
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "thread", "from_essence", "to_essence", "amount"],
+      "properties": {
+        "op": {
+          "const": "reweave"
+        },
+        "thread": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "from_essence": {
+          "$ref": "./common.schema.json#/$defs/essenceName"
+        },
+        "to_essence": {
+          "$ref": "./common.schema.json#/$defs/essenceName"
+        },
+        "amount": {
+          "type": "integer",
+          "enum": [1, 2]
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["op", "thread", "reduce_essence"],
+      "properties": {
+        "op": {
+          "const": "stabilize"
+        },
+        "thread": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "reduce_essence": {
+          "$ref": "./common.schema.json#/$defs/essenceName"
+        }
+      }
+    }
+  ]
+}
