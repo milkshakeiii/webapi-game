@@ -1,4 +1,4 @@
-"""Async observation job queue."""
+"""Async observation and jump job queues."""
 
 import time
 import uuid
@@ -13,6 +13,9 @@ class JobStatus(Enum):
     FAILED = "failed"
 
 
+VALID_SCAN_PROFILES = {"low_power", "survey", "boosted", "overclocked"}
+
+
 @dataclass
 class ObservationRequest:
     """RTML-style observation request."""
@@ -22,6 +25,8 @@ class ObservationRequest:
     filter_band: str | None    # "clear", "h_alpha", "oiii", "r_band", "b_band", None
     exposure_time: float       # seconds
     scheduling_priority: str = "medium"  # "low", "medium", "high", "override"
+    scan_profile: str = "survey"  # "low_power", "survey", "boosted", "overclocked"
+    active_module: str | None = None
 
     def validate(self):
         errors = []
@@ -38,6 +43,8 @@ class ObservationRequest:
             errors.append("exposure_time must be 1-3600 seconds")
         if self.scheduling_priority not in ("low", "medium", "high", "override"):
             errors.append(f"unknown priority: {self.scheduling_priority}")
+        if self.scan_profile not in VALID_SCAN_PROFILES:
+            errors.append(f"unknown scan_profile: {self.scan_profile}")
         return errors
 
 
@@ -55,6 +62,21 @@ class ObservationJob:
     error: str | None = None
 
 
+@dataclass
+class JumpJob:
+    """A jump charge job."""
+    job_id: str
+    session_id: str
+    destination_au: dict
+    charge_profile: str
+    charge_duration_sec: float
+    status: JobStatus = JobStatus.QUEUED
+    started_at: float | None = None
+    charged_at: float | None = None
+    completed_at: float | None = None
+    result: dict | None = None
+
+
 class JobQueue:
     """In-memory job queue with time-based completion."""
 
@@ -64,6 +86,7 @@ class JobQueue:
 
     def __init__(self):
         self._jobs: dict[str, ObservationJob] = {}
+        self._jump_jobs: dict[str, JumpJob] = {}
         self._by_session: dict[str, list[str]] = {}
 
     def submit(self, session_id: str, request: ObservationRequest) -> ObservationJob:
@@ -113,3 +136,31 @@ class JobQueue:
             job.status = JobStatus.FAILED
             job.completed_at = time.time()
             job.error = error
+
+    # -- jump jobs -----------------------------------------------------------
+
+    def submit_jump(self, session_id: str, destination_au: dict,
+                    charge_profile: str, charge_duration_sec: float,
+                    now: float) -> JumpJob:
+        job_id = "jmp-" + str(uuid.uuid4())[:8]
+        job = JumpJob(
+            job_id=job_id,
+            session_id=session_id,
+            destination_au=destination_au,
+            charge_profile=charge_profile,
+            charge_duration_sec=charge_duration_sec,
+            status=JobStatus.PROCESSING,
+            started_at=now,
+        )
+        self._jump_jobs[job_id] = job
+        return job
+
+    def get_jump_job(self, job_id: str) -> JumpJob | None:
+        return self._jump_jobs.get(job_id)
+
+    def complete_jump(self, job_id: str, result: dict):
+        job = self._jump_jobs.get(job_id)
+        if job:
+            job.status = JobStatus.COMPLETED
+            job.completed_at = time.time()
+            job.result = result
