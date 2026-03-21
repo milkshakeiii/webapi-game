@@ -1,0 +1,16 @@
+;name Scorpion
+;strategy: balanced fork+bomb+score with embedded wells
+MOV #100, $10     ; build well 1
+MOV #100, $10     ; build well 2
+FORK #0, #14      ; colonize edge 0 (carries wells in payload)
+FORK #1, #14      ; colonize edge 1
+; Main loop: score, bomb, repeat
+SCORE $6          ; score from well 1
+SCORE $6          ; score from well 2
+ADD #5, $6        ; advance bomb pointer
+MOV #0, @5        ; bomb
+JMP $-4, #0       ; loop
+; Wells (targets of MOV above)
+DAT #0, #0        ; becomes DAT #0, #100
+DAT #0, #0        ; becomes DAT #0, #100
+DAT #0, #12       ; bomb pointer

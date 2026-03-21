@@ -1,0 +1,60 @@
+;name Vanguard
+;strategy: 40-instruction aggressive raider with role divergence
+; Commander: triple bomb streams + well repair + constant re-forking
+; Worker: score from wells + self-repair + spread for cycle theft
+;
+; === ENTRY (cell 0): fork + role check ===
+FORK #0, #32       ; fork cells 0-31 to edge 0
+FORK #1, #32       ; fork to edge 1
+CMP #0, $37        ; role check: cell 39 (outside payload)
+; CMP skips if NOT equal → commander
+JMP $14, #0        ; role=0 (worker) → jump to worker at cell 18
+;
+; === COMMANDER (cells 5-17): aggressive bombing + scoring ===
+; Triple bomb streams for maximum disruption
+ADD #3, $30        ; PC=5: advance bomb ptr 1 (cell 35)
+MOV #0, @29        ; PC=6: bomb from ptr 1
+ADD #5, $29        ; PC=7: advance bomb ptr 2 (cell 36)
+MOV #0, @28        ; PC=8: bomb from ptr 2
+ADD #7, $28        ; PC=9: advance bomb ptr 3 (cell 37)
+MOV #0, @27        ; PC=10: bomb from ptr 3
+; Score from wells
+SCORE $19, #127    ; PC=11: reads cell 30 (well, 127)
+SCORE $19, #127    ; PC=12: reads cell 31 (well, 127)
+; Repair wells
+MOV #127, $17      ; PC=13: repair cell 30
+MOV #127, $18      ; PC=14: repair cell 32
+; Re-fork constantly
+FORK #0, #32       ; PC=15: re-fork
+FORK #1, #32       ; PC=16: re-fork
+JMP $-12, #127     ; PC=17: back to cell 5
+;
+; === WORKER (cells 18-29): efficient scoring with repair ===
+FORK #0, #14       ; PC=18: spread further (copies cells 18-31)
+FORK #1, #14       ; PC=19: spread
+; Score from wells at cells 30-33
+SCORE $10, #127    ; PC=20: reads cell 30 (well, 127)
+SCORE $10, #127    ; PC=21: reads cell 31 (well, 127)
+SCORE $10, #127    ; PC=22: reads cell 32 (well, 127)
+SCORE $10, #127    ; PC=23: reads cell 33 (well, 127)
+SCORE $7, #127     ; PC=24: reads cell 31 (well, 127)
+SCORE $7, #127     ; PC=25: reads cell 32 (well, 127)
+; Repair wells between scoring passes
+MOV #127, $4       ; PC=26: repair cell 30
+MOV #127, $5       ; PC=27: repair cell 32
+JMP $-10, #127     ; PC=28: back to cell 18 (re-fork + score)
+DAT #0, #0         ; cell 29: spacer
+;
+; === WELL ZONE (cells 30-33): scoring infrastructure ===
+DAT #0, #127       ; cell 30: well
+DAT #0, #127       ; cell 31: well
+DAT #0, #127       ; cell 32: well
+DAT #0, #127       ; cell 33: well
+DAT #0, #0         ; cell 34: spacer
+;
+; === BOMB POINTERS (cells 35-37) ===
+DAT #0, #40        ; cell 35: bomb pointer 1
+DAT #0, #50        ; cell 36: bomb pointer 2
+DAT #0, #60        ; cell 37: bomb pointer 3
+DAT #0, #0         ; cell 38: spacer
+DAT #0, #1         ; cell 39: role flag (1=commander)

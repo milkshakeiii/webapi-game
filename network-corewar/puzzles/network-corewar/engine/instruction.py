@@ -3,7 +3,7 @@
 import re
 from .graph import Cell
 
-OPCODES = {'DAT', 'MOV', 'ADD', 'SUB', 'MOD', 'JMP', 'JMZ', 'CMP', 'SEND', 'RECV', 'FORK', 'SCAN'}
+OPCODES = {'DAT', 'MOV', 'ADD', 'SUB', 'MOD', 'JMP', 'JMZ', 'CMP', 'SEND', 'RECV', 'FORK', 'SCAN', 'SCORE'}
 MODES = {'#', '$', '@'}
 
 

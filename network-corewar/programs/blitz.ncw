@@ -1,8 +1,0 @@
-;name Blitz
-; Fork full payload, then bomb with step-2 pattern
-FORK #0, #6      ; colonize edge 0
-FORK #1, #6      ; colonize edge 1
-ADD #2, $4       ; advance bomb pointer by 2
-MOV #0, @3       ; write DAT at bombed address
-JMP $-4, #0      ; loop (re-fork + bomb)
-DAT #0, #6       ; bomb pointer

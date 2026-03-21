@@ -1,0 +1,17 @@
+;name WellRaider
+;strategy: invade enemy nodes and score from THEIR wells
+; Fork aggressively, then score whatever b_values exist on captured nodes
+; Enemy wells become our scoring infrastructure
+FORK #0, #12      ; colonize edge 0
+FORK #1, #12      ; colonize edge 1
+; Scan for valuable cells — score from whatever's there
+SCORE $8          ; score from cell at PC+8
+SCORE $9          ; score from cell at PC+9
+SCORE $10         ; score from cell at PC+10
+SCORE $11         ; score from cell at PC+11
+SCORE $12         ; score from cell at PC+12
+; Also bomb to disrupt enemy processes (but leave their wells!)
+ADD #7, $4        ; advance bomb pointer (skip every 7 to miss wells)
+MOV #0, @3        ; bomb selectively
+JMP $-10, #0      ; loop
+DAT #0, #12       ; bomb pointer

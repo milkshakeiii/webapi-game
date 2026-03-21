@@ -1,0 +1,16 @@
+;name Harvester
+;author example
+;strategy: fork to claim nodes, build wells, score from them
+; Phase 1: build wells
+MOV #100, $9      ; write scoring well (DAT #0, #100)
+MOV #100, $9      ; write another well
+; Phase 2: fork to spread (carries wells in payload)
+FORK #0, #12      ; fork to edge 0 with 12-cell payload
+FORK #1, #12      ; fork to edge 1
+; Phase 3: score from wells
+SCORE $5          ; score from well 1
+SCORE $5          ; score from well 2
+JMP $-2, #0       ; loop scoring
+; Wells (targets of MOV above)
+DAT #0, #0        ; becomes DAT #0, #100
+DAT #0, #0        ; becomes DAT #0, #100

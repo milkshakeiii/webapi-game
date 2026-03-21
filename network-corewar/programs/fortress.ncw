@@ -1,6 +1,0 @@
-;name Fortress
-; Pure defense: bomb without forking
-ADD #3, $3       ; increment bomb pointer
-MOV #0, @2       ; bomb at computed address
-JMP $-2, #0      ; loop
-DAT #0, #4       ; bomb pointer

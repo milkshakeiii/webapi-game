@@ -1,0 +1,72 @@
+;name WellMaster
+;strategy: build scoring wells, defend them, fork scorers to harvest
+; Role divergence: commander builds/defends, forked scorers harvest wells
+;
+; === ENTRY (cell 0) ===
+FORK #0, #40      ; fork scorer payload to edge 0
+FORK #1, #40      ; fork to edge 1
+CMP #0, $60       ; role check (cell 62 outside payload)
+JMP $30, #0       ; role=0 (scorer) → jump to score loop at cell 33
+;
+; === COMMANDER (cells 4-32): build wells + defend ===
+; Build scoring wells: write high-value DATs at cells 50-59
+MOV #120, $46      ; write DAT #0,#120 at cell 50
+MOV #120, $46      ; write DAT #0,#120 at cell 51 (PC advanced)
+MOV #120, $46      ; cell 52
+MOV #120, $46      ; cell 53
+MOV #120, $46      ; cell 54
+MOV #120, $46      ; cell 55
+; Wells built! Now defend + re-fork + score
+FORK #0, #40      ; keep spreading
+FORK #1, #40      ; spread other direction
+; Bomb to defend territory
+ADD #5, $19       ; advance bomb pointer
+MOV #0, @18       ; bomb
+ADD #5, $17       ; bomb pointer 2
+MOV #0, @16       ; bomb again
+; Commander also scores from wells
+SCORE $33         ; score from well at cell 50 (PC=17, $33=50)
+SCORE $33         ; score from well at cell 51
+SCORE $33         ; cell 52
+SCORE $33         ; cell 53
+; Re-fork and loop
+FORK #0, #40      ; maintain presence
+JMP $-14, #0      ; back to bombing loop
+DAT #0, #28       ; bomb pointer 1
+DAT #0, #35       ; bomb pointer 2
+;
+; === SCORER LOOP (cell 33) ===
+; Forked processes land here. Score from wells at cells 50+
+; But on forked nodes, wells might not exist yet — score what we can
+FORK #0, #10      ; spread further
+FORK #1, #10      ; spread other direction
+; Build local wells too
+MOV #127, $14     ; write well at cell 49
+MOV #127, $14     ; well at cell 50
+MOV #127, $14     ; well at cell 51
+; Score from local wells
+SCORE $12         ; score from cell 49
+SCORE $12         ; score from cell 50
+SCORE $12         ; score from cell 51
+SCORE $12         ; score from cell 52
+SCORE $12         ; score from cell 53
+JMP $-5, #0       ; loop scoring
+;
+; === WELLS (cells 48-58) — scoring infrastructure ===
+DAT #0, #0        ; cell 48
+DAT #0, #0        ; cell 49 — will be pumped to 127
+DAT #0, #0        ; cell 50
+DAT #0, #0        ; cell 51
+DAT #0, #0        ; cell 52
+DAT #0, #0        ; cell 53
+DAT #0, #0        ; cell 54
+DAT #0, #0        ; cell 55
+DAT #0, #0        ; cell 56
+DAT #0, #0        ; cell 57
+DAT #0, #0        ; cell 58
+;
+; === DATA (cells 59+, outside payload) ===
+DAT #0, #0        ; cell 59
+DAT #0, #0        ; cell 60
+DAT #0, #0        ; cell 61
+DAT #0, #1        ; cell 62: role flag (commander)

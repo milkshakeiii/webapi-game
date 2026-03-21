@@ -1,9 +1,0 @@
-;name Relay
-; Fork a minimal RECV listener to neighbor, then SEND full code over
-; The listener receives cells and builds up the program remotely
-FORK #0, #4      ; fork to edge 0 with 4-cell listener payload
-SEND $0, #0      ; send this FORK to edge 0
-SEND $5, #0      ; send the JMP to edge 0
-JMP $-3, #0      ; loop: keep forking and sending
-RECV $8, #1      ; listener: receive from edge 1 (back toward sender)
-JMP $-1, #0      ; loop: keep receiving

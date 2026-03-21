@@ -9,13 +9,15 @@ from .instruction import cell_to_str
 class Match:
     """Runs a Network CoreWar match."""
 
-    def __init__(self, graph, max_turns=10000, max_processes=16):
+    def __init__(self, graph, max_turns=10000, max_processes=16, score_target=None):
         self.graph = graph
         self.max_turns = max_turns
         self.max_processes = max_processes
+        self.score_target = score_target  # None = no score victory, use node_count
         self.turn = 0
         # player_id -> list of Process (FIFO queue)
         self.processes = defaultdict(list)
+        self.scores = defaultdict(int)  # player_id -> score points
         self.player_names = {}
         self.eliminated = set()
         self.log = []
@@ -161,6 +163,19 @@ class Match:
                 target.b_value = count % node.size
             proc.pc = (proc.pc + 1) % node.size
 
+        elif op == 'SCORE':
+            # Burns the cycle to score points equal to b_value of the referenced
+            # cell. Immediate mode (#) is treated as relative ($) — SCORE always
+            # reads from memory, never from a literal. This ensures all scoring
+            # depends on data cells that enemies can bomb.
+            mode = cell.a_mode if cell.a_mode != '#' else '$'
+            addr = self.resolve_address(node, proc.pc, mode, cell.a_value)
+            if addr is not None:
+                points = node.read(addr).b_value
+                if points > 0:
+                    self.scores[proc.player_id] += points
+            proc.pc = (proc.pc + 1) % node.size
+
         elif op == 'FORK':
             edge_idx = self.get_value(node, proc.pc, cell.a_mode, cell.a_value)
             payload_size = self.get_value(node, proc.pc, cell.b_mode, cell.b_value)
@@ -190,6 +205,10 @@ class Match:
         for turn in range(self.max_turns):
             self.turn = turn
 
+            # Reset cycle budgets for all nodes
+            for node in self.graph.nodes.values():
+                node.cycles_remaining = node.cycles
+
             # Alternate player order each turn to reduce ordering bias
             if turn % 2 == 0:
                 turn_order = player_ids
@@ -206,10 +225,16 @@ class Match:
                 surviving = []
 
                 for proc in self.processes[pid]:
-                    alive, new_procs = self.execute(proc, verbose=verbose)
-                    if alive:
+                    node = self.graph.nodes[proc.node_id]
+                    if node.cycles_remaining > 0:
+                        node.cycles_remaining -= 1
+                        alive, new_procs = self.execute(proc, verbose=verbose)
+                        if alive:
+                            surviving.append(proc)
+                        pending[pid].extend(new_procs)
+                    else:
+                        # No cycles left on this node — process skips this turn
                         surviving.append(proc)
-                    pending[pid].extend(new_procs)
 
                 self.processes[pid] = surviving
 
@@ -265,13 +290,33 @@ class Match:
                     if verbose:
                         print(f"Turn {turn}: Player {pid} ({self.player_names.get(pid, '?')}) eliminated")
 
+            # Check for score victory
+            if self.score_target is not None:
+                score_winners = [pid for pid in player_ids
+                                 if self.scores[pid] >= self.score_target
+                                 and pid not in self.eliminated]
+                if score_winners:
+                    max_score = max(self.scores[pid] for pid in score_winners)
+                    top = [pid for pid in score_winners if self.scores[pid] == max_score]
+                    winner = top[0] if len(top) == 1 else None
+                    return winner, self._results(winner, "score")
+
             # Check for winner by elimination
             alive_players = [p for p in player_ids if p not in self.eliminated]
             if len(alive_players) <= 1:
                 winner = alive_players[0] if alive_players else None
                 return winner, self._results(winner, "elimination")
 
-        # Turn limit reached - score by node ownership
+        # Turn limit reached
+        if self.score_target is not None:
+            # Highest score wins
+            alive_scores = {pid: self.scores[pid] for pid in player_ids if pid not in self.eliminated}
+            if alive_scores:
+                max_score = max(alive_scores.values())
+                top = [pid for pid, s in alive_scores.items() if s == max_score]
+                winner = top[0] if len(top) == 1 else None
+                return winner, self._results(winner, "score_timeout")
+        # Fall back to node ownership
         winner = self._score_nodes(player_ids)
         return winner, self._results(winner, "node_count")
 
@@ -316,4 +361,5 @@ class Match:
             'turns': self.turn,
             'node_ownership': dict(ownership),
             'processes': {pid: len(procs) for pid, procs in self.processes.items()},
+            'scores': dict(self.scores),
         }

@@ -1,6 +1,0 @@
-;name Scout
-; Fork a small imp payload to both edges — fast spread, minimal copy
-FORK #0, #4      ; fork to edge 0, copy 4 cells
-FORK #1, #4      ; fork to edge 1, copy 4 cells
-MOV $0, $1       ; imp: copy forward
-JMP $-1, #0      ; keep imping

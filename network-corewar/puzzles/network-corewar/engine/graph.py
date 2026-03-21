@@ -32,13 +32,13 @@ class Cell:
 class Node:
     """A graph node with a circular memory array."""
 
-    def __init__(self, node_id, size=16):
+    def __init__(self, node_id, size=16, cycles=4):
         self.node_id = node_id
         self.size = size
+        self.cycles = cycles  # max execution cycles per turn
+        self.cycles_remaining = cycles  # reset each turn
         self.memory = [Cell() for _ in range(size)]
-        self.edges = []  # list of (edge_index, neighbor_node_id)
-        # Edge buffers: dict of edge_index -> Cell or None (one per direction)
-        # Key is (from_node, to_node) style, but we store per-edge-index incoming
+        self.edges = []  # list of neighbor_node_ids
         self.recv_buffers = {}  # edge_index -> Cell or None
 
     def read(self, address):
@@ -54,8 +54,8 @@ class Graph:
     def __init__(self):
         self.nodes = {}  # node_id -> Node
 
-    def add_node(self, node_id, size=16):
-        node = Node(node_id, size)
+    def add_node(self, node_id, size=16, cycles=4):
+        node = Node(node_id, size, cycles)
         self.nodes[node_id] = node
         return node
 
@@ -104,7 +104,7 @@ class Graph:
             node.recv_buffers = {i: None for i in range(len(node.edges))}
 
     @staticmethod
-    def make_ring(num_nodes, node_size=16):
+    def make_ring(num_nodes, node_size=16, cycles=4):
         """Create a ring topology with consistent edge ordering.
 
         Every node has edge 0 = clockwise (next) and edge 1 = counter-clockwise (prev).
@@ -112,7 +112,7 @@ class Graph:
         """
         g = Graph()
         for i in range(num_nodes):
-            g.add_node(i, node_size)
+            g.add_node(i, node_size, cycles)
         for i in range(num_nodes):
             node = g.nodes[i]
             cw = (i + 1) % num_nodes
@@ -122,7 +122,7 @@ class Graph:
         return g
 
     @staticmethod
-    def make_grid(rows, cols, node_size=16):
+    def make_grid(rows, cols, node_size=16, cycles=4):
         """Create a toroidal grid topology.
 
         Wraps around both axes so every node has exactly 4 edges.
@@ -132,7 +132,7 @@ class Graph:
         g = Graph()
         for r in range(rows):
             for c in range(cols):
-                g.add_node(r * cols + c, node_size)
+                g.add_node(r * cols + c, node_size, cycles)
         for r in range(rows):
             for c in range(cols):
                 nid = r * cols + c
@@ -146,7 +146,7 @@ class Graph:
         return g
 
     @staticmethod
-    def make_star(num_spokes, node_size=16):
+    def make_star(num_spokes, node_size=16, cycles=4):
         """Create a star topology: one center node connected to all spoke nodes.
 
         Center is node 0. Spoke nodes are 1..num_spokes.
@@ -155,9 +155,9 @@ class Graph:
         Total nodes = num_spokes + 1.
         """
         g = Graph()
-        g.add_node(0, node_size)  # center
+        g.add_node(0, node_size, cycles)  # center
         for i in range(1, num_spokes + 1):
-            g.add_node(i, node_size)
+            g.add_node(i, node_size, cycles)
         # Center connects to all spokes
         g.nodes[0].edges = list(range(1, num_spokes + 1))
         # Each spoke connects back to center
@@ -167,14 +167,14 @@ class Graph:
         return g
 
     @staticmethod
-    def make_complete(num_nodes, node_size=16):
+    def make_complete(num_nodes, node_size=16, cycles=4):
         """Create a complete graph where every node connects to every other.
 
         Each node's edges are ordered by node ID (excluding self).
         """
         g = Graph()
         for i in range(num_nodes):
-            g.add_node(i, node_size)
+            g.add_node(i, node_size, cycles)
         for i in range(num_nodes):
             g.nodes[i].edges = [j for j in range(num_nodes) if j != i]
         g._init_recv_buffers()

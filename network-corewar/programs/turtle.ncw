@@ -1,7 +1,0 @@
-;name Turtle
-; Fork minimal imp to edges, rely on imp trail for resilience
-FORK #0, #5      ; fork to edge 0, copy 5 cells
-FORK #1, #5      ; fork to edge 1, copy 5 cells
-JMP $1, #0       ; jump to imp
-MOV $0, $1       ; imp: copy forward
-JMP $-1, #0      ; keep imping

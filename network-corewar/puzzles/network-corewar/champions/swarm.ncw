@@ -1,0 +1,47 @@
+;name Swarm
+;strategy: 42-instruction economy warrior — pre-embedded wells, instant scoring
+; No MOV setup phase — wells are DAT #0, #127 in source, ready from turn 0.
+; Fast startup: fork + score immediately. Dual bomb streams.
+; Large well bank (6 wells) for redundancy. Constant re-forking.
+;
+; === FORK + SCORE LOOP (cells 0-27) ===
+FORK #0, #30       ; PC=0: fork cells 0-29 to edge 0 (carries wells)
+FORK #1, #30       ; PC=1: fork to edge 1
+; Score from pre-embedded wells at cells 24-29
+SCORE $22, #127    ; PC=2: reads cell 24 (well, 127)
+SCORE $22, #127    ; PC=3: reads cell 25 (well, 127)
+SCORE $22, #127    ; PC=4: reads cell 26 (well, 127)
+SCORE $22, #127    ; PC=5: reads cell 27 (well, 127)
+; Bomb stream 1
+ADD #3, $16        ; PC=6: advance bomb pointer at cell 22
+MOV #0, @15        ; PC=7: bomb from cell 22
+; Score more wells
+SCORE $18, #127    ; PC=8: reads cell 26 (well, 127)
+SCORE $18, #127    ; PC=9: reads cell 27 (well, 127)
+SCORE $18, #127    ; PC=10: reads cell 28 (well, 127)
+SCORE $18, #127    ; PC=11: reads cell 29 (well, 127)
+; Bomb stream 2
+ADD #5, $11        ; PC=12: advance bomb pointer at cell 23
+MOV #0, @10        ; PC=13: bomb from cell 23
+; Repair wells
+MOV #127, $10      ; PC=14: repair cell 24
+MOV #127, $11      ; PC=15: repair cell 26
+MOV #127, $12      ; PC=16: repair cell 28
+; Re-fork for territory pressure + cycle theft
+FORK #0, #30       ; PC=17: re-fork
+FORK #1, #30       ; PC=18: re-fork
+; Final scoring burst
+SCORE $6, #127     ; PC=19: reads cell 25 (well, 127)
+SCORE $6, #127     ; PC=20: reads cell 26 (well, 127)
+JMP $-19, #127     ; PC=21: back to cell 2 (skip initial forks)
+;
+; === DATA (cells 22-29) ===
+DAT #0, #32        ; cell 22: bomb pointer 1
+DAT #0, #45        ; cell 23: bomb pointer 2
+; Well zone (pre-embedded, no MOV needed)
+DAT #0, #127       ; cell 24: well
+DAT #0, #127       ; cell 25: well
+DAT #0, #127       ; cell 26: well
+DAT #0, #127       ; cell 27: well
+DAT #0, #127       ; cell 28: well
+DAT #0, #127       ; cell 29: well

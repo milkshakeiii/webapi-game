@@ -1,0 +1,12 @@
+;name Warrior
+;author example
+;strategy: fork aggressively, bomb everything, never score
+; Pure fighter — wins by eliminating the opponent, not scoring
+FORK #0, #8       ; fork to edge 0 with 8-cell payload
+FORK #1, #8       ; fork to edge 1 with 8-cell payload
+ADD #4, $5        ; advance bomb target
+MOV #0, @4        ; bomb
+ADD #4, $3        ; advance bomb target again
+MOV #0, @2        ; bomb again
+JMP $-4, #0       ; loop bombing
+DAT #0, #8        ; bomb pointer

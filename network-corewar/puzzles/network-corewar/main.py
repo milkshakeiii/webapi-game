@@ -23,12 +23,15 @@ def main():
     parser = argparse.ArgumentParser(description='Network CoreWar')
     parser.add_argument('programs', nargs='+', help='Program files (.ncw)')
     parser.add_argument('--nodes', type=int, default=None, help='Number of graph nodes')
-    parser.add_argument('--node-size', type=int, default=16, help='Memory cells per node')
+    parser.add_argument('--node-size', type=int, default=128, help='Memory cells per node')
     parser.add_argument('--max-turns', type=int, default=10000, help='Maximum turns')
+    parser.add_argument('--score-target', type=int, default=100000,
+                        help='Points needed to win via SCORE (0 to disable)')
     parser.add_argument('--topology', choices=['ring', 'grid', 'star', 'complete'],
                         default='ring', help='Graph topology')
     parser.add_argument('--grid-rows', type=int, default=None, help='Grid rows (for grid topology)')
     parser.add_argument('--grid-cols', type=int, default=None, help='Grid cols (for grid topology)')
+    parser.add_argument('--cycles', type=int, default=2, help='Execution cycles per node per turn')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose output')
     parser.add_argument('--dump', '-d', action='store_true', help='Dump final node state')
     args = parser.parse_args()
@@ -38,22 +41,23 @@ def main():
     # Build graph
     if args.topology == 'ring':
         num_nodes = args.nodes or (4 * num_players)
-        graph = Graph.make_ring(num_nodes, args.node_size)
+        graph = Graph.make_ring(num_nodes, args.node_size, args.cycles)
     elif args.topology == 'grid':
         rows = args.grid_rows or (2 * num_players)
         cols = args.grid_cols or (2 * num_players)
-        graph = Graph.make_grid(rows, cols, args.node_size)
+        graph = Graph.make_grid(rows, cols, args.node_size, args.cycles)
         num_nodes = rows * cols
     elif args.topology == 'star':
         num_spokes = args.nodes or (3 * num_players)
-        graph = Graph.make_star(num_spokes, args.node_size)
+        graph = Graph.make_star(num_spokes, args.node_size, args.cycles)
         num_nodes = num_spokes + 1
     elif args.topology == 'complete':
         num_nodes = args.nodes or (3 * num_players)
-        graph = Graph.make_complete(num_nodes, args.node_size)
+        graph = Graph.make_complete(num_nodes, args.node_size, args.cycles)
 
     # Load programs and set up match
-    match = Match(graph, max_turns=args.max_turns)
+    score_target = args.score_target if args.score_target > 0 else None
+    match = Match(graph, max_turns=args.max_turns, score_target=score_target)
 
     # Determine starting nodes — spread players evenly, topology-aware
     node_ids = sorted(graph.nodes.keys())
@@ -74,14 +78,15 @@ def main():
         start_nodes = [node_ids[(i * len(node_ids)) // num_players] for i in range(num_players)]
 
     for i, prog_file in enumerate(args.programs):
-        name, cells = load_program(prog_file)
+        name, cells = load_program(prog_file, args.node_size)
         if len(cells) > args.node_size:
             print(f"Error: {prog_file} has {len(cells)} instructions, max is {args.node_size}")
             sys.exit(1)
         match.place_program(i, name, cells, start_nodes[i])
         print(f"Player {i}: {name} -> node {start_nodes[i]} ({len(cells)} instructions)")
 
-    print(f"\nGraph: {num_nodes} nodes, {args.topology} topology, {args.node_size} cells/node")
+    score_str = f", score target: {args.score_target}" if args.score_target else ""
+    print(f"\nGraph: {num_nodes} nodes, {args.topology} topology, {args.node_size} cells/node, {args.cycles} cycles/node{score_str}")
     print(f"Max turns: {args.max_turns}\n")
 
     # Run
@@ -93,6 +98,8 @@ def main():
     print(f"Turns: {results['turns']}")
     print(f"Node ownership: {results['node_ownership']}")
     print(f"Surviving processes: {results['processes']}")
+    if results.get('scores'):
+        print(f"Scores: {results['scores']}")
 
     if args.dump:
         print(f"\n=== FINAL STATE ===")

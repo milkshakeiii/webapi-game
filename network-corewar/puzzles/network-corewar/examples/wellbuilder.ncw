@@ -1,0 +1,18 @@
+;name WellBuilder
+;author example
+;strategy: build high-value scoring wells, then score from them
+; Phase 1: set up scoring infrastructure
+MOV #100, $10     ; write DAT with b_value=100 at PC+10 (scoring well)
+MOV #100, $10     ; write another well
+; Phase 2: fork to spread wells + scorer
+FORK #0, #12      ; fork to edge 0, carry 12 cells (wells included)
+FORK #1, #12      ; fork to edge 1
+; Phase 3: score from wells repeatedly
+SCORE $5          ; score b_value of well at PC+5
+SCORE $5          ; score again from same well
+SCORE $4          ; score from other well
+SCORE $4          ; score again
+JMP $-4, #0       ; loop scoring
+; Scoring wells (targets of the MOV instructions above)
+DAT #0, #0        ; will become DAT #0, #100
+DAT #0, #0        ; will become DAT #0, #100
