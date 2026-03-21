@@ -24,7 +24,7 @@ cd puzzles/network-corewar
 python3 submit.py my_warrior.ncw
 
 # Run a single match to debug
-python3 main.py my_warrior.ncw champions/apex.ncw -v
+python3 main.py my_warrior.ncw champions/apex.ncwc -v
 
 # Study the examples
 ls examples/
@@ -77,5 +77,5 @@ See [SPEC.md](SPEC.md) for the complete instruction set (13 instructions), addre
 - `submit.py` — Submit your warrior and see if it beats the champions
 - `main.py` — Run individual matches with full control over settings
 - `SPEC.md` — Complete game specification
-- `champions/` — The warriors you need to beat
+- `champions/` — The warriors you need to beat (compiled `.ncwc` format)
 - `examples/` — Reference warriors showing different strategies

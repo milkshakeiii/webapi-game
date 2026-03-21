@@ -71,8 +71,8 @@ def main():
     # Select representative warriors (mix of strategies and sizes)
     base = os.path.dirname(os.path.abspath(__file__))
     warrior_files = [
-        os.path.join(base, 'champions', 'apex.ncw'),
-        os.path.join(base, 'champions', 'scorpion.ncw'),
+        os.path.join(base, 'champions', 'apex.ncwc'),
+        os.path.join(base, 'champions', 'scorpion.ncwc'),
         os.path.join(base, 'examples', 'harvester.ncw'),
         os.path.join(base, 'examples', 'warrior.ncw'),
         os.path.join(base, 'examples', 'colonizer.ncw'),

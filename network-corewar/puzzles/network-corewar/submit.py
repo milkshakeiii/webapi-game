@@ -61,7 +61,7 @@ def load_field():
         if not os.path.isdir(dirpath):
             continue
         for fname in sorted(os.listdir(dirpath)):
-            if fname.endswith('.ncw'):
+            if fname.endswith('.ncw') or fname.endswith('.ncwc'):
                 path = os.path.join(dirpath, fname)
                 name, cells = load_program(path, NODE_SIZE)
                 field.append((name, cells))
