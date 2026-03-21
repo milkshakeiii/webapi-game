@@ -1,0 +1,5 @@
+;name Fork Test
+; Try to fork a process to neighbor node
+FORK #0, #0    ; fork to edge 0, starting at PC 0
+FORK #1, #0    ; fork to edge 1, starting at PC 0
+JMP $-2, #0    ; loop

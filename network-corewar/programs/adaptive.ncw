@@ -1,0 +1,21 @@
+;name Adaptive
+;strategy: SCAN both edges, fork to least occupied, bomb the most occupied
+; Uses computed edge indices via $ addressing
+SCAN $10, #0      ; scan edge 0, result → cell 10
+SCAN $10, #1      ; scan edge 1, result → cell 11
+CMP $9, $9        ; compare edge 0 count vs edge 1 count
+; CMP skips if NOT equal — if counts differ, skip to smart fork
+JMP $3, #0        ; equal counts: fork edge 0 by default
+; Counts differ: fork to the one with LOWER count
+; (lower count = less occupied = better target)
+; If edge0 < edge1, we want edge 0. If edge1 < edge0, we want edge 1.
+FORK #0, #10      ; fork edge 0 (placeholder — we'll try both)
+JMP $2, #0        ; skip
+FORK #1, #10      ; fork edge 1
+; Bomb phase
+ADD #2, $2        ; advance bomb pointer
+MOV #0, @1        ; bomb
+JMP $-11, #0      ; loop
+DAT #0, #0        ; scratch for scan edge 0
+DAT #0, #0        ; scratch for scan edge 1
+DAT #0, #12       ; bomb pointer

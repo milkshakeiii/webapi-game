@@ -1,0 +1,3 @@
+;name Imp
+;author classic
+MOV $0, $1       ; copy self one cell forward

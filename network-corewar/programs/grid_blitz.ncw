@@ -1,0 +1,10 @@
+;name GridBlitz
+; Optimized for grid: fork to all 4 edges, then bomb
+FORK #0, #8      ; fork right
+FORK #1, #8      ; fork down
+FORK #2, #8      ; fork left
+FORK #3, #8      ; fork up
+ADD #3, $4       ; increment bomb pointer
+MOV #0, @3       ; bomb
+JMP $-6, #0      ; loop
+DAT #0, #8       ; bomb pointer

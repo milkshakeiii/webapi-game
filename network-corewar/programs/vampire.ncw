@@ -1,0 +1,8 @@
+;name Vampire
+; Fork full program to both edges, then bomb locally
+FORK #0, #6      ; colonize edge 0, copy all 6 cells
+FORK #1, #6      ; colonize edge 1, copy all 6 cells
+ADD #3, $4       ; increment bomb pointer
+MOV #0, @3       ; bomb with DAT at computed address
+JMP $-4, #0      ; loop
+DAT #0, #6       ; bomb pointer

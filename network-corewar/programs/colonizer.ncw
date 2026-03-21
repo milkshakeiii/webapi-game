@@ -1,0 +1,5 @@
+;name Colonizer
+;author example
+FORK #0, #3      ; fork to edge 0, copy 3 cells (this whole program)
+FORK #1, #3      ; fork to edge 1, copy 3 cells
+JMP $-2, #0      ; loop back to first FORK

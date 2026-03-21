@@ -1,0 +1,6 @@
+;name Spreader
+;author example
+SEND $0, #0      ; send self to edge 0
+SEND $0, #1      ; send self to edge 1
+MOV $0, $1       ; copy self forward
+JMP $-3, #0      ; loop back to first SEND

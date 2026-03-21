@@ -1,0 +1,6 @@
+;name Send-Recv
+; Try to send code to neighbor, then fork there
+SEND $0, #0     ; send this instruction to edge 0
+SEND $1, #0     ; send next instruction to edge 0
+FORK #0, #0     ; fork a process on the neighbor at PC 0
+JMP $-3, #0     ; loop

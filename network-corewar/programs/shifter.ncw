@@ -1,0 +1,9 @@
+;name Shifter
+;strategy: self-modifying FORK cycles through edges using MOD
+FORK $5, #6       ; fork to edge at [PC+5].b_value, payload 6
+ADD #1, $4        ; increment edge target
+MOD #2, $3        ; wrap edge index mod 2 (ring=2, grid=4)
+MOV #0, @3        ; bomb indirect target
+JMP $-4, #0       ; loop
+DAT #0, #0        ; edge index (cycles 0,1,0,1,...)
+DAT #0, #6        ; bomb pointer

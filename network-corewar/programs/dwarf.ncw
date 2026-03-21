@@ -1,0 +1,6 @@
+;name Dwarf
+;author classic
+ADD #4, $3       ; increment target pointer
+MOV #0, @2       ; write DAT 0 0 to indirect target
+JMP $-2, #0      ; loop back
+DAT #0, #4       ; pointer (starts at offset 4)

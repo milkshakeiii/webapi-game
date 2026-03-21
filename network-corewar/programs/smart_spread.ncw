@@ -1,0 +1,14 @@
+;name SmartSpread
+;author example
+;strategy: scan before forking — only fork to empty nodes
+SCAN $7, #0      ; scan edge 0, store count at offset 7 (DAT cell)
+JMZ $2, $6       ; if edge 0 is empty (count=0), skip to FORK
+JMP $3, #0       ; edge 0 occupied, try edge 1
+FORK #0, #5      ; fork to edge 0 with 5-cell payload
+JMP $3, #0       ; skip to loop
+SCAN $2, #1      ; scan edge 1, store count at offset 2 (reuse DAT)
+JMZ $2, $1       ; if edge 1 is empty, fork there
+JMP $-7, #0      ; loop back to start
+FORK #1, #5      ; fork to edge 1 with 5-cell payload
+JMP $-8, #0      ; loop back to start
+DAT #0, #0       ; scratch space for scan results
