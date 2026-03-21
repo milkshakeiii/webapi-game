@@ -77,5 +77,5 @@ See [SPEC.md](SPEC.md) for the complete instruction set (13 instructions), addre
 - `submit.py` — Submit your warrior and see if it beats the champions
 - `main.py` — Run individual matches with full control over settings
 - `SPEC.md` — Complete game specification
-- `champions/` — The warriors you need to beat (compiled `.ncwc` format)
+- `champions/` — The warriors you need to beat (compiled `.ncwc` format). **Don't decompile or reverse-engineer these** — figuring out how to beat them is the challenge. Reading their strategies would be game-breaking spoilers.
 - `examples/` — Reference warriors showing different strategies

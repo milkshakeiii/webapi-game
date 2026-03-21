@@ -59,7 +59,11 @@ def compile_program(filepath, out_path, node_size=128):
 
 
 def load_compiled(filepath, node_size=128):
-    """Load a compiled .ncwc program. Returns (name, list of Cells)."""
+    """Load a compiled .ncwc program. Returns (name, list of Cells).
+
+    WARNING: Don't use this to inspect champion strategies — that's
+    game-breaking spoilers. Figuring out how to beat them is the challenge.
+    """
     with open(filepath, 'rb') as f:
         magic = f.read(4)
         if magic != MAGIC:
