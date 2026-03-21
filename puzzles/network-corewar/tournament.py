@@ -10,34 +10,36 @@ from engine.loader import load_program
 from engine.match import Match
 
 
-def run_match(prog_a, prog_b, topology, node_size=128, cycles=2, score_target=100000, max_turns=10000):
+NODE_SIZE = 128
+CYCLES = 2
+SCORE_TARGET = 100000
+MAX_TURNS = 10000
+
+SCENARIOS = [
+    ('ring-8',    lambda: Graph.make_ring(8, NODE_SIZE, CYCLES),       [0, 4]),
+    ('ring-16',   lambda: Graph.make_ring(16, NODE_SIZE, CYCLES),      [0, 8]),
+    ('grid-4x4',  lambda: Graph.make_grid(4, 4, NODE_SIZE, CYCLES),    [0, 10]),
+    ('grid-6x6',  lambda: Graph.make_grid(6, 6, NODE_SIZE, CYCLES),    [0, 21]),
+    ('star-8',    lambda: Graph.make_star(8, NODE_SIZE, CYCLES),        [1, 5]),
+    ('star-16',   lambda: Graph.make_star(16, NODE_SIZE, CYCLES),       [1, 9]),
+]
+
+
+def run_match(prog_a, prog_b, scenario):
     """Run a single match. Returns (winner_idx or None, method, scores, turns)."""
-    if topology == 'ring':
-        graph = Graph.make_ring(8, node_size, cycles)
-        starts = [0, 4]
-    elif topology == 'grid':
-        graph = Graph.make_grid(4, 4, node_size, cycles)
-        starts = [0, 10]
-    elif topology == 'star':
-        graph = Graph.make_star(8, node_size, cycles)
-        starts = [1, 5]
-    elif topology == 'complete':
-        graph = Graph.make_complete(6, node_size, cycles)
-        starts = [0, 3]
+    label, make_graph, starts = scenario
+    graph = make_graph()
 
-    match = Match(graph, max_turns=max_turns, score_target=score_target)
-
-    name_a, cells_a = prog_a
-    name_b, cells_b = prog_b
-    match.place_program(0, name_a, cells_a, starts[0])
-    match.place_program(1, name_b, cells_b, starts[1])
+    match = Match(graph, max_turns=MAX_TURNS, score_target=SCORE_TARGET)
+    match.place_program(0, prog_a[0], prog_a[1], starts[0])
+    match.place_program(1, prog_b[0], prog_b[1], starts[1])
 
     winner, results = match.run()
     return results['winner'], results['method'], results['scores'], results['turns']
 
 
-def run_tournament(programs, topology, node_size=128):
-    """Run full round-robin (both sides) on a topology."""
+def run_tournament(programs, scenario):
+    """Run full round-robin (both sides) on a scenario."""
     names = [p[0] for p in programs]
     wins = defaultdict(int)
     draws = defaultdict(int)
@@ -47,7 +49,7 @@ def run_tournament(programs, topology, node_size=128):
     for i, j in itertools.combinations(range(len(programs)), 2):
         for first, second in [(i, j), (j, i)]:
             winner, method, scores, turns = run_match(
-                programs[first], programs[second], topology
+                programs[first], programs[second], scenario
             )
             if winner == 0:
                 wins[names[first]] += 1
@@ -68,36 +70,28 @@ def run_tournament(programs, topology, node_size=128):
 
 
 def main():
-    # Select representative warriors (mix of strategies and sizes)
+    # Load all warriors from champions and examples
     base = os.path.dirname(os.path.abspath(__file__))
-    warrior_files = [
-        os.path.join(base, 'champions', 'apex.ncwc'),
-        os.path.join(base, 'champions', 'scorpion.ncwc'),
-        os.path.join(base, 'examples', 'harvester.ncw'),
-        os.path.join(base, 'examples', 'warrior.ncw'),
-        os.path.join(base, 'examples', 'colonizer.ncw'),
-        os.path.join(base, 'examples', 'dwarf.ncw'),
-        os.path.join(base, 'examples', 'imp.ncw'),
-    ]
-
-    # Load all programs
     programs = []
-    for f in warrior_files:
-        try:
-            name, cells = load_program(f, 128)
-            programs.append((name, cells))
-        except Exception as e:
-            print(f"Skipping {f}: {e}")
+    for subdir in ['champions', 'examples']:
+        dirpath = os.path.join(base, subdir)
+        if not os.path.isdir(dirpath):
+            continue
+        for fname in sorted(os.listdir(dirpath)):
+            if fname.endswith('.ncw') or fname.endswith('.ncwc'):
+                try:
+                    name, cells = load_program(os.path.join(dirpath, fname), NODE_SIZE)
+                    programs.append((name, cells))
+                except Exception as e:
+                    print(f"Skipping {fname}: {e}")
 
-    topologies = ['ring', 'grid', 'star', 'complete']
-
-    for topo in topologies:
+    for scenario in SCENARIOS:
         print(f"\n{'='*60}")
-        print(f"  TOPOLOGY: {topo.upper()}")
-        print(f"  8 warriors, round-robin (both sides), score target 100K")
+        print(f"  SCENARIO: {scenario[0].upper()}")
+        print(f"  {len(programs)} warriors, round-robin (both sides), score target {SCORE_TARGET:,}")
         print(f"{'='*60}")
 
-        wins, draws, total_scores, match_results = run_tournament(programs, topo)
+        wins, draws, total_scores, match_results = run_tournament(programs, scenario)
 
         # Sort by wins descending
         all_names = sorted(set(p[0] for p in programs),

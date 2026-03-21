@@ -33,17 +33,21 @@ TIERS = [
 ]
 
 
-def run_match(prog_a, prog_b, topology):
+# Each scenario is (label, topology, graph_factory, start_nodes)
+SCENARIOS = [
+    ('ring-8',    'ring',  lambda: Graph.make_ring(8, NODE_SIZE, CYCLES),       [0, 4]),
+    ('ring-16',   'ring',  lambda: Graph.make_ring(16, NODE_SIZE, CYCLES),      [0, 8]),
+    ('grid-4x4',  'grid',  lambda: Graph.make_grid(4, 4, NODE_SIZE, CYCLES),    [0, 10]),
+    ('grid-6x6',  'grid',  lambda: Graph.make_grid(6, 6, NODE_SIZE, CYCLES),    [0, 21]),
+    ('star-8',    'star',  lambda: Graph.make_star(8, NODE_SIZE, CYCLES),        [1, 5]),
+    ('star-16',   'star',  lambda: Graph.make_star(16, NODE_SIZE, CYCLES),       [1, 9]),
+]
+
+
+def run_match(prog_a, prog_b, scenario):
     """Run a single match. Returns (winner_idx or None, method, scores, turns)."""
-    if topology == 'ring':
-        graph = Graph.make_ring(8, NODE_SIZE, CYCLES)
-        starts = [0, 4]
-    elif topology == 'grid':
-        graph = Graph.make_grid(4, 4, NODE_SIZE, CYCLES)
-        starts = [0, 10]
-    elif topology == 'star':
-        graph = Graph.make_star(8, NODE_SIZE, CYCLES)
-        starts = [1, 5]
+    label, topo, make_graph, starts = scenario
+    graph = make_graph()
 
     match = Match(graph, max_turns=MAX_TURNS, score_target=SCORE_TARGET)
     match.place_program(0, prog_a[0], prog_a[1], starts[0])
@@ -114,28 +118,28 @@ def main():
         names[0] = f"{names[0]} (you)"
         player_name = names[0]
 
-    topologies = ['ring', 'grid', 'star']
+    scenario_labels = [s[0] for s in SCENARIOS]
 
     print(f"  Network CoreWar Challenge")
     print(f"  Warrior: {player_name} ({len(player_cells)} instructions)")
     print(f"  Field: {len(field)} opponents")
-    print(f"  Topologies: {', '.join(topologies)}")
+    print(f"  Scenarios: {', '.join(scenario_labels)}")
     print(f"  Settings: {NODE_SIZE} cells/node, {CYCLES} cycles/node, target {SCORE_TARGET:,}")
     print()
 
-    # Run player vs every opponent across topologies (both sides)
+    # Run player vs every opponent across scenarios (both sides)
     wins = defaultdict(int)
     losses = defaultdict(int)
     draws = defaultdict(int)
     # Track head-to-head vs champions specifically
     h2h = defaultdict(lambda: {'w': 0, 'l': 0, 'd': 0})
 
-    for topo in topologies:
-        print(f"--- {topo.upper()} ---")
+    for scenario in SCENARIOS:
+        print(f"--- {scenario[0].upper()} ---")
         for j in range(1, len(all_programs)):
             for first, second, p_pos in [(0, j, 0), (j, 0, 1)]:
                 winner, method, scores, turns = run_match(
-                    all_programs[first], all_programs[second], topo
+                    all_programs[first], all_programs[second], scenario
                 )
                 opp_name = names[j]
                 s0 = scores.get(0, 0)
