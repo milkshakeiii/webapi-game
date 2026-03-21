@@ -61,7 +61,7 @@ This scores ~100 points per cycle from its well, but it has no defense — an en
 
 Four champions, each representing a different strategic archetype:
 
-- **Apex** (41 instructions) — Engineering. Phase-transition warrior with well-building, role divergence between commander and worker processes, and targeted bombing.
+- **Apex** (40 instructions) — Engineering. Phase-transition warrior with well-building, role divergence between commander and worker processes, and targeted bombing.
 - **Scorpion** (13 instructions) — Balance. Compact fork+bomb+score with embedded wells. Efficient and resilient.
 - **Swarm** (30 instructions) — Economy. Pre-embedded wells skip the setup phase. Floods nodes with scorers for maximum cycle-budget efficiency.
 - **Vanguard** (39 instructions) — Aggression. Triple bomb streams, constant re-forking, and well repair under fire.
