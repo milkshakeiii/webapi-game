@@ -1,46 +1,40 @@
 ;name Apex
-;strategy: optimized well warrior — wells interleaved with SCORE for tight loops
-; Every SCORE references the well immediately after it (SCORE $1 → next cell)
-; Fork payload includes wells. Role divergence via cell outside payload.
+;strategy: role-divergence warrior with well-building and targeted bombing
+; Fork payload includes wells. Commander vs worker role determined by
+; a flag cell outside the payload (cell 40).
 ;
-; === ENTRY (cell 0): fork + diverge ===
+; === ENTRY (cells 0-3): fork + diverge ===
 FORK #0, #30      ; fork cells 0-29 to edge 0
 FORK #1, #30      ; fork to edge 1
 CMP #0, $38       ; role check (cell 40, outside payload)
-JMP $10, #0       ; role=0 (worker): jump to worker at cell 13
+JMP $10, #0       ; role=0 (worker): jump to cell 13
 ;
 ; === COMMANDER (cells 4-12): bomb + refork + score ===
 ADD #5, $8        ; advance bomb pointer (cell 12)
 MOV #0, @7        ; bomb
-SCORE $3          ; score from well at cell 9 (PC=6, $3=9)
-DAT #0, #127      ; well A (cell 7 — also serves as bomb data)
+SCORE $3          ; score from well A (cell 9)
+DAT #0, #127      ; well A
 FORK #0, #30      ; re-fork
-SCORE $3          ; score from well at cell 12 (PC=9, $3=12)
-MOV #127, $-1     ; repair well at cell 9
-MOV #127, $1      ; repair well at cell 12
-DAT #0, #127      ; well B (cell 12) / bomb pointer
+SCORE $3          ; score from well B (cell 12)
+MOV #127, $-1     ; repair well A
+MOV #127, $1      ; repair well B
+DAT #0, #127      ; well B / bomb pointer
 ;
-; === WORKER (cell 13): tight score loop with interleaved wells ===
+; === WORKER (cells 13-24): score loop targeting well zone ===
 FORK #0, #17      ; spread further (cells 13-29)
 FORK #1, #17      ; spread other direction
-; Score-well pairs: each SCORE reads the DAT right after it
-SCORE $1          ; score from cell 17 (PC=15, $1=16... wait)
-; Actually $1 from PC=15 = cell 16. Let me fix:
-; The pattern should be SCORE $1 then DAT — but JMP breaks it
-; Simpler: SCORE $N pointing to a fixed well zone
-SCORE $11         ; score from cell 27 (PC=16, $11=27)
-SCORE $11         ; score from cell 28 (PC=17, $11=28)
-SCORE $11         ; score from cell 29 (PC=18, $11=29)
-SCORE $8          ; score from cell 27 again (PC=19, $8=27)
-SCORE $8          ; cell 28 (PC=20, $8=28)
-SCORE $8          ; cell 29 (PC=21, $8=29)
-; Repair wells
-MOV #127, $6      ; repair cell 27 (PC=22, $5=27)
-MOV #127, $6      ; repair cell 28
-JMP $-8, #0       ; back to SCORE at cell 16
+SCORE $11         ; score from well zone
+SCORE $11         ; score from well zone
+SCORE $11         ; score from well zone
+SCORE $8          ; score from well zone
+SCORE $8          ; score from well zone
+SCORE $8          ; score from well zone
+MOV #127, $6      ; repair wells
+MOV #127, $6      ; repair wells
+JMP $-8, #0       ; back to score loop
 ; Spacer
-DAT #0, #0        ; cell 25
-DAT #0, #0        ; cell 26
+DAT #0, #0
+DAT #0, #0
 ; === WELL ZONE (cells 27-29, inside both payloads) ===
 DAT #0, #127      ; well 1
 DAT #0, #127      ; well 2
@@ -57,4 +51,4 @@ DAT #0, #0
 DAT #0, #0
 DAT #0, #0
 DAT #0, #0
-DAT #0, #1        ; cell 40: role flag
+DAT #0, #1        ; role flag (1=commander)
