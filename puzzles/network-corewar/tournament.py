@@ -16,12 +16,15 @@ SCORE_TARGET = 100000
 MAX_TURNS = 10000
 
 SCENARIOS = [
-    ('ring-8',    lambda: Graph.make_ring(8, NODE_SIZE, CYCLES),       [0, 4]),
-    ('ring-16',   lambda: Graph.make_ring(16, NODE_SIZE, CYCLES),      [0, 8]),
-    ('grid-4x4',  lambda: Graph.make_grid(4, 4, NODE_SIZE, CYCLES),    [0, 10]),
-    ('grid-6x6',  lambda: Graph.make_grid(6, 6, NODE_SIZE, CYCLES),    [0, 21]),
-    ('star-8',    lambda: Graph.make_star(8, NODE_SIZE, CYCLES),        [1, 5]),
-    ('star-16',   lambda: Graph.make_star(16, NODE_SIZE, CYCLES),       [1, 9]),
+    ('ring-8',      lambda: Graph.make_ring(8, NODE_SIZE, CYCLES),             [0, 4]),
+    ('ring-16',     lambda: Graph.make_ring(16, NODE_SIZE, CYCLES),            [0, 8]),
+    ('grid-4x4',    lambda: Graph.make_grid(4, 4, NODE_SIZE, CYCLES),          [0, 10]),
+    ('grid-6x6',    lambda: Graph.make_grid(6, 6, NODE_SIZE, CYCLES),          [0, 21]),
+    ('star-8',      lambda: Graph.make_star(8, NODE_SIZE, CYCLES),              [1, 5]),
+    ('star-16',     lambda: Graph.make_star(16, NODE_SIZE, CYCLES),             [1, 9]),
+    ('random-12-3', lambda: Graph.make_random(12, 3, NODE_SIZE, CYCLES, 42),   [0, 6]),
+    ('random-16-5', lambda: Graph.make_random(16, 5, NODE_SIZE, CYCLES, 99),   [0, 8]),
+    ('complete-8',  lambda: Graph.make_complete(8, NODE_SIZE, CYCLES),          [0, 4]),
 ]
 
 

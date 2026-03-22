@@ -1,9 +1,0 @@
-;name MiniMiner
-;strategy: smallest possible well+scorer — embed well data in the program itself
-; The program IS the scoring infrastructure
-FORK #0, #6       ; spread (copies cells 0-5 = this whole program)
-FORK #1, #6       ; spread other direction
-SCORE $3          ; score b_value of cell at PC+3 = cell 5 = DAT with b_value=100
-SCORE $2          ; score b_value of cell at PC+2 = cell 5 again (wraps)
-JMP $-2, #0       ; tight score loop
-DAT #0, #100      ; THE WELL — embedded in the program, b_value=100

@@ -167,6 +167,51 @@ class Graph:
         return g
 
     @staticmethod
+    def make_random(num_nodes, avg_degree, node_size=16, cycles=4, seed=None):
+        """Create a random connected graph with approximately avg_degree edges per node.
+
+        Uses Erdos-Renyi model with edge probability tuned to the target average degree,
+        then ensures connectivity by adding edges along a random spanning path.
+        """
+        import random
+        rng = random.Random(seed)
+
+        g = Graph()
+        for i in range(num_nodes):
+            g.add_node(i, node_size, cycles)
+
+        # Ensure connectivity: random permutation, connect consecutive nodes
+        perm = list(range(num_nodes))
+        rng.shuffle(perm)
+        connected_edges = set()
+        for k in range(len(perm) - 1):
+            a, b = min(perm[k], perm[k+1]), max(perm[k], perm[k+1])
+            connected_edges.add((a, b))
+
+        # Add random edges to reach target average degree
+        # avg_degree = 2 * num_edges / num_nodes => target_edges = avg_degree * num_nodes / 2
+        target_edges = int(avg_degree * num_nodes / 2)
+        all_possible = [(i, j) for i in range(num_nodes) for j in range(i+1, num_nodes)]
+        rng.shuffle(all_possible)
+        edges = set(connected_edges)
+        for a, b in all_possible:
+            if len(edges) >= target_edges:
+                break
+            edges.add((a, b))
+
+        # Build adjacency and shuffle edge order per node for variety
+        adj = {i: [] for i in range(num_nodes)}
+        for a, b in edges:
+            adj[a].append(b)
+            adj[b].append(a)
+        for i in range(num_nodes):
+            rng.shuffle(adj[i])
+            g.nodes[i].edges = adj[i]
+
+        g._init_recv_buffers()
+        return g
+
+    @staticmethod
     def make_complete(num_nodes, node_size=16, cycles=4):
         """Create a complete graph where every node connects to every other.
 

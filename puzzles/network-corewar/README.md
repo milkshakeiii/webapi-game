@@ -59,14 +59,9 @@ This scores ~100 points per cycle from its well, but it has no defense — an en
 
 ## The Champions
 
-Four champions, each representing a different strategic archetype:
+Four champions: **Apex**, **MiniMiner**, **Swarm**, and **Vanguard**. Their source code is compiled — you can run matches against them but you shouldn't read their strategies. Figuring out how to beat them is the challenge.
 
-- **Apex** (40 instructions) — Engineering. Phase-transition warrior with well-building, role divergence between commander and worker processes, and targeted bombing.
-- **Scorpion** (13 instructions) — Balance. Compact fork+bomb+score with embedded wells. Efficient and resilient.
-- **Swarm** (30 instructions) — Economy. Pre-embedded wells skip the setup phase. Floods nodes with scorers for maximum cycle-budget efficiency.
-- **Vanguard** (39 instructions) — Aggression. Triple bomb streams, constant re-forking, and well repair under fire.
-
-Your warrior must hold a **winning head-to-head record against each champion** across ring, grid, and star topologies.
+Your warrior must hold a **winning head-to-head record against each champion** across all tournament scenarios (ring, grid, star, random, and complete topologies at multiple scales).
 
 ## Full Reference
 
