@@ -1,0 +1,31 @@
+;name Nexus
+;strategy: fixed edge-0 re-fork (minimal overhead) + 10 tight SCOREs
+;
+; Initial spread to all edges
+FORK #0, #20      ; edge 0 (copies 0-19, full payload)
+FORK #1, #20      ; edge 1
+FORK #2, #20      ; edge 2 (grid/complete)
+FORK #3, #20      ; edge 3 (grid/complete)
+; Build 2 high-value wells
+MOV #127, $14     ; well at cell 18
+MOV #127, $14     ; well at cell 19
+;
+; === Main loop (12 instructions: FORK + 10 SCORE + JMP) ===
+; Re-fork to edge 0 every loop (star recovery, process replacement)
+FORK #0, #14      ; fork 14 cells (6-19) to edge 0
+; 10 SCOREs alternating between wells
+SCORE $11         ; well 1 (cell 18)
+SCORE $11         ; well 2 (cell 19)
+SCORE $9          ; well 1
+SCORE $9          ; well 2
+SCORE $7          ; well 1
+SCORE $7          ; well 2
+SCORE $5          ; well 1
+SCORE $5          ; well 2
+SCORE $3          ; well 1
+SCORE $3          ; well 2
+JMP $-11, #0      ; back to FORK (cell 6)
+;
+; === Data ===
+DAT #0, #0        ; well 1 -> 127
+DAT #0, #0        ; well 2 -> 127
