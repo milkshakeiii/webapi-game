@@ -1,0 +1,14 @@
+[
+  {"id": "none", "name": "Unarmored", "category": "none", "ac_bonus": 0, "max_dex_bonus": 99, "armor_check_penalty": 0, "arcane_spell_failure": 0, "speed_30_reduced_to": 30, "speed_20_reduced_to": 20, "weight": 0, "cost_gp": 0},
+  {"id": "padded", "name": "Padded Armor", "category": "light", "ac_bonus": 1, "max_dex_bonus": 8, "armor_check_penalty": 0, "arcane_spell_failure": 5, "speed_30_reduced_to": 30, "speed_20_reduced_to": 20, "weight": 10, "cost_gp": 5},
+  {"id": "leather", "name": "Leather Armor", "category": "light", "ac_bonus": 2, "max_dex_bonus": 6, "armor_check_penalty": 0, "arcane_spell_failure": 10, "speed_30_reduced_to": 30, "speed_20_reduced_to": 20, "weight": 15, "cost_gp": 10},
+  {"id": "studded_leather", "name": "Studded Leather", "category": "light", "ac_bonus": 3, "max_dex_bonus": 5, "armor_check_penalty": -1, "arcane_spell_failure": 15, "speed_30_reduced_to": 30, "speed_20_reduced_to": 20, "weight": 20, "cost_gp": 25},
+  {"id": "chain_shirt", "name": "Chain Shirt", "category": "light", "ac_bonus": 4, "max_dex_bonus": 4, "armor_check_penalty": -2, "arcane_spell_failure": 20, "speed_30_reduced_to": 30, "speed_20_reduced_to": 20, "weight": 25, "cost_gp": 100},
+  {"id": "hide", "name": "Hide Armor", "category": "medium", "ac_bonus": 4, "max_dex_bonus": 4, "armor_check_penalty": -3, "arcane_spell_failure": 20, "speed_30_reduced_to": 20, "speed_20_reduced_to": 15, "weight": 25, "cost_gp": 15},
+  {"id": "scale_mail", "name": "Scale Mail", "category": "medium", "ac_bonus": 5, "max_dex_bonus": 3, "armor_check_penalty": -4, "arcane_spell_failure": 25, "speed_30_reduced_to": 20, "speed_20_reduced_to": 15, "weight": 30, "cost_gp": 50},
+  {"id": "chainmail", "name": "Chainmail", "category": "medium", "ac_bonus": 6, "max_dex_bonus": 2, "armor_check_penalty": -5, "arcane_spell_failure": 30, "speed_30_reduced_to": 20, "speed_20_reduced_to": 15, "weight": 40, "cost_gp": 150},
+  {"id": "breastplate", "name": "Breastplate", "category": "medium", "ac_bonus": 6, "max_dex_bonus": 3, "armor_check_penalty": -4, "arcane_spell_failure": 25, "speed_30_reduced_to": 20, "speed_20_reduced_to": 15, "weight": 30, "cost_gp": 200},
+  {"id": "splint_mail", "name": "Splint Mail", "category": "heavy", "ac_bonus": 7, "max_dex_bonus": 0, "armor_check_penalty": -7, "arcane_spell_failure": 40, "speed_30_reduced_to": 20, "speed_20_reduced_to": 15, "weight": 45, "cost_gp": 200},
+  {"id": "half_plate", "name": "Half-plate", "category": "heavy", "ac_bonus": 8, "max_dex_bonus": 0, "armor_check_penalty": -7, "arcane_spell_failure": 40, "speed_30_reduced_to": 20, "speed_20_reduced_to": 15, "weight": 50, "cost_gp": 600},
+  {"id": "full_plate", "name": "Full Plate", "category": "heavy", "ac_bonus": 9, "max_dex_bonus": 1, "armor_check_penalty": -6, "arcane_spell_failure": 35, "speed_30_reduced_to": 20, "speed_20_reduced_to": 15, "weight": 50, "cost_gp": 1500}
+]

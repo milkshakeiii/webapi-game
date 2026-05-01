@@ -1,0 +1,52 @@
+{
+  "id": "orc",
+  "name": "Orc Warrior",
+  "summary": "Brutal raiders. Hit hard with two-handed weapons; resilient even when bloodied.",
+  "cr": "1/3",
+  "xp": 135,
+  "race": "orc",
+  "alignment": "chaotic_evil",
+  "size": "medium",
+  "type": "humanoid",
+  "subtypes": ["orc"],
+  "ability_scores": {"str": 17, "dex": 11, "con": 12, "int": 8, "wis": 9, "cha": 6},
+  "hit_dice": "1d10+1",
+  "hp": 6,
+  "init": 0,
+  "senses": ["darkvision_60"],
+  "speed": 30,
+  "ac": {"total": 13, "touch": 10, "flat_footed": 13, "armor": 2, "shield": 1},
+  "saves": {"fort": 3, "ref": 0, "will": -1},
+  "bab": 1,
+  "cmb": 4,
+  "cmd": 14,
+  "attacks": [
+    {
+      "type": "melee",
+      "name": "falchion",
+      "attack_bonus": 4,
+      "damage": "2d4+4",
+      "damage_type": "S",
+      "crit_range": [18, 20],
+      "crit_multiplier": 2
+    },
+    {
+      "type": "ranged",
+      "name": "javelin",
+      "attack_bonus": 1,
+      "damage": "1d6+3",
+      "damage_type": "P",
+      "crit_range": [20, 20],
+      "crit_multiplier": 2,
+      "range_increment": 30
+    }
+  ],
+  "feats": ["weapon_focus_falchion"],
+  "skills": {"intimidate": 2},
+  "languages": ["common", "orc"],
+  "racial_traits": [
+    {"id": "ferocity", "name": "Ferocity", "summary": "When reduced below 0 HP but not killed, may continue fighting for one round before falling unconscious."},
+    {"id": "light_sensitivity_orc", "name": "Light Sensitivity", "summary": "Dazzled in bright sunlight or daylight spells."}
+  ],
+  "equipment": ["studded leather", "light shield", "falchion", "4 javelins"]
+}

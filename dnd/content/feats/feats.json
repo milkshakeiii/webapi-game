@@ -1,0 +1,215 @@
+[
+  {
+    "id": "alertness",
+    "name": "Alertness",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 Perception and +2 Sense Motive (or +4 each at 10 ranks)."
+  },
+  {
+    "id": "athletic",
+    "name": "Athletic",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 Climb and +2 Swim (or +4 each at 10 ranks)."
+  },
+  {
+    "id": "cleave",
+    "name": "Cleave",
+    "type": "combat",
+    "prerequisites": {"abilities": {"str": 13}, "feats": ["power_attack"], "bab": 1},
+    "summary": "As a standard action: make a single melee attack at full BAB; if it hits, make one additional attack at the same BAB against an adjacent foe also threatened by you. -2 AC until next turn."
+  },
+  {
+    "id": "combat_expertise",
+    "name": "Combat Expertise",
+    "type": "combat",
+    "prerequisites": {"abilities": {"int": 13}},
+    "summary": "Take a -1 to attack to gain +1 dodge AC (-2/+2 at BAB +4, etc., up to BAB/+4)."
+  },
+  {
+    "id": "combat_reflexes",
+    "name": "Combat Reflexes",
+    "type": "combat",
+    "prerequisites": {},
+    "summary": "Number of attacks of opportunity per round = 1 + Dex modifier; can take AoOs while flat-footed."
+  },
+  {
+    "id": "diehard",
+    "name": "Diehard",
+    "type": "general",
+    "prerequisites": {"feats": ["endurance"]},
+    "summary": "When at 0 or fewer HP, automatically stable. Can choose to act as if disabled rather than dying, even at negative HP, until reaching -CON HP."
+  },
+  {
+    "id": "dodge",
+    "name": "Dodge",
+    "type": "combat",
+    "prerequisites": {"abilities": {"dex": 13}},
+    "summary": "+1 dodge bonus to AC."
+  },
+  {
+    "id": "empower_spell",
+    "name": "Empower Spell",
+    "type": "metamagic",
+    "prerequisites": {},
+    "summary": "All variable, numeric effects of an empowered spell are increased by half. Empowered spell uses a slot 2 levels higher than the spell's actual level."
+  },
+  {
+    "id": "endurance",
+    "name": "Endurance",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+4 on checks for prolonged exertion (Constitution checks for running, holding breath, etc., Swim checks to avoid taking damage from prolonged swim, and forced-march Constitution checks). Can sleep in light/medium armor without becoming fatigued."
+  },
+  {
+    "id": "eschew_materials",
+    "name": "Eschew Materials",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "Cast spells without material components costing 1 gp or less."
+  },
+  {
+    "id": "great_fortitude",
+    "name": "Great Fortitude",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 on Fortitude saves."
+  },
+  {
+    "id": "improved_initiative",
+    "name": "Improved Initiative",
+    "type": "combat",
+    "prerequisites": {},
+    "summary": "+4 on initiative checks."
+  },
+  {
+    "id": "improved_unarmed_strike",
+    "name": "Improved Unarmed Strike",
+    "type": "combat",
+    "prerequisites": {},
+    "summary": "Treated as armed when unarmed. Unarmed strikes deal lethal damage and do not provoke attacks of opportunity."
+  },
+  {
+    "id": "iron_will",
+    "name": "Iron Will",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 on Will saves."
+  },
+  {
+    "id": "lightning_reflexes",
+    "name": "Lightning Reflexes",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 on Reflex saves."
+  },
+  {
+    "id": "persuasive",
+    "name": "Persuasive",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 Diplomacy and +2 Intimidate (or +4 each at 10 ranks)."
+  },
+  {
+    "id": "point_blank_shot",
+    "name": "Point-Blank Shot",
+    "type": "combat",
+    "prerequisites": {},
+    "summary": "+1 on attack and damage rolls with ranged weapons against opponents within 30 feet."
+  },
+  {
+    "id": "power_attack",
+    "name": "Power Attack",
+    "type": "combat",
+    "prerequisites": {"abilities": {"str": 13}, "bab": 1},
+    "summary": "Take a -1 to attack to gain +2 to melee damage (+3 with two-handed weapons), scaling at higher BAB."
+  },
+  {
+    "id": "precise_shot",
+    "name": "Precise Shot",
+    "type": "combat",
+    "prerequisites": {"feats": ["point_blank_shot"]},
+    "summary": "No -4 penalty for shooting into melee."
+  },
+  {
+    "id": "rapid_shot",
+    "name": "Rapid Shot",
+    "type": "combat",
+    "prerequisites": {"abilities": {"dex": 13}, "feats": ["point_blank_shot"]},
+    "summary": "When making a full-attack with a ranged weapon, may make one additional attack at the highest base attack bonus, but all attacks take a -2 penalty."
+  },
+  {
+    "id": "run",
+    "name": "Run",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "Run at 5x speed (4x in heavy armor) and retain Dex bonus to AC while running. +4 on Acrobatics for running long jumps."
+  },
+  {
+    "id": "scribe_scroll",
+    "name": "Scribe Scroll",
+    "type": "item_creation",
+    "prerequisites": {"caster_level": 1},
+    "summary": "Create scrolls. Cost in gold = spell level x caster level x 12.5 gp; takes 2 hours per 250 gp of value."
+  },
+  {
+    "id": "skill_focus",
+    "name": "Skill Focus",
+    "type": "general",
+    "prerequisites": {},
+    "subtype": "skill",
+    "summary": "+3 to a chosen skill (+6 at 10 ranks)."
+  },
+  {
+    "id": "spell_focus",
+    "name": "Spell Focus",
+    "type": "general",
+    "prerequisites": {},
+    "subtype": "school",
+    "summary": "+1 DC for all spells of the chosen school."
+  },
+  {
+    "id": "spell_penetration",
+    "name": "Spell Penetration",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 caster level checks to overcome spell resistance."
+  },
+  {
+    "id": "stealthy",
+    "name": "Stealthy",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 Escape Artist and +2 Stealth (or +4 each at 10 ranks)."
+  },
+  {
+    "id": "toughness",
+    "name": "Toughness",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+3 HP at 1st level, +1 HP per Hit Die thereafter (minimum +3)."
+  },
+  {
+    "id": "two_weapon_fighting",
+    "name": "Two-Weapon Fighting",
+    "type": "combat",
+    "prerequisites": {"abilities": {"dex": 15}},
+    "summary": "Reduce two-weapon penalties: -2/-2 with a light off-hand weapon, -4/-4 otherwise."
+  },
+  {
+    "id": "weapon_finesse",
+    "name": "Weapon Finesse",
+    "type": "combat",
+    "prerequisites": {},
+    "summary": "Use Dex modifier instead of Str modifier on melee attack rolls with light weapons, rapiers, whips, and spiked chains."
+  },
+  {
+    "id": "weapon_focus",
+    "name": "Weapon Focus",
+    "type": "combat",
+    "prerequisites": {"bab": 1},
+    "subtype": "weapon",
+    "summary": "+1 attack with the chosen weapon (must be proficient)."
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "id": "gnome",
+  "name": "Gnome",
+  "summary": "Small fey-blooded folk. Hardy and charismatic, naturally inclined to illusion magic.",
+  "size": "small",
+  "speed": 20,
+  "ability_modifiers": {"con": 2, "cha": 2, "str": -2},
+  "ability_modifier_choice": null,
+  "languages_starting": ["common", "gnome", "sylvan"],
+  "languages_bonus": ["draconic", "dwarven", "elven", "giant", "goblin", "orc"],
+  "vision": "low_light",
+  "traits": [
+    {"id": "defensive_training_gnome", "name": "Defensive Training", "summary": "+4 dodge AC vs giants."},
+    {"id": "gnome_magic", "name": "Gnome Magic", "summary": "+1 DC for illusion spells. SLAs at high enough Cha: dancing lights, ghost sound, prestidigitation, speak with animals (1/day each)."},
+    {"id": "hatred_gnome", "name": "Hatred", "summary": "+1 attack vs reptilian and goblinoid creatures."},
+    {"id": "illusion_resistance", "name": "Illusion Resistance", "summary": "+2 saves vs illusion spells and effects."},
+    {"id": "keen_senses_gnome", "name": "Keen Senses", "summary": "+2 Perception."},
+    {"id": "obsessive", "name": "Obsessive", "summary": "+2 to one Craft or Profession skill."},
+    {"id": "weapon_familiarity_gnome", "name": "Weapon Familiarity", "summary": "Treat any weapon with 'gnome' in its name as martial."}
+  ]
+}

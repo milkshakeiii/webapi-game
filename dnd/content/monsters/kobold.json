@@ -1,0 +1,51 @@
+{
+  "id": "kobold",
+  "name": "Kobold",
+  "summary": "Small reptilian humanoids. Trap-makers and tunnel-dwellers, weak alone but devastating in numbers.",
+  "cr": "1/4",
+  "xp": 100,
+  "race": "kobold",
+  "alignment": "lawful_evil",
+  "size": "small",
+  "type": "humanoid",
+  "subtypes": ["reptilian"],
+  "ability_scores": {"str": 9, "dex": 13, "con": 10, "int": 10, "wis": 9, "cha": 8},
+  "hit_dice": "1d10",
+  "hp": 5,
+  "init": 1,
+  "senses": ["darkvision_60"],
+  "speed": 30,
+  "ac": {"total": 15, "touch": 12, "flat_footed": 14, "armor": 2, "size": 1, "dex": 1, "natural": 1},
+  "saves": {"fort": 2, "ref": 1, "will": -1},
+  "bab": 1,
+  "cmb": -1,
+  "cmd": 10,
+  "attacks": [
+    {
+      "type": "melee",
+      "name": "spear",
+      "attack_bonus": 1,
+      "damage": "1d6-1",
+      "damage_type": "P",
+      "crit_range": [20, 20],
+      "crit_multiplier": 3
+    },
+    {
+      "type": "ranged",
+      "name": "sling",
+      "attack_bonus": 3,
+      "damage": "1d3-1",
+      "damage_type": "B",
+      "crit_range": [20, 20],
+      "crit_multiplier": 2,
+      "range_increment": 50
+    }
+  ],
+  "feats": ["skill_focus"],
+  "skills": {"craft_trapmaking": 6, "perception": 5, "stealth": 6, "profession_miner": 2},
+  "languages": ["draconic"],
+  "racial_traits": [
+    {"id": "light_sensitivity", "name": "Light Sensitivity", "summary": "Dazzled in bright sunlight or within the radius of a daylight spell."}
+  ],
+  "equipment": ["leather armor", "spear", "sling", "20 sling bullets"]
+}

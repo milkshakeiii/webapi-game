@@ -1,0 +1,44 @@
+{
+  "id": "wolf",
+  "name": "Wolf",
+  "summary": "Pack-hunting predator. Pack tactics make wolves dangerous in groups.",
+  "cr": "1",
+  "xp": 400,
+  "race": "wolf",
+  "alignment": "true_neutral",
+  "size": "medium",
+  "type": "animal",
+  "subtypes": [],
+  "ability_scores": {"str": 13, "dex": 15, "con": 15, "int": 2, "wis": 12, "cha": 6},
+  "hit_dice": "2d8+4",
+  "hp": 13,
+  "init": 2,
+  "senses": ["low_light", "scent"],
+  "speed": 50,
+  "ac": {"total": 14, "touch": 12, "flat_footed": 12, "dex": 2, "natural": 2},
+  "saves": {"fort": 5, "ref": 5, "will": 1},
+  "bab": 1,
+  "cmb": 2,
+  "cmd": 14,
+  "attacks": [
+    {
+      "type": "melee",
+      "name": "bite",
+      "attack_bonus": 2,
+      "damage": "1d6+1",
+      "damage_type": "B/P/S",
+      "crit_range": [20, 20],
+      "crit_multiplier": 2,
+      "extra_effects": [
+        {"on_hit": "trip", "cmb_bonus": 2}
+      ]
+    }
+  ],
+  "feats": ["skill_focus_perception"],
+  "skills": {"perception": 8, "stealth": 6, "survival": 5},
+  "languages": [],
+  "racial_traits": [
+    {"id": "trip_attack", "name": "Trip", "summary": "When biting, may attempt a free trip combat maneuver without provoking an AoO. Failure does not let target trip the wolf back."}
+  ],
+  "equipment": []
+}

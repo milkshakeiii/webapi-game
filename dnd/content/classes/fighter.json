@@ -1,0 +1,25 @@
+{
+  "id": "fighter",
+  "name": "Fighter",
+  "summary": "Master of weapons and armor. Versatile combat specialist who customizes with bonus combat feats.",
+  "hit_die": 10,
+  "alignment_restriction": null,
+  "starting_gold_dice": "5d6",
+  "starting_gold_multiplier": 10,
+  "level_1": {
+    "bab": 1,
+    "saves": {"fort": 2, "ref": 0, "will": 0},
+    "skill_points_per_level": 2,
+    "class_skills": [
+      "climb", "craft", "handle_animal", "intimidate",
+      "knowledge_dungeoneering", "knowledge_engineering",
+      "profession", "ride", "survival", "swim"
+    ],
+    "weapon_proficiencies": "all_simple_and_martial",
+    "armor_proficiencies": "all_armor_shields_including_tower",
+    "class_features": [
+      {"id": "fighter_bonus_combat_feat_1", "name": "Bonus Combat Feat", "summary": "Choose a combat feat at 1st level (and additional combat feats every other level)."}
+    ]
+  },
+  "spell_progression": null
+}

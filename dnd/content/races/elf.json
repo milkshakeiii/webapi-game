@@ -1,0 +1,18 @@
+{
+  "id": "elf",
+  "name": "Elf",
+  "summary": "Long-lived and graceful. Quick and clever, but physically frail.",
+  "size": "medium",
+  "speed": 30,
+  "ability_modifiers": {"dex": 2, "int": 2, "con": -2},
+  "ability_modifier_choice": null,
+  "languages_starting": ["common", "elven"],
+  "languages_bonus": ["celestial", "draconic", "gnoll", "gnome", "goblin", "orc", "sylvan"],
+  "vision": "low_light",
+  "traits": [
+    {"id": "elven_immunities", "name": "Elven Immunities", "summary": "Immune to magic sleep effects; +2 saves vs enchantments."},
+    {"id": "elven_magic", "name": "Elven Magic", "summary": "+2 caster level checks to overcome SR; +2 Spellcraft to identify magic items."},
+    {"id": "keen_senses", "name": "Keen Senses", "summary": "+2 Perception."},
+    {"id": "weapon_familiarity_elven", "name": "Weapon Familiarity", "summary": "Proficient with longbow, longsword, rapier, shortbow."}
+  ]
+}

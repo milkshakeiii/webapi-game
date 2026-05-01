@@ -1,0 +1,39 @@
+OPEN GAME LICENSE Version 1.0a
+
+[Insert the canonical OGL 1.0a license text here. The full text is
+available from Paizo at https://paizo.com/pathfinderRPG/ogl and from
+the Open Gaming Foundation. It is required verbatim by the OGL itself.
+This file is a placeholder — paste the canonical text above this line
+before distributing SRD-derived content.]
+
+----------------------------------------------------------------------
+SECTION 15: COPYRIGHT NOTICE
+
+Open Game License v 1.0a Copyright 2000, Wizards of the Coast, LLC.
+
+System Reference Document. Copyright 2000, Wizards of the Coast, Inc.;
+Authors Jonathan Tweet, Monte Cook, Skip Williams, based on material
+by E. Gary Gygax and Dave Arneson.
+
+Pathfinder Roleplaying Game Core Rulebook. © 2009, Paizo Publishing,
+LLC; Author: Jason Bulmahn, based on material by Jonathan Tweet,
+Monte Cook, and Skip Williams.
+
+Pathfinder Roleplaying Game Bestiary. © 2009, Paizo Publishing, LLC;
+Author: Jason Bulmahn, based on material by Jonathan Tweet, Monte Cook,
+and Skip Williams.
+
+D&D Sandbox (this work). © 2026, Henry Solberg.
+----------------------------------------------------------------------
+
+DESIGNATION OF OPEN GAME CONTENT
+
+All game mechanics, statistics, and rule-text derived from the System
+Reference Document and the Pathfinder Roleplaying Game Reference Document
+in this work are designated as Open Game Content under the OGL 1.0a.
+
+DESIGNATION OF PRODUCT IDENTITY
+
+The names "D&D Sandbox", patron names, castle names, hero names,
+location names, and all original narrative text are designated as
+Product Identity and are not Open Game Content.

@@ -1,0 +1,39 @@
+{
+  "id": "bard",
+  "name": "Bard",
+  "summary": "Versatile performer who inspires allies and dabbles in arcane magic. Spontaneous caster from the bard list.",
+  "hit_die": 8,
+  "alignment_restriction": null,
+  "starting_gold_dice": "3d6",
+  "starting_gold_multiplier": 10,
+  "level_1": {
+    "bab": 0,
+    "saves": {"fort": 0, "ref": 2, "will": 2},
+    "skill_points_per_level": 6,
+    "class_skills": [
+      "acrobatics", "appraise", "bluff", "climb", "craft", "diplomacy",
+      "disguise", "escape_artist", "intimidate",
+      "knowledge_arcana", "knowledge_dungeoneering", "knowledge_engineering",
+      "knowledge_geography", "knowledge_history", "knowledge_local",
+      "knowledge_nature", "knowledge_nobility", "knowledge_planes",
+      "knowledge_religion",
+      "linguistics", "perception", "perform", "profession",
+      "sense_motive", "sleight_of_hand", "spellcraft", "stealth",
+      "use_magic_device"
+    ],
+    "weapon_proficiencies": "simple_plus_longsword_rapier_sap_short_sword_shortbow_whip",
+    "armor_proficiencies": "light_shields_no_tower",
+    "class_features": [
+      {"id": "bardic_knowledge", "name": "Bardic Knowledge", "summary": "+1/2 class level on all Knowledge checks; may make Knowledge checks untrained."},
+      {"id": "bardic_performance", "name": "Bardic Performance", "summary": "Use as a standard action; sustain as free action. Rounds per day = 4 + Cha modifier. At L1, available performances: Countersong, Distraction, Fascinate, Inspire Courage."},
+      {"id": "cantrips_bard", "name": "Cantrips", "summary": "Knows all 0-level bard spells; cast at will."}
+    ]
+  },
+  "spell_progression": {
+    "type": "spontaneous",
+    "key_ability": "cha",
+    "spells_per_day_l1": {"0": "at_will", "1": 1},
+    "spells_known_l1": {"0": 4, "1": 2},
+    "starts_with_spellbook": false
+  }
+}

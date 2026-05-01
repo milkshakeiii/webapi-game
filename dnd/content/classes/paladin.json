@@ -1,0 +1,26 @@
+{
+  "id": "paladin",
+  "name": "Paladin",
+  "summary": "Holy warrior bound by a code of conduct. Smites evil, heals the wounded, and channels divine grace.",
+  "hit_die": 10,
+  "alignment_restriction": "lawful_good",
+  "starting_gold_dice": "5d6",
+  "starting_gold_multiplier": 10,
+  "level_1": {
+    "bab": 1,
+    "saves": {"fort": 2, "ref": 0, "will": 2},
+    "skill_points_per_level": 2,
+    "class_skills": [
+      "craft", "diplomacy", "handle_animal", "heal", "knowledge_nobility",
+      "knowledge_religion", "profession", "ride", "sense_motive", "spellcraft"
+    ],
+    "weapon_proficiencies": "all_simple_and_martial",
+    "armor_proficiencies": "all_armor_shields_including_tower",
+    "class_features": [
+      {"id": "aura_of_good", "name": "Aura of Good", "summary": "Possesses a strong aura of good (as cleric of class level)."},
+      {"id": "detect_evil", "name": "Detect Evil", "summary": "At will, may concentrate to detect evil as the spell."},
+      {"id": "smite_evil_1day", "name": "Smite Evil 1/day", "summary": "Once per day as a swift action, choose an evil target. Add Cha to attack and class level to damage; bypass DR; +Cha deflection AC vs target. Lasts until target is dead or paladin rests."}
+    ]
+  },
+  "spell_progression": null
+}

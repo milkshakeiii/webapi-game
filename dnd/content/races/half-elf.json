@@ -1,0 +1,22 @@
+{
+  "id": "half_elf",
+  "name": "Half-Elf",
+  "summary": "Children of two worlds. Versatile like humans, perceptive like elves.",
+  "size": "medium",
+  "speed": 30,
+  "ability_modifiers": {},
+  "ability_modifier_choice": {
+    "options": ["str", "dex", "con", "int", "wis", "cha"],
+    "bonus": 2
+  },
+  "languages_starting": ["common", "elven"],
+  "languages_bonus": ["any"],
+  "vision": "low_light",
+  "traits": [
+    {"id": "adaptability", "name": "Adaptability", "summary": "Bonus Skill Focus feat at 1st level."},
+    {"id": "elf_blood", "name": "Elf Blood", "summary": "Counts as both human and elf for race-based effects."},
+    {"id": "elven_immunities_he", "name": "Elven Immunities", "summary": "Immune to magic sleep; +2 saves vs enchantments."},
+    {"id": "keen_senses_he", "name": "Keen Senses", "summary": "+2 Perception."},
+    {"id": "multitalented", "name": "Multitalented", "summary": "Two favored classes; gain favored class bonus from either."}
+  ]
+}

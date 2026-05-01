@@ -1,0 +1,21 @@
+{
+  "id": "dwarf",
+  "name": "Dwarf",
+  "summary": "Hardy mountain folk. Strong constitution and wisdom, resistant to magic and poison, but socially gruff.",
+  "size": "medium",
+  "speed": 20,
+  "speed_unencumbered_in_armor": true,
+  "ability_modifiers": {"con": 2, "wis": 2, "cha": -2},
+  "ability_modifier_choice": null,
+  "languages_starting": ["common", "dwarven"],
+  "languages_bonus": ["giant", "gnome", "goblin", "orc", "terran", "undercommon"],
+  "vision": "darkvision_60",
+  "traits": [
+    {"id": "defensive_training", "name": "Defensive Training", "summary": "+4 dodge AC vs giants."},
+    {"id": "hardy", "name": "Hardy", "summary": "+2 saves vs poison, spells, and spell-like abilities."},
+    {"id": "stability", "name": "Stability", "summary": "+4 CMD vs bull rush and trip while standing."},
+    {"id": "stonecunning", "name": "Stonecunning", "summary": "+2 Perception for stonework; automatic check within 10 ft."},
+    {"id": "hatred", "name": "Hatred", "summary": "+1 attack vs orcs and goblinoids."},
+    {"id": "weapon_familiarity_dwarven", "name": "Weapon Familiarity", "summary": "Treat any weapon with 'dwarven' in its name as martial."}
+  ]
+}

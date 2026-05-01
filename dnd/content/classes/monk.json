@@ -1,0 +1,29 @@
+{
+  "id": "monk",
+  "name": "Monk",
+  "summary": "Disciplined martial artist. Lightly armed and armored but exceptionally agile and resilient against magic.",
+  "hit_die": 8,
+  "alignment_restriction": "lawful",
+  "starting_gold_dice": "1d6",
+  "starting_gold_multiplier": 10,
+  "level_1": {
+    "bab": 0,
+    "saves": {"fort": 2, "ref": 2, "will": 2},
+    "skill_points_per_level": 4,
+    "class_skills": [
+      "acrobatics", "climb", "craft", "escape_artist", "intimidate",
+      "knowledge_history", "knowledge_religion", "perception",
+      "perform", "profession", "ride", "sense_motive", "stealth", "swim"
+    ],
+    "weapon_proficiencies": "club_crossbow_dagger_handaxe_javelin_kama_nunchaku_quarterstaff_sai_shortspear_short_sword_shuriken_siangham_sling_spear_temple_sword_unarmed",
+    "armor_proficiencies": "none",
+    "class_features": [
+      {"id": "ac_bonus_monk", "name": "AC Bonus", "summary": "When unarmored and unencumbered: add Wis bonus (if positive) and +1/4 levels above 1 to AC and CMD."},
+      {"id": "flurry_of_blows", "name": "Flurry of Blows", "summary": "As a full-attack, may make one extra attack as if using two-weapon fighting (full BAB for both attacks at level 1, treated as monk weapon)."},
+      {"id": "stunning_fist_1day", "name": "Stunning Fist", "summary": "Once per day per level (1/day at L1), forces a Fort save (DC 10 + 1/2 level + Wis) on a successful attack or be stunned 1 round."},
+      {"id": "unarmed_strike", "name": "Unarmed Strike", "summary": "Unarmed deals 1d6 (medium) lethal damage; threat range x2; counts as both armed and unarmed."},
+      {"id": "monk_bonus_feat_1", "name": "Bonus Feat", "summary": "At 1st level, choose one: Catch Off-Guard, Combat Reflexes, Deflect Arrows, Dodge, Improved Grapple, Scorpion Style, Throw Anything."}
+    ]
+  },
+  "spell_progression": null
+}

@@ -1,0 +1,35 @@
+{
+  "id": "druid",
+  "name": "Druid",
+  "summary": "Defender of the wilds. Divine spellcaster who can shapeshift, summon nature's wrath, and bond with an animal companion.",
+  "hit_die": 8,
+  "alignment_restriction": "any_neutral",
+  "starting_gold_dice": "2d6",
+  "starting_gold_multiplier": 10,
+  "level_1": {
+    "bab": 0,
+    "saves": {"fort": 2, "ref": 0, "will": 2},
+    "skill_points_per_level": 4,
+    "class_skills": [
+      "climb", "craft", "fly", "handle_animal", "heal",
+      "knowledge_geography", "knowledge_nature",
+      "perception", "profession", "ride", "spellcraft", "survival", "swim"
+    ],
+    "weapon_proficiencies": "club_dagger_dart_quarterstaff_scimitar_scythe_sickle_shortspear_sling_spear",
+    "armor_proficiencies": "light_medium_no_metal_shields_no_metal_no_tower",
+    "class_features": [
+      {"id": "nature_bond", "name": "Nature Bond", "summary": "Choose either an animal companion (1st-level effective druid level) or a domain (cleric domain list, restricted to Air, Animal, Earth, Fire, Plant, Water, Weather)."},
+      {"id": "nature_sense", "name": "Nature Sense", "summary": "+2 to Knowledge (nature) and Survival."},
+      {"id": "wild_empathy_druid", "name": "Wild Empathy", "summary": "Roll 1d20 + class level + Cha to influence an animal's attitude."},
+      {"id": "orisons_druid", "name": "Orisons", "summary": "Prepares 0-level druid spells; they are not expended when cast."}
+    ]
+  },
+  "spell_progression": {
+    "type": "prepared",
+    "key_ability": "wis",
+    "spells_per_day_l1": {"0": 3, "1": 1},
+    "spell_list_source": "full_druid_list",
+    "starts_with_spellbook": false
+  },
+  "nature_bond_choices": ["animal_companion", "domain"]
+}

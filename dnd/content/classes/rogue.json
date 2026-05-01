@@ -1,0 +1,28 @@
+{
+  "id": "rogue",
+  "name": "Rogue",
+  "summary": "Skilled trickster, scout, and ambush specialist. Strikes hard when foes are caught off guard.",
+  "hit_die": 8,
+  "alignment_restriction": null,
+  "starting_gold_dice": "4d6",
+  "starting_gold_multiplier": 10,
+  "level_1": {
+    "bab": 0,
+    "saves": {"fort": 0, "ref": 2, "will": 0},
+    "skill_points_per_level": 8,
+    "class_skills": [
+      "acrobatics", "appraise", "bluff", "climb", "craft", "diplomacy",
+      "disable_device", "disguise", "escape_artist", "intimidate",
+      "knowledge_dungeoneering", "knowledge_local", "linguistics",
+      "perception", "perform", "profession", "sense_motive",
+      "sleight_of_hand", "stealth", "swim", "use_magic_device"
+    ],
+    "weapon_proficiencies": "simple_plus_hand_crossbow_rapier_sap_shortbow_short_sword",
+    "armor_proficiencies": "light_no_shields",
+    "class_features": [
+      {"id": "sneak_attack_1d6", "name": "Sneak Attack +1d6", "summary": "+1d6 damage when target is denied Dex bonus to AC, or when flanking."},
+      {"id": "trapfinding", "name": "Trapfinding", "summary": "+1/2 level on Perception to find traps and on Disable Device. Can use Disable Device to disarm magical traps."}
+    ]
+  },
+  "spell_progression": null
+}

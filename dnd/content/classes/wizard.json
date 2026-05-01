@@ -1,0 +1,43 @@
+{
+  "id": "wizard",
+  "name": "Wizard",
+  "summary": "Studied arcane caster. Prepares spells from a personal spellbook; specializes in one of the eight schools (or remains a universalist).",
+  "hit_die": 6,
+  "alignment_restriction": null,
+  "starting_gold_dice": "2d6",
+  "starting_gold_multiplier": 10,
+  "level_1": {
+    "bab": 0,
+    "saves": {"fort": 0, "ref": 0, "will": 2},
+    "skill_points_per_level": 2,
+    "class_skills": [
+      "appraise", "craft", "fly",
+      "knowledge_arcana", "knowledge_dungeoneering", "knowledge_engineering",
+      "knowledge_geography", "knowledge_history", "knowledge_local",
+      "knowledge_nature", "knowledge_nobility", "knowledge_planes",
+      "knowledge_religion",
+      "linguistics", "profession", "spellcraft"
+    ],
+    "weapon_proficiencies": "club_dagger_heavy_crossbow_light_crossbow_quarterstaff",
+    "armor_proficiencies": "none",
+    "class_features": [
+      {"id": "arcane_school", "name": "Arcane School", "summary": "Pick one school of magic for specialization (or remain a Universalist). Specialists pick two schools as their opposed schools and cannot cast from those without using two slots. Specialists gain bonus 1st-level spell slot of their school per level."},
+      {"id": "arcane_bond", "name": "Arcane Bond", "summary": "At 1st level: choose either a familiar or a bonded object (amulet, ring, staff, wand, weapon)."},
+      {"id": "scribe_scroll", "name": "Scribe Scroll", "summary": "Bonus feat: may scribe scrolls following standard item creation rules."},
+      {"id": "cantrips_wizard", "name": "Cantrips", "summary": "Prepares 0-level wizard spells from spellbook; they are not expended when cast."}
+    ]
+  },
+  "spell_progression": {
+    "type": "prepared",
+    "key_ability": "int",
+    "spells_per_day_l1": {"0": 3, "1": 1},
+    "specialist_bonus_slots_l1": {"1": 1},
+    "spell_list_source": "spellbook",
+    "starts_with_spellbook": true,
+    "starting_spellbook": {
+      "all_zero_level_wizard_spells_in_book": true,
+      "first_level_spells_in_book": "3 + Int modifier"
+    }
+  },
+  "school_choices": ["abjuration", "conjuration", "divination", "enchantment", "evocation", "illusion", "necromancy", "transmutation", "universalist"]
+}

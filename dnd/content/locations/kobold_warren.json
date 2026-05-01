@@ -1,0 +1,10 @@
+{
+  "id": "loc_kobold_warren",
+  "name": "Kobold Warren",
+  "position": [165, 130],
+  "kind": "lair",
+  "description": "A scaly tribe burrowed under a rocky outcrop. Cunning trapsmiths.",
+  "resident_template": "kobold",
+  "base_renown": 8,
+  "respawn_ticks": 14400
+}

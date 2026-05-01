@@ -1,0 +1,25 @@
+{
+  "id": "barbarian",
+  "name": "Barbarian",
+  "summary": "Wild and ferocious warrior who taps into primal fury for explosive combat strength.",
+  "hit_die": 12,
+  "alignment_restriction": "any_nonlawful",
+  "starting_gold_dice": "3d6",
+  "starting_gold_multiplier": 10,
+  "level_1": {
+    "bab": 1,
+    "saves": {"fort": 2, "ref": 0, "will": 0},
+    "skill_points_per_level": 4,
+    "class_skills": [
+      "acrobatics", "climb", "craft", "handle_animal", "intimidate",
+      "knowledge_nature", "perception", "ride", "survival", "swim"
+    ],
+    "weapon_proficiencies": "all_simple_and_martial",
+    "armor_proficiencies": "light_medium_shields_no_tower",
+    "class_features": [
+      {"id": "fast_movement", "name": "Fast Movement", "summary": "+10 ft land speed in light/medium armor (and no encumbrance)."},
+      {"id": "rage", "name": "Rage", "summary": "4 + Con modifier rounds of rage per day. While raging: +4 morale Str/Con, +2 morale Will saves, -2 AC; cannot use Cha/Dex/Int skills (except Acrobatics, Fly, Intimidate, Ride) or any ability requiring patience."}
+    ]
+  },
+  "spell_progression": null
+}

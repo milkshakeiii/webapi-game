@@ -1,0 +1,10 @@
+{
+  "id": "loc_goblin_camp_north",
+  "name": "Goblin Camp (North)",
+  "position": [37, 45],
+  "kind": "camp",
+  "description": "A ramshackle ring of cookfires and hide tents at the edge of the woods. A scout's report says one tribe of three.",
+  "resident_template": "goblin",
+  "base_renown": 10,
+  "respawn_ticks": 14400
+}

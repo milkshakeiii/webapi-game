@@ -1,0 +1,28 @@
+{
+  "id": "ranger",
+  "name": "Ranger",
+  "summary": "Wilderness warrior. Excels at tracking, two-weapon fighting or archery, and hunting specific foes.",
+  "hit_die": 10,
+  "alignment_restriction": null,
+  "starting_gold_dice": "5d6",
+  "starting_gold_multiplier": 10,
+  "level_1": {
+    "bab": 1,
+    "saves": {"fort": 2, "ref": 2, "will": 0},
+    "skill_points_per_level": 6,
+    "class_skills": [
+      "climb", "craft", "handle_animal", "heal", "intimidate",
+      "knowledge_dungeoneering", "knowledge_geography", "knowledge_nature",
+      "perception", "profession", "ride", "spellcraft", "stealth",
+      "survival", "swim"
+    ],
+    "weapon_proficiencies": "all_simple_and_martial",
+    "armor_proficiencies": "light_medium_shields_no_tower",
+    "class_features": [
+      {"id": "first_favored_enemy", "name": "Favored Enemy", "summary": "Choose one creature type. +2 to Bluff, Knowledge, Perception, Sense Motive, Survival vs that type, and +2 to weapon attack and damage rolls vs that type."},
+      {"id": "track", "name": "Track", "summary": "+1/2 level on Survival checks to follow tracks."},
+      {"id": "wild_empathy_ranger", "name": "Wild Empathy", "summary": "Roll 1d20 + class level + Cha to influence an animal's attitude."}
+    ]
+  },
+  "spell_progression": null
+}

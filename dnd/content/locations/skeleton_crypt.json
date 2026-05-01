@@ -1,0 +1,10 @@
+{
+  "id": "loc_skeleton_crypt",
+  "name": "Forgotten Crypt",
+  "position": [25, 165],
+  "kind": "ruins",
+  "description": "An old burial vault with the seal cracked. Skeletal guardians shamble inside.",
+  "resident_template": "skeleton",
+  "base_renown": 15,
+  "respawn_ticks": 14400
+}

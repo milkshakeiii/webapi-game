@@ -1,0 +1,43 @@
+{
+  "id": "human_zombie",
+  "name": "Human Zombie",
+  "summary": "Slow-moving but stubborn animated dead. Staggered (only one action per turn) but hits hard.",
+  "cr": "1/2",
+  "xp": 200,
+  "race": "human_zombie",
+  "alignment": "neutral_evil",
+  "size": "medium",
+  "type": "undead",
+  "subtypes": [],
+  "ability_scores": {"str": 14, "dex": 10, "con": 0, "int": 0, "wis": 10, "cha": 10},
+  "hit_dice": "2d8+5",
+  "hp": 12,
+  "init": 0,
+  "senses": ["darkvision_60"],
+  "speed": 30,
+  "ac": {"total": 12, "touch": 10, "flat_footed": 12, "natural": 2},
+  "saves": {"fort": 0, "ref": 0, "will": 3},
+  "bab": 1,
+  "cmb": 3,
+  "cmd": 13,
+  "attacks": [
+    {
+      "type": "melee",
+      "name": "slam",
+      "attack_bonus": 4,
+      "damage": "1d6+3",
+      "damage_type": "B",
+      "crit_range": [20, 20],
+      "crit_multiplier": 2
+    }
+  ],
+  "feats": ["toughness"],
+  "skills": {},
+  "languages": [],
+  "permanent_conditions": ["staggered"],
+  "racial_traits": [
+    {"id": "undead_traits_zombie", "name": "Undead Traits", "summary": "No Constitution score; immune to mind-affecting effects, bleed, disease, exhaustion, fatigue, paralysis, poison, sleep, stunning, ability drain to physical scores; not subject to massive damage."},
+    {"id": "dr_5_slashing", "name": "DR 5/slashing", "summary": "Damage reduction 5 against non-slashing attacks."}
+  ],
+  "equipment": []
+}

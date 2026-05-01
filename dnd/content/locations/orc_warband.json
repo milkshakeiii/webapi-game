@@ -1,0 +1,10 @@
+{
+  "id": "loc_orc_warband",
+  "name": "Orc Warband",
+  "position": [120, 80],
+  "kind": "warband",
+  "description": "A roving band of orc raiders. They strike farms and merchant trains. Bring numbers.",
+  "resident_template": "orc",
+  "base_renown": 25,
+  "respawn_ticks": 14400
+}

@@ -1,0 +1,39 @@
+{
+  "id": "cleric",
+  "name": "Cleric",
+  "summary": "Divine spellcaster. Channels positive or negative energy, prepares spells from the cleric list and from two chosen domains.",
+  "hit_die": 8,
+  "alignment_restriction": "within_one_step_of_deity",
+  "starting_gold_dice": "4d6",
+  "starting_gold_multiplier": 10,
+  "level_1": {
+    "bab": 0,
+    "saves": {"fort": 2, "ref": 0, "will": 2},
+    "skill_points_per_level": 2,
+    "class_skills": [
+      "appraise", "craft", "diplomacy", "heal",
+      "knowledge_arcana", "knowledge_history", "knowledge_nobility",
+      "knowledge_planes", "knowledge_religion",
+      "linguistics", "profession", "sense_motive", "spellcraft"
+    ],
+    "weapon_proficiencies": "all_simple_plus_deity_favored",
+    "armor_proficiencies": "light_medium_shields_no_tower",
+    "class_features": [
+      {"id": "aura_cleric", "name": "Aura", "summary": "Cleric of a non-neutral deity has a strong aura of their deity's alignment."},
+      {"id": "channel_energy_1d6", "name": "Channel Energy 1d6", "summary": "Standard action, 30-ft burst centered on cleric. Heals (good) or harms (evil) living, harms (good) or heals (evil) undead. 1d6 at L1, +1d6 every 2 levels. Used 3 + Cha mod times per day. Will save half (DC 10 + 1/2 level + Cha)."},
+      {"id": "domains", "name": "Domains", "summary": "Choose two domains from the deity's list. Each grants a 1st-level domain power and a domain spell slot per level."},
+      {"id": "spontaneous_casting", "name": "Spontaneous Casting", "summary": "May convert any prepared cleric spell into a cure (good) or inflict (evil) spell of the same level."},
+      {"id": "orisons", "name": "Orisons", "summary": "Prepares 0-level cleric spells; they are not expended when cast."}
+    ]
+  },
+  "spell_progression": {
+    "type": "prepared",
+    "key_ability": "wis",
+    "spells_per_day_l1": {"0": 3, "1": 1},
+    "domain_slots_l1": {"1": 1},
+    "spell_list_source": "full_cleric_list_plus_chosen_domains",
+    "starts_with_spellbook": false
+  },
+  "domain_choices": ["air", "earth", "fire", "good", "healing", "knowledge", "law", "war", "death", "evil", "trickery", "magic"],
+  "domain_count": 2
+}

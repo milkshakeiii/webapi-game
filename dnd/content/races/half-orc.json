@@ -1,0 +1,21 @@
+{
+  "id": "half_orc",
+  "name": "Half-Orc",
+  "summary": "Strong and intimidating outsiders. Carry orcish ferocity in human society.",
+  "size": "medium",
+  "speed": 30,
+  "ability_modifiers": {},
+  "ability_modifier_choice": {
+    "options": ["str", "dex", "con", "int", "wis", "cha"],
+    "bonus": 2
+  },
+  "languages_starting": ["common", "orc"],
+  "languages_bonus": ["abyssal", "draconic", "giant", "goblin", "gnoll"],
+  "vision": "darkvision_60",
+  "traits": [
+    {"id": "intimidating", "name": "Intimidating", "summary": "+2 Intimidate."},
+    {"id": "orc_ferocity", "name": "Orc Ferocity", "summary": "Once per day, when reduced below 0 HP but not killed, can fight on for one round before falling unconscious."},
+    {"id": "orc_blood", "name": "Orc Blood", "summary": "Counts as both human and orc for race-based effects."},
+    {"id": "weapon_familiarity_orc", "name": "Weapon Familiarity", "summary": "Proficient with greataxe and falchion; treat any weapon with 'orc' in its name as martial."}
+  ]
+}

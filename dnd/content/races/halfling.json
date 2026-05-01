@@ -1,0 +1,19 @@
+{
+  "id": "halfling",
+  "name": "Halfling",
+  "summary": "Small, lucky, and brave. Quick on their feet and quick of tongue.",
+  "size": "small",
+  "speed": 20,
+  "ability_modifiers": {"dex": 2, "cha": 2, "str": -2},
+  "ability_modifier_choice": null,
+  "languages_starting": ["common", "halfling"],
+  "languages_bonus": ["dwarven", "elven", "gnome", "goblin"],
+  "vision": "normal",
+  "traits": [
+    {"id": "fearless", "name": "Fearless", "summary": "+2 saves vs fear (stacks with halfling luck)."},
+    {"id": "halfling_luck", "name": "Halfling Luck", "summary": "+1 racial bonus to all saves."},
+    {"id": "keen_senses_halfling", "name": "Keen Senses", "summary": "+2 Perception."},
+    {"id": "sure_footed", "name": "Sure-Footed", "summary": "+2 Acrobatics and Climb."},
+    {"id": "weapon_familiarity_halfling", "name": "Weapon Familiarity", "summary": "Proficient with sling; treat any weapon with 'halfling' in its name as martial."}
+  ]
+}
