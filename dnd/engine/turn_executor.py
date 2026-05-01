@@ -770,11 +770,7 @@ def _do_attack(
     outcome: AttackOutcome = resolve_attack(profile, defense, roller)
     if outcome.hit and outcome.damage > 0:
         target.take_damage(outcome.damage)
-        if target.current_hp <= 0:
-            target.add_condition("dying")
-        if target.current_hp <= -10:
-            target.add_condition("dead")
-            target.remove_condition("dying")
+        _apply_post_damage_state(target)
     events.append(TurnEvent(actor.id, label, {
         "target_id": target.id,
         "weapon": profile.name,
@@ -1202,10 +1198,7 @@ def _do_channel_energy(
                 if passed:
                     amount = base_amount // 2
                 c.take_damage(amount)
-                if c.current_hp <= 0:
-                    c.add_condition("dying")
-                if c.current_hp <= -10:
-                    c.add_condition("dead")
+                _apply_post_damage_state(c)
                 affected.append({
                     "target_id": c.id, "kind": "harm_undead",
                     "amount": amount, "save": passed,
@@ -1228,10 +1221,7 @@ def _do_channel_energy(
             if passed:
                 amount = base_amount // 2
             c.take_damage(amount)
-            if c.current_hp <= 0:
-                c.add_condition("dying")
-            if c.current_hp <= -10:
-                c.add_condition("dead")
+            _apply_post_damage_state(c)
             affected.append({
                 "target_id": c.id, "kind": "harm_undead",
                 "amount": amount, "save": passed,
@@ -1660,6 +1650,45 @@ def _sneak_attack_dice(
     return f"{sa_dice}d6"
 
 
+def _has_racial_trait(target: Combatant, trait_id: str) -> bool:
+    """True if the monster template carries the named racial trait."""
+    if target.template_kind != "monster" or target.template is None:
+        return False
+    traits = getattr(target.template, "racial_traits", None) or []
+    return any(
+        isinstance(t, dict) and t.get("id") == trait_id for t in traits
+    )
+
+
+def _apply_post_damage_state(target: Combatant) -> None:
+    """Centralized HP-threshold transitions after damage.
+
+    All damage sites must call this *after* ``target.take_damage(...)``.
+    It handles the three transitions:
+
+    * HP <= -10 (engine convention) → dead.
+    * HP <= 0 with ferocity (orcs etc.) → ``ferocity_active`` +
+      ``staggered``. The creature stays conscious and continues to
+      fight at reduced effectiveness; ``Combatant.tick_round`` bleeds
+      1 HP/round until it's killed outright.
+    * HP <= 0 without ferocity → ``dying``.
+    """
+    if target.current_hp <= -10:
+        target.add_condition("dead")
+        target.remove_condition("dying")
+        target.remove_condition("ferocity_active")
+        target.remove_condition("staggered")
+        return
+    if target.current_hp <= 0:
+        if _has_racial_trait(target, "ferocity"):
+            # Stay conscious and keep fighting; suppress dying.
+            target.add_condition("ferocity_active")
+            target.add_condition("staggered")
+            target.remove_condition("dying")
+        else:
+            target.add_condition("dying")
+
+
 def _do_aoo(
     threatener: Combatant,
     target: Combatant,
@@ -1683,8 +1712,9 @@ def _do_aoo(
     from .dice import Roller as _R
     aoo_roller = _R()  # not deterministic — TODO route encounter RNG.
     outcome = resolve_attack(profile, target.defense_profile(), aoo_roller)
-    if outcome.hit:
+    if outcome.hit and outcome.damage > 0:
         target.take_damage(outcome.damage)
+        _apply_post_damage_state(target)
     events.append(TurnEvent(threatener.id, "aoo", {
         "target_id": target.id,
         "hit": outcome.hit,

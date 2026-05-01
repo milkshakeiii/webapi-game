@@ -85,6 +85,10 @@ class Combatant:
     # Smite target id (paladin Smite Evil declared target). Empty when none.
     smite_target_id: str | None = None
 
+    # Damage reduction: ``(amount, bypass_keywords)`` or ``None``. Read
+    # by ``defense_profile()`` and applied by combat.resolve_attack.
+    damage_reduction: tuple[int, frozenset[str]] | None = None
+
     # ── Derived stat queries ──────────────────────────────────────────────
 
     def ac(self, situation: str = "normal") -> int:
@@ -129,7 +133,7 @@ class Combatant:
             ac=self.ac("normal"),
             touch_ac=self.ac("touch"),
             flat_footed_ac=self.ac("flat_footed"),
-            dr=None,  # DR support comes when conditions/equipment do.
+            dr=self.damage_reduction,
         )
 
     @property
@@ -172,8 +176,19 @@ class Combatant:
         return self.modifiers.remove_by_source(source)
 
     def tick_round(self, current_round: int) -> list[Modifier]:
-        """Drop any modifiers whose duration has elapsed at this round."""
-        return self.modifiers.prune_expired(current_round)
+        """End-of-round housekeeping: prune expired modifiers, apply
+        per-round HP losses (ferocity bleed), check death."""
+        expired = self.modifiers.prune_expired(current_round)
+        # PF1 ferocity: a creature kept conscious below 0 HP bleeds
+        # 1 HP per round until killed outright.
+        if "ferocity_active" in self.conditions and self.current_hp <= 0:
+            self.current_hp -= 1
+            if self.current_hp <= -10:
+                self.add_condition("dead")
+                self.remove_condition("ferocity_active")
+                self.remove_condition("staggered")
+                self.remove_condition("dying")
+        return expired
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +198,43 @@ class Combatant:
 
 def _new_id() -> str:
     return f"combatant_{uuid.uuid4().hex[:8]}"
+
+
+def _parse_dr_trait(trait_id: str) -> tuple[int, frozenset[str]] | None:
+    """Parse a racial-trait ID like ``dr_5_bludgeoning`` into the
+    ``DefenseProfile.dr`` tuple ``(amount, bypass_keywords)``.
+
+    Examples:
+      ``dr_5_bludgeoning`` → ``(5, frozenset({"bludgeoning"}))``
+      ``dr_10_silver``     → ``(10, frozenset({"silver"}))``
+
+    Returns ``None`` if the ID isn't a DR trait. Multi-keyword DRs
+    (e.g., ``DR 10/silver and magic``) aren't yet expressible in the
+    bypass-keyword set semantics; they need a richer model.
+    """
+    if not trait_id.startswith("dr_"):
+        return None
+    parts = trait_id.split("_")
+    if len(parts) < 3:
+        return None
+    try:
+        amount = int(parts[1])
+    except ValueError:
+        return None
+    return amount, frozenset(parts[2:])
+
+
+def _monster_damage_reduction(
+    monster: Monster,
+) -> tuple[int, frozenset[str]] | None:
+    """Walk the monster's racial_traits and return the first DR found."""
+    for t in monster.racial_traits or []:
+        if not isinstance(t, dict):
+            continue
+        parsed = _parse_dr_trait(t.get("id", ""))
+        if parsed is not None:
+            return parsed
+    return None
 
 
 # Map keys in monster.ac dict → modifier types.
@@ -264,6 +316,7 @@ def combatant_from_monster(
         resources={},
         template_kind="monster",
         template=monster,
+        damage_reduction=_monster_damage_reduction(monster),
     )
 
 
