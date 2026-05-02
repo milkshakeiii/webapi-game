@@ -74,6 +74,15 @@ class Modifier:
     - ``expires_round``: absolute round number at which this modifier
       expires. ``None`` for permanent. The collection holder is
       responsible for ticking and pruning expired modifiers.
+    - ``qualifier``: optional context predicate. ``None`` means the
+      modifier always applies. A dict like
+      ``{"target_type": ["orc", "goblinoid"]}`` means the modifier
+      applies *only* when the evaluation context (passed to
+      ``compute_with_context``) has a matching value. Used for
+      situational racial traits (dwarven hatred vs orcs, hardy vs
+      poison, etc.). Modifiers with a non-None qualifier are
+      filtered out by the unconditional ``compute()`` and only
+      surface via ``compute_with_context`` when the context matches.
     """
 
     value: int
@@ -81,15 +90,19 @@ class Modifier:
     target: str
     source: str
     expires_round: int | None = None
+    qualifier: tuple[tuple[str, tuple[str, ...]], ...] | None = None
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "value": self.value,
             "type": self.type,
             "target": self.target,
             "source": self.source,
             "expires_round": self.expires_round,
         }
+        if self.qualifier is not None:
+            d["qualifier"] = {k: list(v) for k, v in self.qualifier}
+        return d
 
 
 # ---------------------------------------------------------------------------
@@ -108,9 +121,60 @@ class TypeBreakdown:
 
 
 def compute(base: int, mods: Iterable[Modifier]) -> int:
-    """Apply ``mods`` to ``base`` and return the total."""
+    """Apply ``mods`` to ``base`` and return the total.
+
+    Modifiers with a non-None ``qualifier`` are excluded — those are
+    situational and only apply via ``compute_with_context`` when the
+    evaluation context matches.
+    """
+    unconditional = [m for m in mods if m.qualifier is None]
     total = base
-    for type_, values in _group_by_type(mods).items():
+    for type_, values in _group_by_type(unconditional).items():
+        if type_ in STACKING_TYPES:
+            total += sum(v.value for v in values)
+        else:
+            total += _net_non_stacking(values)
+    return total
+
+
+def qualifier_matches(qualifier, context: dict) -> bool:
+    """True if every key in ``qualifier`` is satisfied by ``context``.
+
+    Context values may be a single string, a list/set/tuple/frozenset
+    of strings, or None (treated as "no value, no match"). Each
+    qualifier entry is a list of expected strings; the entry is
+    satisfied if any expected value appears in the context's value.
+    """
+    if not qualifier:
+        return True
+    for key, expected_values in qualifier:
+        actual = context.get(key)
+        if actual is None:
+            return False
+        expected_set = set(expected_values)
+        if isinstance(actual, str):
+            if actual not in expected_set:
+                return False
+        elif isinstance(actual, (list, set, tuple, frozenset)):
+            if not any(v in expected_set for v in actual):
+                return False
+        else:
+            return False
+    return True
+
+
+def compute_with_context(
+    base: int, mods: Iterable[Modifier], context: dict | None = None,
+) -> int:
+    """Like ``compute`` but also applies qualified modifiers whose
+    qualifier matches ``context``."""
+    ctx = context or {}
+    relevant = [
+        m for m in mods
+        if m.qualifier is None or qualifier_matches(m.qualifier, ctx)
+    ]
+    total = base
+    for type_, values in _group_by_type(relevant).items():
         if type_ in STACKING_TYPES:
             total += sum(v.value for v in values)
         else:
@@ -307,11 +371,24 @@ def mod(
     target: str,
     source: str,
     expires_round: int | None = None,
+    qualifier: dict | None = None,
 ) -> Modifier:
-    """Concise constructor — same fields as ``Modifier``, easier to read."""
+    """Concise constructor — same fields as ``Modifier``, easier to read.
+
+    ``qualifier`` accepts a dict like ``{"target_type": ["orc"]}``;
+    it's stored as a frozen tuple-of-tuples to keep ``Modifier`` hashable.
+    """
+    q: tuple[tuple[str, tuple[str, ...]], ...] | None = None
+    if qualifier:
+        q = tuple(
+            (k, tuple(v) if isinstance(v, (list, set, tuple, frozenset))
+             else (v,))
+            for k, v in qualifier.items()
+        )
     return Modifier(
         value=value, type=type, target=target,
         source=source, expires_round=expires_round,
+        qualifier=q,
     )
 
 

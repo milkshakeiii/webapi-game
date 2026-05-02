@@ -39,7 +39,23 @@ def racial_modifiers(race: Race) -> list[Modifier]:
 
     elif rid == "gnome":
         out.append(mod(2, "racial", "skill:perception", f"{src_prefix}:keen_senses"))
-        # Illusion Resistance: +2 vs illusion saves — situational, skip.
+        # Hatred: +1 attack vs reptilian and goblinoid subtypes.
+        out.append(mod(
+            1, "racial", "attack", f"{src_prefix}:hatred_gnome",
+            qualifier={"target_subtypes": ["reptilian", "goblinoid"]},
+        ))
+        # Defensive Training: +4 dodge AC vs giants.
+        out.append(mod(
+            4, "dodge", "ac", f"{src_prefix}:defensive_training_gnome",
+            qualifier={"attacker_subtypes": ["giant"]},
+        ))
+        # Illusion Resistance: +2 saves vs illusion school.
+        for save_target in ("fort_save", "ref_save", "will_save"):
+            out.append(mod(
+                2, "racial", save_target,
+                f"{src_prefix}:illusion_resistance",
+                qualifier={"effect_tags": ["illusion"]},
+            ))
 
     elif rid == "half_elf":
         out.append(mod(2, "racial", "skill:perception", f"{src_prefix}:keen_senses"))
@@ -48,13 +64,23 @@ def racial_modifiers(race: Race) -> list[Modifier]:
         out.append(mod(2, "racial", "skill:intimidate", f"{src_prefix}:intimidating"))
 
     elif rid == "dwarf":
-        # Stonecunning: +2 Perception for stonework only — situational.
-        # Hardy: +2 saves vs poison/spells/SLAs — situational.
-        # Stability: +4 CMD vs trip/bull rush — situational.
-        # Hatred: +1 attack vs orcs/goblinoids — situational.
-        # Defensive Training: +4 dodge AC vs giants — situational.
-        # All conditional; not wired in v1.
-        pass
+        # Hatred: +1 attack vs orcs and goblinoids.
+        out.append(mod(
+            1, "racial", "attack", f"{src_prefix}:hatred",
+            qualifier={"target_subtypes": ["orc", "goblinoid"]},
+        ))
+        # Defensive Training: +4 dodge AC vs creatures of giant subtype.
+        out.append(mod(
+            4, "dodge", "ac", f"{src_prefix}:defensive_training",
+            qualifier={"attacker_subtypes": ["giant"]},
+        ))
+        # Hardy: +2 saves vs poison, spells, and spell-like abilities.
+        for save_target in ("fort_save", "ref_save", "will_save"):
+            out.append(mod(
+                2, "racial", save_target, f"{src_prefix}:hardy",
+                qualifier={"effect_tags": ["spell", "poison", "spell_like"]},
+            ))
+        # Stonecunning, stability — deferred (no terrain types / maneuvers).
 
     elif rid == "human":
         # No passive modifier-shaped traits — bonus feat and bonus skill

@@ -133,12 +133,24 @@ class Combatant:
             raise ValueError(f"unknown AC situation {situation!r}")
         return compute(self.bases.get("ac", 10), mods)
 
-    def save(self, kind: str) -> int:
-        """Return Fort/Ref/Will save total."""
+    def save(self, kind: str, context: dict | None = None) -> int:
+        """Return Fort/Ref/Will save total.
+
+        ``context`` is the qualifier-evaluation context (e.g.
+        ``{"effect_tags": ["poison"]}``). Pass it when situational
+        save bonuses (hardy vs poison, illusion_resistance vs
+        illusion) should apply. With no context, only unconditional
+        save modifiers contribute.
+        """
         if kind not in ("fort", "ref", "will"):
             raise ValueError(f"unknown save kind {kind!r}")
         target = f"{kind}_save"
-        return compute(self.bases.get(target, 0), self.modifiers.for_target(target))
+        from .modifiers import compute_with_context
+        return compute_with_context(
+            self.bases.get(target, 0),
+            self.modifiers.for_target(target),
+            context or {},
+        )
 
     def cmb(self) -> int:
         return compute(self.bases.get("cmb", 0), self.modifiers.for_target("cmb"))

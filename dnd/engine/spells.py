@@ -133,9 +133,15 @@ def roll_save(
     save_kind: str,
     dc: int,
     roller: Roller,
+    context: dict | None = None,
 ) -> tuple[bool, int, int]:
-    """Roll a saving throw. Returns (passed, natural, total)."""
-    save_total = target.save(save_kind)
+    """Roll a saving throw. Returns (passed, natural, total).
+
+    ``context`` is forwarded to ``target.save`` so situational save
+    bonuses (hardy, illusion_resistance, etc.) qualify. Default
+    behavior (no context) ignores qualified mods.
+    """
+    save_total = target.save(save_kind, context=context)
     r = roller.roll("1d20")
     nat = r.terms[0].rolls[0]
     total = nat + save_total
@@ -394,7 +400,9 @@ def _handle_scaling_damage(
     save_kind, semantic = parse_saving_throw(spell.saving_throw)
     final = raw_damage
     if save_kind:
-        passed, nat, total = roll_save(target, save_kind, dc, roller)
+        passed, nat, total = roll_save(
+            target, save_kind, dc, roller, context=_spell_save_context(spell),
+        )
         out.log.append(
             f"  {target.name} {save_kind} save: d20={nat}+{target.save(save_kind)}={total} vs DC {dc} → "
             f"{'PASS' if passed else 'FAIL'}"
@@ -456,6 +464,17 @@ def _handle_buff_party(
     _handle_buff_target(caster, spell, target, dc, cl, registry, roller, out)
 
 
+def _spell_save_context(spell: Spell) -> dict:
+    """Build the effect-tag context for save resolution against a spell.
+
+    Used by situational racial save bonuses (hardy +2 vs spells,
+    illusion_resistance +2 vs illusion, etc.)."""
+    tags: list[str] = ["spell"]
+    if spell.school:
+        tags.append(spell.school.lower())
+    return {"effect_tags": tags}
+
+
 def _handle_apply_condition_save(
     caster: Combatant, spell: Spell, target: Combatant, dc: int,
     cl: int, registry: ContentRegistry, roller: Roller, out: SpellOutcome,
@@ -465,7 +484,9 @@ def _handle_apply_condition_save(
     cond = str(eff["condition"])
     save_kind, _ = parse_saving_throw(spell.saving_throw)
     if save_kind:
-        passed, nat, total = roll_save(target, save_kind, dc, roller)
+        passed, nat, total = roll_save(
+            target, save_kind, dc, roller, context=_spell_save_context(spell),
+        )
         out.log.append(
             f"  {target.name} {save_kind} save: d20={nat}+{target.save(save_kind)}={total} vs DC {dc} → "
             f"{'PASS' if passed else 'FAIL'}"
@@ -485,7 +506,9 @@ def _handle_charm(
 ) -> None:
     save_kind, _ = parse_saving_throw(spell.saving_throw)
     if save_kind:
-        passed, nat, total = roll_save(target, save_kind, dc, roller)
+        passed, nat, total = roll_save(
+            target, save_kind, dc, roller, context=_spell_save_context(spell),
+        )
         out.log.append(
             f"  {target.name} {save_kind} save: d20={nat}+{target.save(save_kind)}={total} vs DC {dc} → "
             f"{'PASS' if passed else 'FAIL'}"

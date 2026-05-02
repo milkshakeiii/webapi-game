@@ -54,10 +54,10 @@ PLAYER_RACE_TRAITS: dict[str, Entry] = {
     "weapon_familiarity_elven": (NOT_IMPLEMENTED, "no weapon-familiarity model yet"),
 
     # Gnome
-    "defensive_training_gnome": (NOT_IMPLEMENTED, "+4 dodge AC vs giants (situational)"),
+    "defensive_training_gnome": (IMPLEMENTED,    "+4 dodge AC vs giants via qualifier-on-modifier"),
     "gnome_magic":             (NOT_IMPLEMENTED, "1/day SLAs + bonus DC for illusions"),
-    "hatred_gnome":            (NOT_IMPLEMENTED, "+1 attack vs reptilian/goblinoid (situational)"),
-    "illusion_resistance":     (NOT_IMPLEMENTED, "+2 saves vs illusion (situational)"),
+    "hatred_gnome":            (IMPLEMENTED,     "+1 attack vs reptilian/goblinoid via qualifier"),
+    "illusion_resistance":     (IMPLEMENTED,     "+2 saves vs illusion school via qualifier; spell handlers pass effect_tags=[school] context"),
     "keen_senses_gnome":       (IMPLEMENTED,     "+2 racial Perception"),
     "obsessive":               (NOT_IMPLEMENTED, "+2 to a chosen Craft/Profession"),
     "weapon_familiarity_gnome": (NOT_IMPLEMENTED, "no weapon-familiarity model yet"),
@@ -76,9 +76,9 @@ PLAYER_RACE_TRAITS: dict[str, Entry] = {
     "weapon_familiarity_orc": (NOT_IMPLEMENTED, "no weapon-familiarity model yet"),
 
     # Dwarf
-    "defensive_training":    (NOT_IMPLEMENTED, "+4 dodge AC vs giants (situational)"),
-    "hardy":                 (NOT_IMPLEMENTED, "+2 vs poison/spells/SLAs (situational)"),
-    "hatred":                (NOT_IMPLEMENTED, "+1 attack vs orcs/goblinoids (situational)"),
+    "defensive_training":    (IMPLEMENTED,     "+4 dodge AC vs giants via qualifier-on-modifier; checked at attack-resolution time"),
+    "hardy":                 (IMPLEMENTED,     "+2 saves vs spells/poisons/SLAs via qualifier; spell saves pass effect_tags=['spell',school] context"),
+    "hatred":                (IMPLEMENTED,     "+1 attack vs orcs/goblinoids via qualifier on the actor's 'attack' modifier"),
     "stability":             (NOT_IMPLEMENTED, "+4 CMD vs bull rush/trip while standing on ground"),
     "stonecunning":          (NOT_IMPLEMENTED, "+2 Perception for stonework, automatic check within 10 ft"),
     "weapon_familiarity_dwarven": (NOT_IMPLEMENTED, "no weapon-familiarity model yet"),

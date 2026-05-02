@@ -31,6 +31,7 @@ from .dsl import TurnIntent, evaluate
 from .encounter import Encounter, aoo_triggers_for_movement
 from .grid import Grid
 from .modifiers import Modifier, compute as _compute_mod
+from .modifiers import compute_with_context as _compute_mod_ctx
 
 
 # ---------------------------------------------------------------------------
@@ -801,10 +802,18 @@ def _do_attack(
     # General-purpose attack/damage modifiers (e.g., Inspire Courage morale,
     # Point-Blank Shot for ranged). These accept any source whose target is
     # "attack" or "damage" — the modifier system enforces stacking rules.
-    attack_general = _compute_mod(0, actor.modifiers.for_target("attack"))
+    # Situational racial bonuses (dwarven hatred etc.) carry a qualifier
+    # against the target's type/subtypes; we evaluate via the context-
+    # aware compute.
+    target_ctx = _target_creature_context(target)
+    attack_general = _compute_mod_ctx(
+        0, actor.modifiers.for_target("attack"), target_ctx,
+    )
     damage_general = _compute_mod(0, actor.modifiers.for_target("damage"))
     if is_ranged:
-        attack_general += _compute_mod(0, actor.modifiers.for_target("attack:ranged"))
+        attack_general += _compute_mod_ctx(
+            0, actor.modifiers.for_target("attack:ranged"), target_ctx,
+        )
         damage_general += _compute_mod(0, actor.modifiers.for_target("damage:ranged"))
 
     # Range increment penalty for ranged attacks: -2 per increment
@@ -827,6 +836,23 @@ def _do_attack(
     if "prone" in target.conditions:
         prone_target_modifier = -4 if is_ranged else 4
 
+    # Situational AC bonuses (e.g., +4 dodge AC vs giants from
+    # dwarven defensive_training): include qualifier-matched modifiers
+    # for THIS attacker. We *augment* the defense_profile by computing
+    # qualified-only ac modifiers separately and adding them to the
+    # raw AC. (Unqualified ac modifiers are already in defense_profile
+    # via the standard compute.)
+    attacker_ctx = _target_creature_context(actor)
+    ac_context = {
+        "attacker_type": attacker_ctx.get("target_type"),
+        "attacker_subtypes": attacker_ctx.get("target_subtypes"),
+    }
+    ac_situational_bonus = _compute_mod_ctx(
+        0,
+        [m for m in target.modifiers.for_target("ac") if m.qualifier is not None],
+        ac_context,
+    )
+
     profile = AttackProfile(
         attack_bonus=(
             int(chosen["attack_bonus"])
@@ -841,6 +867,7 @@ def _do_attack(
             + firing_penalty
             + prone_atk_penalty
             + prone_target_modifier
+            - ac_situational_bonus  # subtracted because it makes the target harder to hit
         ),
         damage_dice=str(chosen["damage"]),
         damage_bonus=(
@@ -1904,6 +1931,28 @@ def _firing_into_melee_penalty(
         if grid.is_adjacent(c, target):
             return -4
     return 0
+
+
+def _target_creature_context(target: Combatant) -> dict:
+    """Build the qualifier-matching context dict for ``target``.
+
+    Used by situational racial traits (dwarven hatred vs orcs etc.).
+    Reads ``target_type`` and ``target_subtypes`` from the underlying
+    monster template; characters get a ``humanoid`` type with their
+    race id as a subtype (so dwarven hatred recognizes a "goblinoid"
+    PC etc., should one ever exist).
+    """
+    if target.template is None:
+        return {"target_type": "", "target_subtypes": []}
+    if target.template_kind == "monster":
+        ttype = (getattr(target.template, "type", "") or "").lower()
+        subs = [s.lower() for s in
+                (getattr(target.template, "subtypes", None) or [])]
+        return {"target_type": ttype, "target_subtypes": subs}
+    if target.template_kind == "character":
+        race_id = (getattr(target.template, "race_id", "") or "").lower()
+        return {"target_type": "humanoid", "target_subtypes": [race_id]}
+    return {"target_type": "", "target_subtypes": []}
 
 
 def _range_increment_penalty(
