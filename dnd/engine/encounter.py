@@ -198,8 +198,25 @@ def _check_actor_legality(turn: Turn, combatant: Combatant) -> None:
             )
 
     if "grappled" in conds:
-        # Heavily restricted; for v1 we only check standard slot for
-        # specific forbidden actions.
+        # PF1: a grappled creature cannot move (no walk, run, charge,
+        # withdraw); cannot make actions requiring two free hands;
+        # cannot take attacks of opportunity (handled at AoO time).
+        if turn.move is not None:
+            mtype = turn.move.get("type")
+            if mtype in ("move_to", "move_toward", "move_away"):
+                raise TurnValidationError(
+                    "grappled combatant cannot move (must escape grapple first)"
+                )
+        if turn.full_round is not None:
+            full_kind = turn.full_round.get("composite") or turn.full_round.get("type")
+            if full_kind in ("charge", "withdraw", "run"):
+                raise TurnValidationError(
+                    f"grappled combatant cannot take {full_kind!r} action"
+                )
+        if turn.five_foot_step is not None:
+            raise TurnValidationError(
+                "grappled combatant cannot take a 5-ft step"
+            )
         if turn.standard is not None:
             stype = turn.standard.get("type")
             if stype == "drink":

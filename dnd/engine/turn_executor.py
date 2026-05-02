@@ -1044,6 +1044,21 @@ def _do_attack(
     outcome: AttackOutcome = resolve_attack(
         profile, defense, roller, situation=ac_situation,
     )
+    # Blinded attacker: 50% miss chance against any target (PF1 RAW
+    # "the creature has total concealment" applies to attacks made by
+    # the blinded character).
+    if outcome.hit and "blinded" in actor.conditions:
+        miss_roll = roller.roll("1d100")
+        if miss_roll.total <= 50:
+            from dataclasses import replace as _replace
+            outcome = _replace(
+                outcome,
+                hit=False, crit=False,
+                damage=0, damage_dealt_pre_dr=0, dr_absorbed=0,
+                log=outcome.log + [
+                    f"blinded miss chance: rolled {miss_roll.total}/100 ≤ 50 — miss",
+                ],
+            )
     if outcome.hit and outcome.damage > 0:
         target.take_damage(outcome.damage)
         _apply_post_damage_state(target)

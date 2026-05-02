@@ -255,20 +255,78 @@ class Combatant:
         """Apply ``condition_id`` unless the combatant is immune.
 
         Returns True when the condition was actually applied, False
-        when blocked by an immunity. Callers that want to know which
-        path fired (e.g., for trace events) should check the return
-        value.
+        when blocked by an immunity or because a stronger tier of the
+        condition is already in effect (e.g., applying ``fatigued``
+        when ``exhausted`` is already present is a no-op).
+
+        Side effects: certain conditions add typed modifiers / mutate
+        speed when applied, and the matching ``remove_condition`` undoes
+        those side effects. See ``_on_condition_applied``.
         """
         if self.is_immune_to_condition(condition_id):
             return False
+        # Fatigued is masked by the stronger exhausted tier.
+        if condition_id == "fatigued" and "exhausted" in self.conditions:
+            return False
+        if condition_id in self.conditions:
+            return True  # already present, no double-application
         self.conditions.add(condition_id)
+        self._on_condition_applied(condition_id)
         return True
 
     def is_immune_to_condition(self, condition_id: str) -> bool:
         return condition_id in self.condition_immunities
 
     def remove_condition(self, condition_id: str) -> None:
+        if condition_id not in self.conditions:
+            return
         self.conditions.discard(condition_id)
+        self._on_condition_removed(condition_id)
+
+    def _on_condition_applied(self, condition_id: str) -> None:
+        """Apply the mechanical side effects of a newly-added condition.
+
+        Penalties are added as typed modifiers sourced under the
+        condition name so that ``remove_condition`` can clear them with
+        ``modifiers.remove_by_source``.
+        """
+        if condition_id == "fatigued":
+            self.modifiers.add(Modifier(value=-2, type="untyped",
+                                        target="ability:str",
+                                        source="fatigued"))
+            self.modifiers.add(Modifier(value=-2, type="untyped",
+                                        target="ability:dex",
+                                        source="fatigued"))
+        elif condition_id == "exhausted":
+            # Exhausted supersedes fatigued. Drop any existing fatigued
+            # state before applying the heavier penalty.
+            if "fatigued" in self.conditions:
+                self.conditions.discard("fatigued")
+                self.modifiers.remove_by_source("fatigued")
+            self.modifiers.add(Modifier(value=-6, type="untyped",
+                                        target="ability:str",
+                                        source="exhausted"))
+            self.modifiers.add(Modifier(value=-6, type="untyped",
+                                        target="ability:dex",
+                                        source="exhausted"))
+            self.speed = self.speed // 2
+        elif condition_id == "grappled":
+            self.modifiers.add(Modifier(value=-2, type="untyped",
+                                        target="attack",
+                                        source="grappled"))
+            self.modifiers.add(Modifier(value=-4, type="untyped",
+                                        target="ability:dex",
+                                        source="grappled"))
+
+    def _on_condition_removed(self, condition_id: str) -> None:
+        """Undo the side effects of a condition that's leaving."""
+        if condition_id == "fatigued":
+            self.modifiers.remove_by_source("fatigued")
+        elif condition_id == "exhausted":
+            self.modifiers.remove_by_source("exhausted")
+            self.speed = self.speed * 2
+        elif condition_id == "grappled":
+            self.modifiers.remove_by_source("grappled")
 
     def add_modifier(self, modifier: Modifier) -> None:
         self.modifiers.add(modifier)
