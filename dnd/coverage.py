@@ -411,7 +411,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.movement_swim":          (OUT_OF_SCOPE,   "no aquatic subgame in v1"),
     "combat.movement_climb":         (OUT_OF_SCOPE,   "no 3D terrain in v1"),
     "combat.movement_burrow":        (OUT_OF_SCOPE,   "no 3D terrain in v1"),
-    "combat.mounted_combat":         (NOT_IMPLEMENTED, "needs mount/rider model + Ride checks + lance-on-charge; planned for late this batch"),
+    "combat.mounted_combat":         (PARTIAL,        "Combatant.mount_id/rider_id link rider and mount; mount/dismount composite actions; rider position follows mount during _move_along; mounted-lance charge doubles damage. Not modeled: Ride skill checks for staying mounted, mount AI, mount must be larger than rider, Mounted Combat feat (negate hit on mount), Spirited Charge (3× lance), Trample, Ride-By Attack"),
     "combat.underwater_combat":      (OUT_OF_SCOPE,   "no aquatic subgame in v1"),
     "combat.squeezing":              (OUT_OF_SCOPE,   "v1 doesn't model tight-quarters movement"),
 

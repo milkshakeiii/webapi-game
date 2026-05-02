@@ -137,6 +137,15 @@ class Combatant:
     regeneration: int = 0
     regeneration_bypass: frozenset[str] = field(default_factory=frozenset)
 
+    # Mount / rider link. While ``mount_id`` is set on this combatant,
+    # the combatant is riding that mount: its ``position`` mirrors the
+    # mount's position, and the grid no longer carries the rider as a
+    # separate occupancy. ``rider_id`` is the inverse — set on the
+    # mount while it carries a rider. See dnd/engine/turn_executor.py
+    # ``_do_mount`` / ``_do_dismount``.
+    mount_id: str | None = None
+    rider_id: str | None = None
+
     # ── Derived stat queries ──────────────────────────────────────────────
 
     def ac(self, situation: str = "normal") -> int:

@@ -152,6 +152,12 @@ def _execute_composite(
     if composite == "run":
         _do_run(actor, args, encounter, grid, events)
         return
+    if composite == "mount":
+        _do_mount(actor, args, grid, ns, events)
+        return
+    if composite == "dismount":
+        _do_dismount(actor, args, grid, events)
+        return
     if composite == "cast":
         _do_cast(actor, args, encounter, grid, roller, ns, events)
         return
@@ -341,6 +347,17 @@ def _move_along(
             return
         events.append(TurnEvent(actor.id, "move",
                                 {"kind": "step", "from": cur, "to": next_step}))
+        # If this combatant carries a rider, the rider's position
+        # tracks the mount's anchor.
+        if actor.rider_id is not None:
+            rider = grid.combatants.get(actor.rider_id)
+            if rider is None:
+                # Rider is off-grid (typical when mounted); update directly.
+                # We can't look it up via grid; the caller (if it has a
+                # reference) is expected to find this state via mount.rider_id.
+                pass
+            else:
+                rider.position = next_step
         cur = next_step
         steps_taken += 1
 
@@ -612,10 +629,22 @@ def _do_charge(
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "charge: target not adjacent after move"}))
         return
+    # PF1 RAW: a lance wielded one-handed in the same hand as a mount's
+    # reins doubles damage on a charge (3× with Spirited Charge feat —
+    # not modeled here). We mark the charge so _do_attack can apply
+    # the multiplier.
+    chosen = actor.attack_options[0] if actor.attack_options else {}
+    is_mounted_lance = (
+        actor.mount_id is not None
+        and chosen.get("weapon_id") == "lance"
+    )
+    options = dict(args.get("options") or {})
+    if is_mounted_lance:
+        options["charge_lance_double_damage"] = True
     _do_attack(actor, target, grid, roller, events,
                attack_bonus_delta=2, label="charge_attack",
                encounter=encounter,
-               script_options=args.get("options") or {})
+               script_options=options)
 
 
 def _straight_line_charge_path(
@@ -836,6 +865,107 @@ def _do_withdraw(
         actor, dest, withdraw_squares, grid, events,
         encounter=encounter, skip_aoo_first_step=True,
     )
+
+
+def _do_mount(
+    actor: Combatant,
+    args: dict,
+    grid: Grid,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Mount an adjacent creature.
+
+    PF1 RAW: a mount must be at least one size larger than the rider
+    (size restriction not enforced here in v1; callers are expected to
+    pair compatible creatures). Mounting is a move action that requires
+    the mount to be willing or unwilling-but-not-resisting.
+
+    On success: the rider is removed from the grid (mount and rider
+    share a square conceptually); the rider's ``position`` mirrors the
+    mount's; ``mount_id`` / ``rider_id`` cross-reference is established.
+    """
+    if actor.mount_id is not None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "mount: already mounted"}))
+        return
+    target = _resolve_target(args.get("target"), ns)
+    if target is None or not isinstance(target, Combatant):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "mount: no target resolved"}))
+        return
+    if target.rider_id is not None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "mount: target already carries a rider"}))
+        return
+    if not grid.is_adjacent(actor, target):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "mount: target not adjacent"}))
+        return
+    actor.mount_id = target.id
+    target.rider_id = actor.id
+    actor.position = target.position
+    # Clear the rider's occupancy without removing them from the grid's
+    # combatant dict. The rider is conceptually in the mount's square;
+    # they stay reachable via grid.combatants for movement-tracking but
+    # don't block placement.
+    for sq in [s for s, cid in grid._occupancy.items() if cid == actor.id]:
+        del grid._occupancy[sq]
+    events.append(TurnEvent(actor.id, "mount", {
+        "mount_id": target.id, "position": list(target.position),
+    }))
+
+
+def _do_dismount(
+    actor: Combatant,
+    args: dict,
+    grid: Grid,
+    events: list[TurnEvent],
+) -> None:
+    """Step off the mount into a square adjacent to it.
+
+    PF1 RAW: dismounting is a move action; emergency dismount with a
+    Ride DC 20 check is not modeled here. Picks the first passable
+    adjacent square; emits ``skip`` if no adjacent square is free.
+    """
+    mount_id = actor.mount_id
+    if mount_id is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "dismount: not mounted"}))
+        return
+    mount = grid.combatants.get(mount_id)
+    mount_pos = mount.position if mount is not None else actor.position
+    # Find an adjacent passable square.
+    chosen: tuple[int, int] | None = None
+    for dx in (-1, 0, 1):
+        for dy in (-1, 0, 1):
+            if dx == 0 and dy == 0:
+                continue
+            sq = (mount_pos[0] + dx, mount_pos[1] + dy)
+            if not grid.in_bounds(*sq):
+                continue
+            if not grid.is_passable(*sq):
+                continue
+            if grid._occupancy.get(sq) is not None:
+                continue
+            chosen = sq
+            break
+        if chosen is not None:
+            break
+    if chosen is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "dismount: no adjacent free square"}))
+        return
+    actor.mount_id = None
+    if mount is not None:
+        mount.rider_id = None
+    actor.position = chosen
+    # Re-establish occupancy at the chosen square. ``place`` would also
+    # re-add to combatants (already there) and validate the footprint.
+    grid.place(actor)
+    events.append(TurnEvent(actor.id, "dismount", {
+        "mount_id": mount_id, "position": list(chosen),
+    }))
 
 
 def _do_run(
@@ -1060,6 +1190,19 @@ def _do_attack(
                 ],
             )
     if outcome.hit and outcome.damage > 0:
+        # Lance double damage on a mounted charge.
+        if (script_options or {}).get("charge_lance_double_damage"):
+            from dataclasses import replace as _replace
+            doubled = outcome.damage * 2
+            outcome = _replace(
+                outcome,
+                damage=doubled,
+                damage_dealt_pre_dr=outcome.damage_dealt_pre_dr * 2,
+                log=outcome.log + [
+                    f"mounted lance charge: damage doubled "
+                    f"({outcome.damage} → {doubled})",
+                ],
+            )
         target.take_damage(outcome.damage)
         _apply_post_damage_state(target)
     # Stunning Fist rider: if the attacker has declared a stunning_fist
