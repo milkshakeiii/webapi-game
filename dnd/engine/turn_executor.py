@@ -176,6 +176,11 @@ def _execute_composite(
     if composite == "aid_another":
         _do_aid_another(actor, args, encounter, grid, roller, ns, events)
         return
+    if composite in ("trip", "disarm", "sunder", "bull_rush", "grapple"):
+        _do_combat_maneuver(
+            actor, composite, args, encounter, grid, roller, ns, events,
+        )
+        return
     raise NotImplementedError(f"composite action {composite!r} not yet implemented")
 
 
@@ -899,6 +904,23 @@ def _do_attack(
         stunning_fist_event = _resolve_stunning_fist(
             actor, target, roller, encounter,
         )
+    # Wolf-style trip-on-bite: free trip CMB after a successful melee hit
+    # for creatures with the ``trip_attack`` racial trait.
+    trip_event: dict | None = None
+    if (
+        outcome.hit and not is_ranged
+        and _has_racial_trait(actor, "trip_attack")
+    ):
+        passed, nat, total, margin = _resolve_maneuver(
+            actor, target, "trip", roller,
+        )
+        if passed:
+            target.add_condition("prone")
+        trip_event = {
+            "actor_id": actor.id, "target_id": target.id,
+            "natural": nat, "total": total, "margin": margin,
+            "passed": passed,
+        }
     events.append(TurnEvent(actor.id, label, {
         "target_id": target.id,
         "weapon": profile.name,
@@ -910,6 +932,8 @@ def _do_attack(
     if stunning_fist_event is not None:
         events.append(TurnEvent(actor.id, "stunning_fist_save",
                                 stunning_fist_event))
+    if trip_event is not None:
+        events.append(TurnEvent(actor.id, "trip_on_hit", trip_event))
 
 
 # ---------------------------------------------------------------------------
@@ -1551,6 +1575,129 @@ def _do_stunning_fist(
     actor.remove_condition("stunning_fist_pending")
     actor.resources.pop("stunning_fist_dc", None)
     actor.resources.pop("stunning_fist_round", None)
+
+
+def _resolve_maneuver(
+    actor: Combatant,
+    target: Combatant,
+    kind: str,
+    roller: Roller,
+) -> tuple[bool, int, int, int]:
+    """Roll d20 + actor.cmb vs target.cmd(context={"maneuver": kind}).
+
+    Returns ``(passed, natural, total, margin)`` where ``margin`` is
+    ``total - cmd`` (positive on success). The maneuver kind is
+    forwarded to ``cmd`` so situational bonuses (dwarven Stability
+    vs trip / bullrush) qualify.
+    """
+    cmb = actor.cmb()
+    cmd = target.cmd(context={"maneuver": kind})
+    r = roller.roll("1d20")
+    nat = r.terms[0].rolls[0]
+    total = nat + cmb
+    return total >= cmd, nat, total, total - cmd
+
+
+_MANEUVER_KINDS = frozenset({"trip", "disarm", "sunder", "bull_rush", "grapple"})
+
+
+def _do_combat_maneuver(
+    actor: Combatant,
+    kind: str,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Standalone combat-maneuver composite (trip / disarm / sunder /
+    bull_rush / grapple).
+
+    All maneuvers share the d20 + CMB vs CMD primitive. Effects on
+    success vary by kind:
+
+    - trip: target gains the ``prone`` condition.
+    - disarm: target gains ``disarmed`` (proxy — engine doesn't yet
+      model held weapons multiset).
+    - sunder: target's weapon gains ``weapon_broken`` proxy.
+    - bull_rush: target moves 1 + (margin // 5) squares directly away
+      from actor, into passable cells; stops on the first impassable.
+    - grapple: both gain ``grappled``.
+
+    Maneuver-time AoOs (PF1 RAW: provoke unless you have Improved X)
+    are NOT yet modeled; v1 treats every maneuver as if Improved.
+    """
+    if kind not in _MANEUVER_KINDS:
+        raise ValueError(f"unknown maneuver kind {kind!r}")
+    target = _resolve_target(args.get("target"), ns)
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": f"{kind}: no target"}))
+        return
+    if not grid.is_adjacent(actor, target):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": f"{kind}: target not adjacent"}))
+        return
+
+    passed, nat, total, margin = _resolve_maneuver(actor, target, kind, roller)
+    detail = {
+        "kind": kind, "target_id": target.id,
+        "natural": nat, "total": total, "margin": margin,
+        "passed": passed,
+    }
+    if passed:
+        _apply_maneuver_effect(actor, target, kind, margin, grid, detail)
+    events.append(TurnEvent(actor.id, f"maneuver_{kind}", detail))
+
+
+def _apply_maneuver_effect(
+    actor: Combatant,
+    target: Combatant,
+    kind: str,
+    margin: int,
+    grid: Grid,
+    detail: dict,
+) -> None:
+    if kind == "trip":
+        if target.add_condition("prone"):
+            detail["effect"] = "prone"
+        else:
+            detail["effect"] = "immune"
+    elif kind == "disarm":
+        target.add_condition("disarmed")
+        detail["effect"] = "disarmed"
+    elif kind == "sunder":
+        target.add_condition("weapon_broken")
+        detail["effect"] = "weapon_broken"
+    elif kind == "grapple":
+        actor.add_condition("grappled")
+        target.add_condition("grappled")
+        detail["effect"] = "grappled"
+    elif kind == "bull_rush":
+        # Push direction: from actor toward target's far side.
+        dx = (target.position[0] - actor.position[0])
+        dy = (target.position[1] - actor.position[1])
+        ux = (dx > 0) - (dx < 0)
+        uy = (dy > 0) - (dy < 0)
+        squares_to_push = 1 + (margin // 5)
+        new_pos = target.position
+        squares_pushed = 0
+        for _ in range(squares_to_push):
+            cand = (new_pos[0] + ux, new_pos[1] + uy)
+            if not grid.in_bounds(*cand):
+                break
+            if not grid.is_passable(*cand):
+                break
+            try:
+                grid.move(target, cand)
+            except Exception:
+                break
+            new_pos = cand
+            squares_pushed += 1
+        detail["effect"] = "pushed"
+        detail["squares_pushed"] = squares_pushed
+        detail["new_position"] = list(new_pos)
 
 
 def _do_aid_another(

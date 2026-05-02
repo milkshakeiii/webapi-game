@@ -80,7 +80,14 @@ def racial_modifiers(race: Race) -> list[Modifier]:
                 2, "racial", save_target, f"{src_prefix}:hardy",
                 qualifier={"effect_tags": ["spell", "poison", "spell_like"]},
             ))
-        # Stonecunning, stability — deferred (no terrain types / maneuvers).
+        # Stability: +4 CMD vs trip and bull rush (while standing on
+        # ground; we approximate "while standing" as "while not flying"
+        # — every PC is on the ground in v1 so always-on is correct).
+        out.append(mod(
+            4, "racial", "cmd", f"{src_prefix}:stability",
+            qualifier={"maneuver": ["trip", "bull_rush"]},
+        ))
+        # Stonecunning — deferred (no terrain types).
 
     elif rid == "human":
         # No passive modifier-shaped traits — bonus feat and bonus skill

@@ -152,11 +152,27 @@ class Combatant:
             context or {},
         )
 
-    def cmb(self) -> int:
-        return compute(self.bases.get("cmb", 0), self.modifiers.for_target("cmb"))
+    def cmb(self, context: dict | None = None) -> int:
+        from .modifiers import compute_with_context
+        return compute_with_context(
+            self.bases.get("cmb", 0),
+            self.modifiers.for_target("cmb"),
+            context or {},
+        )
 
-    def cmd(self) -> int:
-        return compute(self.bases.get("cmd", 10), self.modifiers.for_target("cmd"))
+    def cmd(self, context: dict | None = None) -> int:
+        """Maneuver Defense.
+
+        ``context`` is forwarded to the qualifier check, so situational
+        bonuses like dwarven Stability (+4 CMD vs trip/bullrush) only
+        apply when the resolving maneuver matches.
+        """
+        from .modifiers import compute_with_context
+        return compute_with_context(
+            self.bases.get("cmd", 10),
+            self.modifiers.for_target("cmd"),
+            context or {},
+        )
 
     def skill_total(self, skill_id: str) -> int:
         target = f"skill:{skill_id}"

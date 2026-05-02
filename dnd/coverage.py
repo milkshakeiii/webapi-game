@@ -79,7 +79,7 @@ PLAYER_RACE_TRAITS: dict[str, Entry] = {
     "defensive_training":    (IMPLEMENTED,     "+4 dodge AC vs giants via qualifier-on-modifier; checked at attack-resolution time"),
     "hardy":                 (IMPLEMENTED,     "+2 saves vs spells/poisons/SLAs via qualifier; spell saves pass effect_tags=['spell',school] context"),
     "hatred":                (IMPLEMENTED,     "+1 attack vs orcs/goblinoids via qualifier on the actor's 'attack' modifier"),
-    "stability":             (NOT_IMPLEMENTED, "+4 CMD vs bull rush/trip while standing on ground"),
+    "stability":             (IMPLEMENTED,     "+4 CMD vs trip / bull_rush via qualifier on cmd modifier; cmd(context) honors {'maneuver': kind}"),
     "stonecunning":          (NOT_IMPLEMENTED, "+2 Perception for stonework, automatic check within 10 ft"),
     "weapon_familiarity_dwarven": (NOT_IMPLEMENTED, "no weapon-familiarity model yet"),
 
@@ -112,7 +112,7 @@ MONSTER_RACIAL_TRAITS: dict[str, Entry] = {
     "cold_immunity":         (NOT_IMPLEMENTED, "no engine source of cold damage yet; build immunity infra alongside the first cold-damage spell"),
 
     # Wolf
-    "trip_attack":           (NOT_IMPLEMENTED, "free trip on bite hit; needs CMB/CMD trip mechanic"),
+    "trip_attack":           (IMPLEMENTED,     "free trip CMB after successful melee hit; wired in _do_attack via _has_racial_trait + _resolve_maneuver"),
 
     # Zombie
     "undead_traits_zombie":  (PARTIAL,         "same as undead_traits — same immunity set wired"),
@@ -350,16 +350,16 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.reach_weapons":          (NOT_IMPLEMENTED, "10-ft threat with no adjacent — not modeled"),
 
     # ── Combat: special attacks & maneuvers ──────────────────────────────
-    "combat.combat_maneuver_basic":  (NOT_IMPLEMENTED, "CMB vs CMD framework not built"),
-    "combat.bull_rush":              (NOT_IMPLEMENTED, "push 5 ft + 5/+5 over CMD"),
-    "combat.disarm":                 (NOT_IMPLEMENTED, "force drop weapon"),
-    "combat.drag":                   (NOT_IMPLEMENTED, "pull target"),
-    "combat.grapple":                (NOT_IMPLEMENTED, "restrain target"),
+    "combat.combat_maneuver_basic":  (IMPLEMENTED,    "_resolve_maneuver: d20 + actor.cmb vs target.cmd(context={'maneuver': kind}); enables Stability and similar qualified CMD bonuses"),
+    "combat.bull_rush":              (IMPLEMENTED,    "composite 'bull_rush'; pushes target 1 + (margin//5) squares directly away from actor; stops on impassable"),
+    "combat.disarm":                 (PARTIAL,        "composite 'disarm' marks target with 'disarmed' condition; engine doesn't track held-weapon multiset, so the mechanical effect is a proxy"),
+    "combat.drag":                   (NOT_IMPLEMENTED, "pull target — separate maneuver, similar to bull_rush"),
+    "combat.grapple":                (PARTIAL,        "composite 'grapple' marks both as 'grappled'; full grapple action set (pin, move, damage, escape) not yet modeled"),
     "combat.overrun":                (NOT_IMPLEMENTED, "move through enemy"),
     "combat.reposition":             (NOT_IMPLEMENTED, "move target around"),
     "combat.steal":                  (NOT_IMPLEMENTED, "take item"),
-    "combat.sunder":                 (NOT_IMPLEMENTED, "damage object/weapon"),
-    "combat.trip":                   (NOT_IMPLEMENTED, "knock prone; wolf trip-on-bite is the immediate consumer"),
+    "combat.sunder":                 (PARTIAL,        "composite 'sunder' marks target with 'weapon_broken' condition; weapon HP/hardness not modeled"),
+    "combat.trip":                   (IMPLEMENTED,    "composite 'trip' applies prone on success; also fires automatically after a successful melee hit for creatures with the 'trip_attack' racial trait (wolf)"),
     "combat.coup_de_grace":          (NOT_IMPLEMENTED, "auto-crit on helpless + Fort save vs death"),
     "combat.massive_damage":         (NOT_IMPLEMENTED, "Fort save vs die at 50+ damage from one source"),
     "combat.aid_another":            (PARTIAL,         "composite 'aid_another' with mode='attack'|'ac'; DC 10 attack roll → +2 (circumstance) attack OR +2 dodge AC for 1 round; 'vs that specific foe' restriction not modeled (bonus is universal)"),
