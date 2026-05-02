@@ -2073,6 +2073,56 @@ def _do_cast(
         }))
         return
 
+    # ── Spell components check ──────────────────────────────────────
+    components = list(spell.components or [])
+    has_v = "V" in components
+    has_s = "S" in components
+    if has_v and "silenced" in actor.conditions:
+        events.append(TurnEvent(actor.id, "cast_failed", {
+            "spell_id": spell_id,
+            "reason": "verbal_component_blocked",
+            "detail": "silenced",
+        }))
+        return
+    if has_v and "deafened" in actor.conditions:
+        # PF1 RAW: 20% chance of spell failure on V-component spells.
+        miss = roller.roll("1d100")
+        if miss.total <= 20:
+            events.append(TurnEvent(actor.id, "cast_failed", {
+                "spell_id": spell_id,
+                "reason": "verbal_component_failed_deafened",
+                "roll": miss.total,
+            }))
+            return
+    if has_s and "grappled" in actor.conditions:
+        # PF1 RAW: somatic spells while grappled require a concentration
+        # check (DC 10 + grappler's CMB + spell level). We don't track
+        # the specific grappler here, so use a flat +4 stand-in.
+        from .spells import key_ability_for, caster_level as _cl
+        cl_g = _cl(actor)
+        key_g = key_ability_for(actor)
+        ab_g = 0
+        if key_g and actor.template is not None and hasattr(actor.template, "base_ability_scores"):
+            base = actor.template.base_ability_scores.get(key_g)
+            ab_g = (base - 10) // 2
+            for m in actor.modifiers.for_target(f"ability:{key_g}"):
+                ab_g += m.value
+        grapple_dc = 10 + 4 + spell_level
+        r_g = roller.roll("1d20")
+        nat_g = r_g.terms[0].rolls[0]
+        total_g = nat_g + cl_g + ab_g
+        if total_g < grapple_dc:
+            events.append(TurnEvent(actor.id, "cast_failed", {
+                "spell_id": spell_id,
+                "reason": "somatic_grappled_concentration_failed",
+                "concentration_check": {
+                    "natural": nat_g, "modifier": cl_g + ab_g,
+                    "total": total_g, "dc": grapple_dc,
+                },
+            }))
+            actor.resources[slot_key] = remaining - 1
+            return
+
     # ── Concentration check if threatened (cast on the defensive). ──
     threatened_by = []
     if grid is not None:
@@ -2120,12 +2170,43 @@ def _do_cast(
             }))
         else:
             # Casting non-defensively while threatened provokes AoOs.
+            # Track total damage taken for the concentration check below.
+            hp_before_aoos = actor.current_hp
             for threatener in threatened_by:
                 _do_aoo(threatener, actor, grid, events, encounter=encounter)
                 if actor.current_hp <= 0:
                     events.append(TurnEvent(actor.id, "cast_failed", {
                         "spell_id": spell_id,
                         "reason": "killed_by_aoo_during_cast",
+                    }))
+                    actor.resources[slot_key] = remaining - 1
+                    return
+            damage_taken = max(0, hp_before_aoos - actor.current_hp)
+            if damage_taken > 0:
+                # PF1 RAW: damage during a cast → concentration check
+                # DC 10 + damage + spell level. Failure → spell lost.
+                from .spells import key_ability_for, caster_level as _cl
+                cl_d = _cl(actor)
+                key_d = key_ability_for(actor)
+                ab_d = 0
+                if key_d and actor.template is not None and hasattr(actor.template, "base_ability_scores"):
+                    base = actor.template.base_ability_scores.get(key_d)
+                    ab_d = (base - 10) // 2
+                    for m in actor.modifiers.for_target(f"ability:{key_d}"):
+                        ab_d += m.value
+                dmg_dc = 10 + damage_taken + spell_level
+                r_d = roller.roll("1d20")
+                nat_d = r_d.terms[0].rolls[0]
+                total_d = nat_d + cl_d + ab_d
+                if total_d < dmg_dc:
+                    events.append(TurnEvent(actor.id, "cast_failed", {
+                        "spell_id": spell_id,
+                        "reason": "concentration_failed_damage",
+                        "concentration_check": {
+                            "natural": nat_d, "modifier": cl_d + ab_d,
+                            "total": total_d, "dc": dmg_dc,
+                        },
+                        "damage_taken": damage_taken,
                     }))
                     actor.resources[slot_key] = remaining - 1
                     return
