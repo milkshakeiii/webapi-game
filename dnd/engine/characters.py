@@ -414,6 +414,9 @@ class Character:
     # Currency rolled or supplied at creation.
     starting_gold: int
 
+    # Off-hand weapon for two-weapon fighting. ``None`` if none equipped.
+    equipped_offhand_weapon: str | None = None
+
     # Level-up plan from L2 to target_level. None for L1 characters.
     level_plan: dict | None = None             # serialized LevelUpPlan
 
@@ -445,6 +448,7 @@ class Character:
             equipped_weapon=d.get("equipped_weapon"),
             equipped_armor=str(d.get("equipped_armor") or "none"),
             equipped_shield=d.get("equipped_shield"),
+            equipped_offhand_weapon=d.get("equipped_offhand_weapon"),
             starting_gold=int(d.get("starting_gold", 0)),
             level_plan=d.get("level_plan"),
         )
@@ -490,6 +494,7 @@ class CharacterRequest:
     equipped_weapon: str | None = None    # None = use class default
     equipped_armor: str | None = None
     equipped_shield: str | None = None
+    equipped_offhand_weapon: str | None = None  # off-hand weapon for TWF
     weapon_explicitly_none: bool = False  # True iff caller asked for unarmed
     shield_explicitly_none: bool = False
     # Level-up plan (optional). When provided, the character is built
@@ -529,6 +534,7 @@ class CharacterRequest:
             equipped_weapon=equipment.get("weapon"),
             equipped_armor=equipment.get("armor"),
             equipped_shield=equipment.get("shield"),
+            equipped_offhand_weapon=equipment.get("offhand"),
             weapon_explicitly_none=(weapon_present and equipment.get("weapon") is None),
             shield_explicitly_none=(shield_present and equipment.get("shield") is None),
             level_plan=d.get("level_plan"),
@@ -690,6 +696,7 @@ def create_character(
         equipped_weapon=weapon_id,
         equipped_armor=armor_id or "none",
         equipped_shield=shield_id,
+        equipped_offhand_weapon=request.equipped_offhand_weapon,
         starting_gold=starting_gold,
         level_plan=plan_dict,
     )

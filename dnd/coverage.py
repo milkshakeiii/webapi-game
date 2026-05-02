@@ -263,7 +263,7 @@ FEATS: dict[str, Entry] = {
     "spell_penetration":     (IMPLEMENTED,     "+2 caster level vs SR"),
     "stealthy":              (IMPLEMENTED,     "+2 stealth/escape_artist"),
     "toughness":             (IMPLEMENTED,     "+max(3, level) hp_max"),
-    "two_weapon_fighting":   (NOT_IMPLEMENTED, "extra off-hand attack with reduced penalties"),
+    "two_weapon_fighting":   (IMPLEMENTED,     "off-hand attack added during full_attack with options.two_weapon_fighting=true; paired penalties: -2/-2 (light off-hand + feat), -4/-8 (heavy + feat), -6/-10 (no feat). Improved/Greater TWF (more off-hand iteratives) deferred."),
     "weapon_finesse":        (IMPLEMENTED,     "use Dex for melee attack rolls; via combatant.is_finesse path"),
     "weapon_focus":          (IMPLEMENTED,     "+1 attack with chosen weapon (parametric)"),
 }
@@ -383,8 +383,8 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.armor_check_penalty":    (IMPLEMENTED,    "ACP applied to relevant skill checks via combatant_from_character"),
     "combat.armor_max_dex":          (IMPLEMENTED,    "Dex bonus to AC capped by armor's max_dex_bonus"),
     "combat.two_handed_str_bonus":   (IMPLEMENTED,    "1.5×Str damage when wield='two_handed'"),
-    "combat.off_hand_str_bonus":     (NOT_IMPLEMENTED, "0.5×Str off-hand; pair with two-weapon fighting work"),
-    "combat.off_hand_attack":        (NOT_IMPLEMENTED, "no off-hand attack path in _do_full_attack"),
+    "combat.off_hand_str_bonus":     (IMPLEMENTED,    "0.5×Str (round toward zero) wired in combatant_from_character for the off-hand attack option"),
+    "combat.off_hand_attack":        (IMPLEMENTED,    "off-hand attack option added to attack_options when equipped_offhand_weapon is set; _do_full_attack iterates it when options.two_weapon_fighting=true"),
     "combat.shield_use":             (IMPLEMENTED,    "shield AC applied via combatant_from_character; no shield-bash attack profile yet"),
     "combat.weapon_finesse_use":     (IMPLEMENTED,    "Dex to attack for finesse weapons; combatant_from_character"),
 

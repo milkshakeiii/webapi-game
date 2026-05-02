@@ -706,11 +706,18 @@ def _do_full_attack(
                                 {"reason": "full_attack: target not in melee"}))
         return
     bab = actor.bases.get("bab", 0)
-    # Per-attack delta sequence. Default iteratives are at -5, -10, etc.
-    # Rapid Shot inserts an extra attack at top BAB and applies -2 to
-    # every attack in this round (PF1 RAW). Only valid with ranged
-    # weapons and the Rapid Shot feat.
-    deltas = [-5 * i for i in range(_iterative_attack_count(bab))]
+    # Build the (delta, attack_index) sequence for this full attack.
+    # Default: primary-only iteratives at 0, -5, -10, ... using
+    # attack_options[0].
+    #
+    # Rapid Shot inserts an extra primary attack at top BAB and applies
+    # -2 to every primary attack this round.
+    #
+    # Two-Weapon Fighting adds an off-hand attack (using the off-hand
+    # attack_option, identified by ``is_offhand: True``) and applies
+    # paired penalties to BOTH primary and off-hand attacks based on
+    # the TWF feat and off-hand wield class.
+    primary_deltas = [-5 * i for i in range(_iterative_attack_count(bab))]
     rapid_shot_active = (
         bool(options and options.get("rapid_shot"))
         and _has_feat(actor, "rapid_shot")
@@ -718,17 +725,57 @@ def _do_full_attack(
         and actor.attack_options[0].get("type") == "ranged"
     )
     if rapid_shot_active:
-        deltas = [0] + deltas
-        deltas = [d - 2 for d in deltas]
+        primary_deltas = [0] + primary_deltas
+        primary_deltas = [d - 2 for d in primary_deltas]
 
-    for i, delta in enumerate(deltas):
+    twf_active = (
+        bool(options and options.get("two_weapon_fighting"))
+        and bool(actor.attack_options)
+        and any(a.get("is_offhand") for a in actor.attack_options)
+        # Off-hand attacks are melee in our v1; ranged TWF (e.g.
+        # bow + buckler crossbow) isn't modeled.
+        and actor.attack_options[0].get("type") == "melee"
+    )
+    offhand_index = -1
+    twf_primary_pen = 0
+    twf_offhand_pen = 0
+    if twf_active:
+        for i, opt in enumerate(actor.attack_options):
+            if opt.get("is_offhand"):
+                offhand_index = i
+                break
+        offhand_is_light = (
+            actor.attack_options[offhand_index].get("wield") == "light"
+        )
+        has_twf_feat = _has_feat(actor, "two_weapon_fighting")
+        if has_twf_feat and offhand_is_light:
+            twf_primary_pen = -2
+            twf_offhand_pen = -2
+        elif has_twf_feat:
+            twf_primary_pen = -4
+            twf_offhand_pen = -8
+        else:
+            # Dual-wielding without the feat: -6 / -10 per RAW.
+            twf_primary_pen = -6
+            twf_offhand_pen = -10
+
+    schedule: list[tuple[int, int]] = [
+        (d + twf_primary_pen, 0) for d in primary_deltas
+    ]
+    if twf_active:
+        # One off-hand attack at the top BAB (no -5 iterative for the
+        # off-hand without Improved/Greater TWF, both deferred to v2).
+        schedule.append((twf_offhand_pen, offhand_index))
+
+    for i, (delta, idx) in enumerate(schedule):
         if not target.is_alive() or target.current_hp <= 0:
             break
         _do_attack(actor, target, grid, roller, events,
                    attack_bonus_delta=delta,
                    label=f"full_attack_{i+1}",
                    encounter=encounter,
-                   script_options=options)
+                   script_options=options,
+                   attack_index=idx)
 
 
 def _do_withdraw(
@@ -768,13 +815,16 @@ def _do_attack(
     label: str = "attack",
     encounter=None,
     script_options: dict | None = None,
+    attack_index: int = 0,
 ) -> None:
     options = actor.attack_options
     if not options:
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "no attack options"}))
         return
-    chosen = options[0]
+    if attack_index < 0 or attack_index >= len(options):
+        attack_index = 0
+    chosen = options[attack_index]
     is_ranged = chosen.get("type") == "ranged"
     if not is_ranged and not grid.is_adjacent(actor, target):
         events.append(TurnEvent(actor.id, "skip",

@@ -681,6 +681,42 @@ def combatant_from_character(
             "wield": weapon_data.wield,
         })
 
+    # Off-hand weapon (PF1 two-weapon fighting). Uses the same to-hit
+    # math as the primary, but damage uses 1/2 Str modifier (rounded
+    # toward zero). Per-attack penalties for dual-wielding are applied
+    # at full-attack time, not baked into ``attack_bonus`` here.
+    offhand_weapon_data = None
+    if (character.equipped_offhand_weapon
+            and character.equipped_offhand_weapon != "none"):
+        offhand_weapon_data = registry.get_weapon(
+            character.equipped_offhand_weapon,
+        )
+    if offhand_weapon_data is not None:
+        if offhand_weapon_data.is_melee:
+            ability_mod = (max(str_mod, dex_mod)
+                           if offhand_weapon_data.is_finesse else str_mod)
+            off_attack_bonus = cumulative.bab + ability_mod + size_mod_atk
+            off_damage_bonus = str_mod // 2
+            off_attack_type = "melee"
+        else:
+            off_attack_bonus = cumulative.bab + dex_mod + size_mod_atk
+            off_damage_bonus = 0
+            off_attack_type = "ranged"
+        attack_options.append({
+            "type": off_attack_type,
+            "name": offhand_weapon_data.name,
+            "weapon_id": offhand_weapon_data.id,
+            "attack_bonus": off_attack_bonus,
+            "damage": offhand_weapon_data.damage_dice,
+            "damage_bonus": off_damage_bonus,
+            "damage_type": offhand_weapon_data.damage_type,
+            "crit_range": list(offhand_weapon_data.crit_range),
+            "crit_multiplier": offhand_weapon_data.crit_multiplier,
+            "range_increment": offhand_weapon_data.range_increment,
+            "wield": offhand_weapon_data.wield,
+            "is_offhand": True,
+        })
+
     # HP from cumulative HD + Con; add any hp_max modifiers (Toughness etc).
     from .modifiers import compute as _compute
     hp_max = cumulative.hp_max + _compute(0, coll.for_target("hp_max"))
