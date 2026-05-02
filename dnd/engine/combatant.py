@@ -116,6 +116,13 @@ class Combatant:
     # fist) check this set first and skip the application if matched.
     condition_immunities: set[str] = field(default_factory=set)
 
+    # Weapon proficiency categories (e.g. ``{"simple", "martial"}``).
+    # Populated at construction from class data. Empty set means
+    # "proficiency not modeled here" (e.g., natural-attack monsters).
+    # Read by ``turn_executor._weapon_not_proficient`` to apply the
+    # -4 attack penalty when wielding a non-proficient weapon.
+    weapon_proficiency_categories: set[str] = field(default_factory=set)
+
     # Fast healing: HP automatically restored each round (capped by
     # max_hp). Applied in ``tick_round``.
     fast_healing: int = 0
@@ -466,6 +473,86 @@ _AC_KEY_TO_TYPE: dict[str, str] = {
 }
 
 
+def _parse_class_weapon_proficiencies(
+    prof_string: str,
+    registry,
+) -> set[str]:
+    """Translate a class-data ``weapon_proficiencies`` string into a set of
+    proficiency tokens.
+
+    A token is either a category name ("simple", "martial", "exotic") or a
+    specific weapon ID (e.g. "longsword"). The returned set is matched
+    against an attack's ``weapon_category`` and ``weapon_id`` by
+    ``turn_executor._weapon_not_proficient``.
+    """
+    out: set[str] = set()
+    if not prof_string:
+        return out
+    s = prof_string.strip()
+    if s.startswith("all_simple_and_martial"):
+        out.update({"simple", "martial"})
+        return out
+    if s.startswith("all_simple_plus_"):
+        out.add("simple")
+        # "deity_favored" / similar tail tokens aren't modeled yet.
+        return out
+    if s == "all_simple" or s.startswith("all_simple"):
+        out.add("simple")
+        return out
+    if s.startswith("simple_plus_"):
+        out.add("simple")
+        s = s[len("simple_plus_"):]
+    # Greedily consume known weapon IDs from the registry.
+    known_ids = sorted(
+        getattr(registry, "weapons", {}).keys(),
+        key=len,
+        reverse=True,  # longest-first so "heavy_crossbow" beats "heavy".
+    )
+    remaining = s
+    while remaining:
+        matched = False
+        for wid in known_ids:
+            if remaining == wid or remaining.startswith(wid + "_"):
+                out.add(wid)
+                remaining = remaining[len(wid):]
+                if remaining.startswith("_"):
+                    remaining = remaining[1:]
+                matched = True
+                break
+        if not matched:
+            # Unknown token; consume up to next underscore and skip.
+            idx = remaining.find("_")
+            if idx == -1:
+                break
+            remaining = remaining[idx + 1:]
+    return out
+
+
+def _parse_racial_weapon_familiarity(race) -> set[str]:
+    """Pull weapon proficiencies granted by racial traits.
+
+    Translates ``weapon_familiarity_*`` traits into proficiency tokens.
+    Tag-based clauses ("treat any weapon with 'orc' in its name as
+    martial") aren't expanded here — they're just summary text we'd
+    have to scan the registry for; deferred to a later pass.
+    """
+    out: set[str] = set()
+    for t in race.traits or []:
+        if not isinstance(t, dict):
+            continue
+        tid = t.get("id", "")
+        if tid == "weapon_familiarity_orc":
+            out.update({"greataxe", "falchion"})
+        elif tid == "weapon_familiarity_halfling":
+            out.add("sling")
+        elif tid == "weapon_familiarity_elven":
+            out.update({"longbow", "longsword", "rapier", "shortbow"})
+        # Dwarf/gnome racial familiarity reads weapons by name-substring
+        # ("dwarven", "gnome") — those weapon entries aren't in v1
+        # content, so nothing to add here yet.
+    return out
+
+
 def combatant_from_monster(
     monster: Monster,
     position: tuple[int, int],
@@ -730,6 +817,7 @@ def combatant_from_character(
             "type": attack_type,
             "name": weapon_data.name,
             "weapon_id": weapon_data.id,
+            "weapon_category": weapon_data.category,
             "attack_bonus": attack_bonus,
             "damage": weapon_data.damage_dice,
             "damage_bonus": damage_bonus,
@@ -765,6 +853,7 @@ def combatant_from_character(
             "type": off_attack_type,
             "name": offhand_weapon_data.name,
             "weapon_id": offhand_weapon_data.id,
+            "weapon_category": offhand_weapon_data.category,
             "attack_bonus": off_attack_bonus,
             "damage": offhand_weapon_data.damage_dice,
             "damage_bonus": off_damage_bonus,
@@ -831,6 +920,23 @@ def combatant_from_character(
         # Stunning Fist: monk level + 1 (other classes can have it via feat).
         spell_slot_resources["stunning_fist_uses"] = monk_levels
 
+    # Weapon proficiencies from class + multiclass + race. The set holds
+    # category names ("simple", "martial") and/or specific weapon IDs.
+    weapon_profs: set[str] = _parse_class_weapon_proficiencies(
+        class_.level_1.weapon_proficiencies, registry,
+    )
+    for cid in cumulative.class_levels:
+        if cid == class_.id:
+            continue
+        try:
+            other = registry.get_class(cid)
+        except Exception:
+            continue
+        weapon_profs |= _parse_class_weapon_proficiencies(
+            other.level_1.weapon_proficiencies, registry,
+        )
+    weapon_profs |= _parse_racial_weapon_familiarity(race)
+
     return Combatant(
         id=_new_id(),
         name=character.name,
@@ -859,4 +965,5 @@ def combatant_from_character(
         template=character,
         castable_spells=castable,
         death_threshold=-int(final_scores.get("con") or 10),
+        weapon_proficiency_categories=weapon_profs,
     )

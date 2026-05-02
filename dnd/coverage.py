@@ -369,8 +369,8 @@ CORE_MECHANICS: dict[str, Entry] = {
     # ── Combat: charge & full-round movement ─────────────────────────────
     "combat.charge":                 (PARTIAL,        "min-distance, straight-line, lane-clear, end-adjacent enforced; difficult terrain not (engine has no terrain types)"),
     "combat.partial_charge":         (NOT_IMPLEMENTED, "charge as standard action when full-round unavailable"),
-    "combat.withdraw":               (PARTIAL,        "full-round; first-square-no-AoO not yet enforced (just moves)"),
-    "combat.run":                    (NOT_IMPLEMENTED, "x4 speed, lose Dex to AC, straight line"),
+    "combat.withdraw":               (IMPLEMENTED,    "full-round, 2× speed in a direction; first square does not provoke AoO (skip_aoo_first_step in _move_along)"),
+    "combat.run":                    (IMPLEMENTED,    "composite 'run': 4× speed in a straight line, loses Dex bonus to AC for the round (added as -dex_to_ac modifier expiring next round)"),
 
     # ── Combat: ranged attacks ──────────────────────────────────────────
     "combat.range_increments":       (PARTIAL,         "-2 attack per increment via _range_increment_penalty in _do_attack; max-range cap (5/10 increments) not yet enforced — long shots are punished but not forbidden"),
@@ -378,7 +378,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.point_blank_shot":       (IMPLEMENTED,    "feat applies +1 attack/damage to ranged via attack:ranged modifier"),
 
     # ── Combat: weapon use & wielding ───────────────────────────────────
-    "combat.weapon_proficiency_penalty": (NOT_IMPLEMENTED, "-4 attack if not proficient with weapon used"),
+    "combat.weapon_proficiency_penalty": (IMPLEMENTED,    "-4 attack via _weapon_not_proficient in _do_attack; classes' weapon_proficiencies parsed into Combatant.weapon_proficiency_categories at construction (categories or specific weapon IDs); racial weapon familiarity (orc/elf/halfling) folded in"),
     "combat.armor_proficiency_penalty": (NOT_IMPLEMENTED, "ACP applies to attack rolls without armor proficiency"),
     "combat.armor_check_penalty":    (IMPLEMENTED,    "ACP applied to relevant skill checks via combatant_from_character"),
     "combat.armor_max_dex":          (IMPLEMENTED,    "Dex bonus to AC capped by armor's max_dex_bonus"),
@@ -395,7 +395,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.stable":                 (IMPLEMENTED,    "suppresses dying-bleed when set; reached via DC 10 Con check in tick_round or via the 'stable' condition being applied externally"),
     "combat.unconscious":            (PARTIAL,        "is_unconscious checks the condition; turn validation prevents acts"),
     "combat.dead_threshold":         (IMPLEMENTED,    "PF1 RAW: HP <= -CON for living; 0 for undead/constructs (no Con score). Cached on Combatant.death_threshold at construction"),
-    "combat.helpless_attacker_bonus": (NOT_IMPLEMENTED, "+4 melee attack vs helpless; Dex treated as 0"),
+    "combat.helpless_attacker_bonus": (IMPLEMENTED,    "+4 melee attack vs helpless target (not ranged); target is dex-denied via _has_dex_denied (helpless/paralyzed/pinned/stunned/etc.) → flat-footed AC used in resolve_attack"),
 
     # ── Combat: healing ─────────────────────────────────────────────────
     "combat.healing_natural":        (NOT_IMPLEMENTED, "1 HP/level/8 hr; no rest-time mechanic in combat-only loop"),

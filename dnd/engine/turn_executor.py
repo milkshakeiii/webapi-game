@@ -149,6 +149,9 @@ def _execute_composite(
     if composite == "withdraw":
         _do_withdraw(actor, args, encounter, grid, events)
         return
+    if composite == "run":
+        _do_run(actor, args, encounter, grid, events)
+        return
     if composite == "cast":
         _do_cast(actor, args, encounter, grid, roller, ns, events)
         return
@@ -302,11 +305,17 @@ def _move_along(
     grid: Grid,
     events: list[TurnEvent],
     encounter=None,
+    skip_aoo_first_step: bool = False,
 ) -> None:
+    """Move along a path with AoO triggers per step.
+
+    ``skip_aoo_first_step``: when True, the first square of movement
+    doesn't provoke AoOs from threateners. Used by withdraw (PF1 RAW:
+    "the square you start in is not considered threatened, and you
+    do not provoke an AoO when leaving that square").
+    """
     if dest is None or dest == actor.position:
         return
-    # Step-by-step movement with obstacle routing. AoO triggered when
-    # leaving a threatened square.
     cur = actor.position
     steps_taken = 0
     while steps_taken < max_squares and cur != dest:
@@ -314,13 +323,15 @@ def _move_along(
         if next_step == cur:
             break  # truly blocked — no passable neighbor closer to dest
         # AoO check: is the actor leaving a square threatened by hostiles?
-        triggers = aoo_triggers_for_movement(grid, actor, cur)
-        for threatener in triggers:
-            _do_aoo(threatener, actor, grid, events, encounter=encounter)
-            if not actor.is_alive() or actor.current_hp <= -10:
-                events.append(TurnEvent(actor.id, "skip",
-                                        {"reason": "killed by AoO"}))
-                return
+        # Skip the first step's AoO when withdrawing.
+        if not (skip_aoo_first_step and steps_taken == 0):
+            triggers = aoo_triggers_for_movement(grid, actor, cur)
+            for threatener in triggers:
+                _do_aoo(threatener, actor, grid, events, encounter=encounter)
+                if not actor.is_alive() or actor.current_hp <= -10:
+                    events.append(TurnEvent(actor.id, "skip",
+                                            {"reason": "killed by AoO"}))
+                    return
         # Commit the step.
         try:
             grid.move(actor, next_step)
@@ -781,6 +792,30 @@ def _do_full_attack(
                    attack_index=idx)
 
 
+_DIRECTION_DELTAS: dict[str, tuple[int, int]] = {
+    "north":     (0, -1),
+    "south":     (0, 1),
+    "east":      (1, 0),
+    "west":      (-1, 0),
+    "northeast": (1, -1),
+    "northwest": (-1, -1),
+    "southeast": (1, 1),
+    "southwest": (-1, 1),
+}
+
+
+def _square_in_direction(
+    actor: Combatant, direction: str, distance: int,
+) -> tuple[int, int] | None:
+    delta = _DIRECTION_DELTAS.get(direction)
+    if delta is None:
+        return None
+    return (
+        actor.position[0] + delta[0] * distance,
+        actor.position[1] + delta[1] * distance,
+    )
+
+
 def _do_withdraw(
     actor: Combatant,
     args: dict,
@@ -791,15 +826,58 @@ def _do_withdraw(
     direction = args.get("direction", "south")
     speed_squares = actor.speed // 5
     withdraw_squares = speed_squares * 2
-    # Withdraw: first square doesn't provoke. We just move; a real impl
-    # would suppress AoO from the starting square only.
-    target = _direction_to_square(actor, direction)
-    if target is None:
+    dest = _square_in_direction(actor, direction, withdraw_squares)
+    if dest is None:
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": f"withdraw: bad direction {direction!r}"}))
         return
-    dest = _square_away(actor, actor.position, withdraw_squares, grid)
-    _move_along(actor, dest, withdraw_squares, grid, events, encounter=encounter)
+    # Withdraw: first square of movement doesn't provoke AoOs.
+    _move_along(
+        actor, dest, withdraw_squares, grid, events,
+        encounter=encounter, skip_aoo_first_step=True,
+    )
+
+
+def _do_run(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    events: list[TurnEvent],
+) -> None:
+    """PF1 Run: full-round action, 4× speed in a straight line, lose Dex
+    bonus to AC until the start of the actor's next turn.
+
+    AoOs trigger normally on each step.
+    """
+    direction = args.get("direction", "south")
+    speed_squares = actor.speed // 5
+    run_squares = speed_squares * 4
+    dest = _square_in_direction(actor, direction, run_squares)
+    if dest is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": f"run: bad direction {direction!r}"}))
+        return
+
+    # Lose Dex bonus to AC until the start of the actor's next turn.
+    dex_to_ac = 0
+    for m in actor.modifiers.for_target("ac"):
+        if m.type == "ability" and "dex" in m.source.lower():
+            dex_to_ac += m.value
+    cur_round = encounter.round_number if encounter else 1
+    src = "running"
+    actor.modifiers.remove_by_source(src)
+    if dex_to_ac > 0:
+        actor.modifiers.add(Modifier(
+            value=-dex_to_ac, type="untyped", target="ac",
+            source=src, expires_round=cur_round + 1,
+        ))
+    events.append(TurnEvent(actor.id, "run", {
+        "direction": direction,
+        "max_squares": run_squares,
+        "dex_ac_lost": dex_to_ac,
+    }))
+    _move_along(actor, dest, run_squares, grid, events, encounter=encounter)
 
 
 # ---------------------------------------------------------------------------
@@ -893,6 +971,22 @@ def _do_attack(
     prone_target_modifier = 0
     if "prone" in target.conditions:
         prone_target_modifier = -4 if is_ranged else 4
+    # Helpless target (sleeping, paralyzed, unconscious, etc.):
+    # attacker gets +4 to melee attack rolls. Helpless creatures also
+    # treat their Dex as 0 — we approximate by switching the AC look-
+    # up to flat-footed AC (the attacker's effective benefit).
+    helpless_bonus = 0
+    ac_situation = "normal"
+    if "helpless" in target.conditions:
+        helpless_bonus = 4 if not is_ranged else 0
+        ac_situation = "flat_footed"
+    elif _has_dex_denied(target):
+        ac_situation = "flat_footed"
+    # Weapon proficiency: -4 attack if the attacker isn't proficient
+    # with the weapon they're using. ``_weapon_not_proficient`` checks
+    # the cached proficient categories on the combatant against the
+    # chosen weapon's category (when known).
+    nonprof_penalty = -4 if _weapon_not_proficient(actor, chosen) else 0
 
     # Situational AC bonuses (e.g., +4 dodge AC vs giants from
     # dwarven defensive_training): include qualifier-matched modifiers
@@ -929,6 +1023,8 @@ def _do_attack(
             + firing_penalty
             + prone_atk_penalty
             + prone_target_modifier
+            + helpless_bonus
+            + nonprof_penalty
             - ac_situational_bonus  # subtracted because it makes the target harder to hit
             - cover_bonus
         ),
@@ -945,7 +1041,9 @@ def _do_attack(
         precision_damage_dice=precision_dice,
     )
     defense = target.defense_profile()
-    outcome: AttackOutcome = resolve_attack(profile, defense, roller)
+    outcome: AttackOutcome = resolve_attack(
+        profile, defense, roller, situation=ac_situation,
+    )
     if outcome.hit and outcome.damage > 0:
         target.take_damage(outcome.damage)
         _apply_post_damage_state(target)
@@ -2270,6 +2368,45 @@ def _firing_into_melee_penalty(
         if grid.is_adjacent(c, target):
             return -4
     return 0
+
+
+_DEX_DENIED_CONDITIONS = frozenset({
+    "flat_footed", "helpless", "paralyzed", "stunned", "pinned",
+    "cowering", "blinded", "prone", "sleeping",
+})
+
+
+def _has_dex_denied(target: Combatant) -> bool:
+    """Whether the target is denied its Dex bonus to AC."""
+    return bool(target.conditions & _DEX_DENIED_CONDITIONS)
+
+
+def _weapon_not_proficient(actor: Combatant, chosen: dict) -> bool:
+    """True if the actor lacks proficiency with the weapon being used.
+
+    Uses the cached ``Combatant.weapon_proficiency_categories`` set
+    (populated at construction). When the cache is empty we assume
+    the actor is proficient (e.g., monsters with natural attacks
+    don't need a category lookup; their attack_options come from a
+    template with built-in proficiency).
+
+    Proficiency matches either the weapon's category ("simple",
+    "martial", "exotic") or its specific weapon ID — class data may
+    grant a narrow list of weapons (e.g. wizard with quarterstaff)
+    that don't translate to whole-category proficiency.
+    """
+    weapon_cat = chosen.get("weapon_category")
+    if not weapon_cat:
+        return False  # natural / template-supplied attack — always proficient
+    profs = getattr(actor, "weapon_proficiency_categories", None) or set()
+    if not profs:
+        return False  # no cached proficiencies — assume proficient
+    if weapon_cat in profs:
+        return False
+    weapon_id = chosen.get("weapon_id")
+    if weapon_id and weapon_id in profs:
+        return False
+    return True
 
 
 def _target_creature_context(target: Combatant) -> dict:
