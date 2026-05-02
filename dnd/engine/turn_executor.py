@@ -176,7 +176,10 @@ def _execute_composite(
     if composite == "aid_another":
         _do_aid_another(actor, args, encounter, grid, roller, ns, events)
         return
-    if composite in ("trip", "disarm", "sunder", "bull_rush", "grapple"):
+    if composite in (
+        "trip", "disarm", "sunder", "bull_rush", "grapple",
+        "drag", "overrun", "reposition", "steal",
+    ):
         _do_combat_maneuver(
             actor, composite, args, encounter, grid, roller, ns, events,
         )
@@ -1648,7 +1651,10 @@ def _resolve_maneuver(
     return total >= cmd, nat, total, total - cmd
 
 
-_MANEUVER_KINDS = frozenset({"trip", "disarm", "sunder", "bull_rush", "grapple"})
+_MANEUVER_KINDS = frozenset({
+    "trip", "disarm", "sunder", "bull_rush", "grapple",
+    "drag", "overrun", "reposition", "steal",
+})
 
 
 def _do_combat_maneuver(
@@ -1748,6 +1754,94 @@ def _apply_maneuver_effect(
         detail["effect"] = "pushed"
         detail["squares_pushed"] = squares_pushed
         detail["new_position"] = list(new_pos)
+    elif kind == "drag":
+        # PF1: pull target 5 ft + 5/+5 over CMD, ending each square
+        # closer to the puller. Direction: opposite of the bull-rush
+        # vector (toward the actor).
+        dx = (actor.position[0] - target.position[0])
+        dy = (actor.position[1] - target.position[1])
+        ux = (dx > 0) - (dx < 0)
+        uy = (dy > 0) - (dy < 0)
+        squares_to_pull = 1 + (margin // 5)
+        new_pos = target.position
+        squares_pulled = 0
+        for _ in range(squares_to_pull):
+            cand = (new_pos[0] + ux, new_pos[1] + uy)
+            if not grid.in_bounds(*cand):
+                break
+            if not grid.is_passable(*cand):
+                break
+            # Don't drag the target onto the actor's own square.
+            if cand == actor.position:
+                break
+            try:
+                grid.move(target, cand)
+            except Exception:
+                break
+            new_pos = cand
+            squares_pulled += 1
+        detail["effect"] = "dragged"
+        detail["squares_pulled"] = squares_pulled
+        detail["new_position"] = list(new_pos)
+    elif kind == "overrun":
+        # PF1 RAW: on success move through the target's space; if
+        # margin >= 5 the target is also knocked prone. We move the
+        # actor through (one square past the target along the line),
+        # leaving the target where they were.
+        dx = (target.position[0] - actor.position[0])
+        dy = (target.position[1] - actor.position[1])
+        ux = (dx > 0) - (dx < 0)
+        uy = (dy > 0) - (dy < 0)
+        through = (target.position[0] + ux, target.position[1] + uy)
+        moved = False
+        if grid.in_bounds(*through) and grid.is_passable(*through):
+            try:
+                grid.move(actor, through)
+                moved = True
+            except Exception:
+                moved = False
+        detail["effect"] = "overran"
+        detail["actor_new_position"] = list(actor.position)
+        if margin >= 5:
+            target.add_condition("prone")
+            detail["target_prone"] = True
+        if not moved:
+            detail["note"] = "blocked past target"
+    elif kind == "reposition":
+        # Move target to any square within (1 + margin//5) of their
+        # original position. The args may carry a "destination" field
+        # the patron picks; otherwise we default to one square in the
+        # opposite direction (a "shove off" feel).
+        max_distance = 1 + (margin // 5)
+        # Default: shove away from actor by one square.
+        dx = (target.position[0] - actor.position[0])
+        dy = (target.position[1] - actor.position[1])
+        ux = (dx > 0) - (dx < 0)
+        uy = (dy > 0) - (dy < 0)
+        default_dest = (
+            target.position[0] + ux, target.position[1] + uy,
+        )
+        dest = detail.get("destination") or default_dest
+        # Validate distance.
+        td = grid.distance_squares(target.position, dest)
+        if (
+            td <= max_distance
+            and grid.in_bounds(*dest)
+            and grid.is_passable(*dest)
+        ):
+            try:
+                grid.move(target, dest)
+            except Exception:
+                pass
+        detail["effect"] = "repositioned"
+        detail["new_position"] = list(target.position)
+        detail["max_distance"] = max_distance
+    elif kind == "steal":
+        # PF1: take a small carried item (not held weapon — that's
+        # disarm). v1 doesn't model item slots beyond proxy
+        # conditions; mark the target with "stolen_from".
+        target.add_condition("stolen_from")
+        detail["effect"] = "stolen_from"
 
 
 def _do_aid_another(
