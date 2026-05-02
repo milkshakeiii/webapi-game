@@ -852,6 +852,10 @@ def _do_attack(
         [m for m in target.modifiers.for_target("ac") if m.qualifier is not None],
         ac_context,
     )
+    # Positional cover. Walls between attacker and target give hard
+    # cover (+4 AC); intervening combatants give soft cover (+4 AC,
+    # ranged only).
+    cover_bonus = _cover_ac_bonus(actor, target, grid, is_ranged)
 
     profile = AttackProfile(
         attack_bonus=(
@@ -868,6 +872,7 @@ def _do_attack(
             + prone_atk_penalty
             + prone_target_modifier
             - ac_situational_bonus  # subtracted because it makes the target harder to hit
+            - cover_bonus
         ),
         damage_dice=str(chosen["damage"]),
         damage_bonus=(
@@ -1902,6 +1907,49 @@ def _is_flanking(
         if grid.is_flanked_by(target, actor, ally):
             return True
     return False
+
+
+def _cover_ac_bonus(
+    attacker: Combatant,
+    target: Combatant,
+    grid: Grid | None,
+    is_ranged: bool,
+) -> int:
+    """Return the cover bonus to ``target``'s AC vs ``attacker``.
+
+    PF1 simplified for v1:
+      - Hard cover (intervening wall): +4 AC, regardless of attack type.
+      - Soft cover (intervening combatant): +4 AC, ranged attacks only.
+      - Hard cover trumps soft cover; we don't double-count.
+      - Greater cover (+8) is deferred — needs a model for "more than
+        half the path is blocked" beyond the binary one we use here.
+    """
+    if grid is None:
+        return 0
+    from .grid import _bresenham
+    line = _bresenham(attacker.position, target.position)
+    has_hard = False
+    has_soft = False
+    for cell in line:
+        if cell == attacker.position or cell == target.position:
+            continue
+        # Hard cover from a wall on the line.
+        f = grid.features.get(cell)
+        if f is not None and f.blocks_line_of_sight:
+            has_hard = True
+            break
+        # Soft cover from any other combatant standing in the way.
+        for cid, occupant in grid.combatants.items():
+            if occupant.id in (attacker.id, target.id):
+                continue
+            if occupant.position == cell:
+                has_soft = True
+                break
+    if has_hard:
+        return 4
+    if has_soft and is_ranged:
+        return 4
+    return 0
 
 
 def _firing_into_melee_penalty(

@@ -333,10 +333,10 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.nonlethal_damage":       (NOT_IMPLEMENTED, "no separate nonlethal HP track"),
 
     # ── Combat: defenses, cover, concealment, flanking ───────────────────
-    "combat.cover":                  (NOT_IMPLEMENTED, "+4 AC, +2 Reflex; no cover model on grid"),
-    "combat.greater_cover":          (NOT_IMPLEMENTED, "+8 AC, +4 Reflex"),
-    "combat.soft_cover":             (NOT_IMPLEMENTED, "intervening creatures grant +4 AC vs ranged"),
-    "combat.total_cover":            (NOT_IMPLEMENTED, "blocks line of effect entirely"),
+    "combat.cover":                  (PARTIAL,        "hard cover (+4 AC) wired via _cover_ac_bonus + Bresenham; +2 Reflex bonus not yet applied (no consumer cares yet)"),
+    "combat.greater_cover":          (NOT_IMPLEMENTED, "+8 AC, +4 Reflex; needs 'majority of line blocked' detection"),
+    "combat.soft_cover":             (IMPLEMENTED,    "intervening combatant grants +4 AC vs ranged via _cover_ac_bonus"),
+    "combat.total_cover":            (NOT_IMPLEMENTED, "blocks line of effect entirely; needs spell-targeting check"),
     "combat.concealment":            (NOT_IMPLEMENTED, "20% miss chance"),
     "combat.total_concealment":      (NOT_IMPLEMENTED, "50% miss chance"),
     "combat.flanking":               (IMPLEMENTED,    "+2 attack to both flankers; grid.is_flanked_by + _flanking_attack_bonus"),
