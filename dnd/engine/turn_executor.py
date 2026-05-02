@@ -226,7 +226,7 @@ def _do_move_action(
             events.append(TurnEvent(actor.id, "skip",
                                     {"reason": "move_to: no destination"}))
             return
-        _move_along(actor, dest, speed_squares, grid, events)
+        _move_along(actor, dest, speed_squares, grid, events, encounter=encounter)
     elif mtype == "move_toward":
         target = _resolve_target(move.get("target"), ns)
         if target is None:
@@ -234,13 +234,13 @@ def _do_move_action(
                                     {"reason": "move_toward: no target"}))
             return
         dest = _square_toward(actor, target, speed_squares, grid)
-        _move_along(actor, dest, speed_squares, grid, events)
+        _move_along(actor, dest, speed_squares, grid, events, encounter=encounter)
     elif mtype == "move_away":
         target = _resolve_target(move.get("target"), ns)
         if target is None:
             return
         dest = _square_away(actor, target, speed_squares, grid)
-        _move_along(actor, dest, speed_squares, grid, events)
+        _move_along(actor, dest, speed_squares, grid, events, encounter=encounter)
     elif mtype == "stand_up":
         if "prone" in actor.conditions:
             # PF1: standing up provokes AoOs from threateners.
@@ -248,7 +248,7 @@ def _do_move_action(
             for threatener in aoo_triggers_for_provoking_action(
                 grid, actor, "stand_up",
             ):
-                _do_aoo(threatener, actor, grid, events)
+                _do_aoo(threatener, actor, grid, events, encounter=encounter)
                 if not actor.is_alive() or actor.current_hp <= -10:
                     events.append(TurnEvent(actor.id, "skip",
                                             {"reason": "killed by AoO"}))
@@ -292,6 +292,7 @@ def _move_along(
     max_squares: int,
     grid: Grid,
     events: list[TurnEvent],
+    encounter=None,
 ) -> None:
     if dest is None or dest == actor.position:
         return
@@ -306,7 +307,7 @@ def _move_along(
         # AoO check: is the actor leaving a square threatened by hostiles?
         triggers = aoo_triggers_for_movement(grid, actor, cur)
         for threatener in triggers:
-            _do_aoo(threatener, actor, grid, events)
+            _do_aoo(threatener, actor, grid, events, encounter=encounter)
             if not actor.is_alive() or actor.current_hp <= -10:
                 events.append(TurnEvent(actor.id, "skip",
                                         {"reason": "killed by AoO"}))
@@ -560,7 +561,7 @@ def _do_charge(
     for next_cell in path_cells:
         triggers = aoo_triggers_for_movement(grid, actor, prev)
         for threatener in triggers:
-            _do_aoo(threatener, actor, grid, events)
+            _do_aoo(threatener, actor, grid, events, encounter=encounter)
             if not actor.is_alive() or actor.current_hp <= -10:
                 events.append(TurnEvent(actor.id, "skip",
                                         {"reason": "killed by AoO"}))
@@ -687,17 +688,38 @@ def _do_full_attack(
     events: list[TurnEvent],
     encounter=None,
 ) -> None:
-    if not grid.is_adjacent(actor, target):
+    # Adjacency only required for melee weapons. Ranged full attacks
+    # (e.g., a longbow user) can fire from any range; range increments
+    # apply per-attack.
+    primary_is_ranged = (
+        bool(actor.attack_options)
+        and actor.attack_options[0].get("type") == "ranged"
+    )
+    if not primary_is_ranged and not grid.is_adjacent(actor, target):
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "full_attack: target not in melee"}))
         return
     bab = actor.bases.get("bab", 0)
-    n_attacks = _iterative_attack_count(bab)
-    for i in range(n_attacks):
+    # Per-attack delta sequence. Default iteratives are at -5, -10, etc.
+    # Rapid Shot inserts an extra attack at top BAB and applies -2 to
+    # every attack in this round (PF1 RAW). Only valid with ranged
+    # weapons and the Rapid Shot feat.
+    deltas = [-5 * i for i in range(_iterative_attack_count(bab))]
+    rapid_shot_active = (
+        bool(options and options.get("rapid_shot"))
+        and _has_feat(actor, "rapid_shot")
+        and bool(actor.attack_options)
+        and actor.attack_options[0].get("type") == "ranged"
+    )
+    if rapid_shot_active:
+        deltas = [0] + deltas
+        deltas = [d - 2 for d in deltas]
+
+    for i, delta in enumerate(deltas):
         if not target.is_alive() or target.current_hp <= 0:
             break
         _do_attack(actor, target, grid, roller, events,
-                   attack_bonus_delta=-5 * i,
+                   attack_bonus_delta=delta,
                    label=f"full_attack_{i+1}",
                    encounter=encounter,
                    script_options=options)
@@ -721,7 +743,7 @@ def _do_withdraw(
                                 {"reason": f"withdraw: bad direction {direction!r}"}))
         return
     dest = _square_away(actor, actor.position, withdraw_squares, grid)
-    _move_along(actor, dest, withdraw_squares, grid, events)
+    _move_along(actor, dest, withdraw_squares, grid, events, encounter=encounter)
 
 
 # ---------------------------------------------------------------------------
@@ -864,14 +886,16 @@ def _do_attack(
 
 
 def _has_feat(actor: Combatant, feat_id: str) -> bool:
-    """True if the combatant's character template lists the feat.
+    """True if the combatant has the feat.
 
-    Walks parametric variants (e.g. ``weapon_focus_longsword`` for a
-    requested ``weapon_focus``).
+    Reads from both the underlying template (``character.feats`` or
+    ``monster.feats``) and the per-combatant ``extra_feats`` override
+    list. Walks parametric variants (e.g. ``weapon_focus_longsword``
+    for a requested ``weapon_focus``).
     """
-    if actor.template_kind != "character" or actor.template is None:
-        return False
-    feats = getattr(actor.template, "feats", None) or []
+    feats: list[str] = list(actor.extra_feats)
+    if actor.template is not None:
+        feats.extend(getattr(actor.template, "feats", None) or [])
     if feat_id in feats:
         return True
     prefix = feat_id + "_"
@@ -1661,7 +1685,7 @@ def _do_cast(
         else:
             # Casting non-defensively while threatened provokes AoOs.
             for threatener in threatened_by:
-                _do_aoo(threatener, actor, grid, events)
+                _do_aoo(threatener, actor, grid, events, encounter=encounter)
                 if actor.current_hp <= 0:
                     events.append(TurnEvent(actor.id, "cast_failed", {
                         "spell_id": spell_id,
@@ -2012,12 +2036,35 @@ def _apply_post_damage_state(target: Combatant) -> None:
             target.remove_condition("disabled")
 
 
+def _aoo_limit(actor: Combatant) -> int:
+    """Maximum AoOs per round. PF1: 1 by default; Combat Reflexes adds
+    the combatant's Dex modifier (minimum total 1)."""
+    if not _has_feat(actor, "combat_reflexes"):
+        return 1
+    dex_mod = _ability_modifier(actor, "dex")
+    return max(1, 1 + dex_mod)
+
+
+def _can_take_aoo(threatener: Combatant, current_round: int) -> bool:
+    """Throttle AoOs per the threatener's per-round limit."""
+    if threatener.aoos_used_round_marker != current_round:
+        threatener.aoos_used_round_marker = current_round
+        threatener.aoos_used_this_round = 0
+    return threatener.aoos_used_this_round < _aoo_limit(threatener)
+
+
 def _do_aoo(
     threatener: Combatant,
     target: Combatant,
     grid: Grid,
     events: list[TurnEvent],
+    encounter=None,
 ) -> None:
+    # Throttle AoOs by the per-round limit (1 + Dex if Combat Reflexes).
+    if encounter is not None:
+        if not _can_take_aoo(threatener, encounter.round_number):
+            return
+        threatener.aoos_used_this_round += 1
     # Use the threatener's first attack option as their AoO weapon.
     if not threatener.attack_options:
         return

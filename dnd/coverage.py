@@ -240,7 +240,7 @@ FEATS: dict[str, Entry] = {
     "athletic":              (IMPLEMENTED,     "+2 climb/swim"),
     "cleave":                (IMPLEMENTED,     "composite action; -2 AC for the round"),
     "combat_expertise":      (IMPLEMENTED,     "attack-time tradeoff; 1-round dodge AC"),
-    "combat_reflexes":       (NOT_IMPLEMENTED, "extra AoOs/round = Dex mod; only 1 AoO/round modeled"),
+    "combat_reflexes":       (IMPLEMENTED,     "AoO limit = 1 + Dex (min 1) when feat present; throttled per-round in _do_aoo via Combatant.aoos_used_this_round"),
     "diehard":               (NOT_IMPLEMENTED, "act normally while dying"),
     "dodge":                 (IMPLEMENTED,     "+1 dodge AC"),
     "empower_spell":         (NOT_IMPLEMENTED, "metamagic: +50% damage/heal at +2 spell level"),
@@ -255,7 +255,7 @@ FEATS: dict[str, Entry] = {
     "point_blank_shot":      (IMPLEMENTED,     "+1 attack/damage with ranged"),
     "power_attack":          (IMPLEMENTED,     "attack-time tradeoff; wield-scaled damage bonus"),
     "precise_shot":          (IMPLEMENTED,     "negates the -4 firing-into-melee penalty in _firing_into_melee_penalty"),
-    "rapid_shot":            (NOT_IMPLEMENTED, "extra ranged attack at -2/-2"),
+    "rapid_shot":            (IMPLEMENTED,     "extra ranged attack at top BAB; -2 to all attacks this round; via _do_full_attack with options.rapid_shot=true"),
     "run":                   (NOT_IMPLEMENTED, "x4 speed for run action"),
     "scribe_scroll":         (NOT_IMPLEMENTED, "crafting feat — deferred to Phase 4"),
     "skill_focus":           (IMPLEMENTED,     "+3 to chosen skill (parametric)"),
@@ -344,7 +344,7 @@ CORE_MECHANICS: dict[str, Entry] = {
 
     # ── Combat: AoOs ────────────────────────────────────────────────────
     "combat.aoo":                    (IMPLEMENTED,    "1 AoO/round; aoo_triggers_for_movement + _do_aoo"),
-    "combat.aoo_extra_combat_reflexes": (NOT_IMPLEMENTED, "Combat Reflexes feat unwired; only 1 AoO/round"),
+    "combat.aoo_extra_combat_reflexes": (IMPLEMENTED,    "_aoo_limit returns 1 + Dex when feat present; per-round counter on Combatant"),
     "combat.aoo_provoking_actions":  (PARTIAL,        "leaving threatened square + stand_up + non-defensive cast trigger; drink-potion / draw-weapon / retrieve-stowed-item not wired"),
     "combat.threatened_squares":     (PARTIAL,        "grid.threatened_squares; 5-ft (normal) and 10-ft (reach weapons) not differentiated yet"),
     "combat.reach_weapons":          (NOT_IMPLEMENTED, "10-ft threat with no adjacent — not modeled"),

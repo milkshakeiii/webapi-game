@@ -96,6 +96,19 @@ class Combatant:
     # combatants built without enough info.
     death_threshold: int = -10
 
+    # Per-round AoO bookkeeping for Combat Reflexes. Reset by
+    # turn_executor when ``aoos_used_this_round_marker`` doesn't
+    # match the current round. Default limit is 1 AoO/round; Combat
+    # Reflexes raises it by the combatant's Dex modifier.
+    aoos_used_this_round: int = 0
+    aoos_used_round_marker: int = -1
+
+    # Per-combatant feat overrides — feats granted at runtime that
+    # aren't in the underlying template (e.g., level-up plan grants,
+    # test injections). Read alongside ``template.feats`` by
+    # ``turn_executor._has_feat``.
+    extra_feats: list[str] = field(default_factory=list)
+
     # ── Derived stat queries ──────────────────────────────────────────────
 
     def ac(self, situation: str = "normal") -> int:
