@@ -819,6 +819,18 @@ def combatant_from_character(
     if dex_mod != 0:
         coll.add(mod(dex_mod, "ability", "initiative", "dex_modifier"))
 
+    # Encumbrance: medium / heavy load adds an extra ACP layer on top
+    # of armor's. Speed reduction and Max-Dex caps from load are not
+    # yet wired (see dnd/engine/encumbrance.py docstring).
+    from .encumbrance import (
+        LOAD_ACP_PENALTY,
+        carried_weight as _carried,
+        load_category as _load_cat,
+    )
+    load_weight = _carried(character, registry)
+    load = _load_cat(load_weight, final_scores.get("str") or 0)
+    load_acp = LOAD_ACP_PENALTY.get(load, 0)
+
     # Skills: cumulative ranks + class skill bonus + ability modifier + ACP.
     class_skills = set(class_.level_1.class_skills)
     for cid in cumulative.class_levels:
@@ -848,6 +860,7 @@ def combatant_from_character(
                 acp += armor_data.armor_check_penalty
             if shield_data is not None:
                 acp += shield_data.armor_check_penalty
+            acp += load_acp
             if acp < 0:
                 coll.add(mod(acp, "untyped", f"skill:{skill_id}",
                              "armor_check_penalty"))

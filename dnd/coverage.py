@@ -467,9 +467,9 @@ CORE_MECHANICS: dict[str, Entry] = {
     "skills.skill_synergy":          (OUT_OF_SCOPE,   "3.5e holdover; PF1 doesn't have skill synergies"),
 
     # ── Equipment & encumbrance ─────────────────────────────────────────
-    "equipment.weapon_categories":   (PARTIAL,        "weapon JSONs declare type but no category-based proficiency check"),
+    "equipment.weapon_categories":   (IMPLEMENTED,    "weapon_category tagged on attack_options; Combatant.weapon_proficiency_categories holds the actor's allowed categories + specific weapon IDs; -4 attack penalty when wielding outside proficiencies (see _weapon_not_proficient in turn_executor)"),
     "equipment.weapon_special_properties": (PARTIAL, "JSONs carry properties (reach, double, brace, trip-bonus); rarely consulted at attack time"),
-    "equipment.encumbrance":         (NOT_IMPLEMENTED, "no encumbrance tracking; carried items have no weight"),
+    "equipment.encumbrance":         (PARTIAL,        "carried_weight + load_category in encumbrance.py; load (light/medium/heavy/overloaded) computed in combatant_from_character; medium adds -3 ACP, heavy adds -6 ACP to ACP-affected skills. Speed reduction and Max-Dex caps from encumbrance are NOT yet wired"),
     "equipment.armor_donning_time":  (NOT_IMPLEMENTED, "no time-to-don model"),
 
     # ── Adventuring: vision, environment ────────────────────────────────
