@@ -457,11 +457,11 @@ CORE_MECHANICS: dict[str, Entry] = {
 
     # ── Skills ──────────────────────────────────────────────────────────
     "skills.untrained_checks":       (IMPLEMENTED,    "skill_total works regardless of ranks unless trained-only"),
-    "skills.trained_only":           (NOT_IMPLEMENTED, "trained-only skills (Disable Device, etc.) usable at 0 ranks"),
+    "skills.trained_only":           (IMPLEMENTED,    "skill_check (skills.py) returns blocked_trained_only=True when actor has 0 ranks in a trained-only skill"),
     "skills.armor_check_penalty":    (IMPLEMENTED,    "applied to ACP-affected skills via combatant_from_character"),
-    "skills.opposed_checks":         (NOT_IMPLEMENTED, "engine has no opposed-check API"),
-    "skills.aid_another_skill":      (NOT_IMPLEMENTED, "DC 10 to grant +2 to another's check"),
-    "skills.take_10":                (NOT_IMPLEMENTED, "skip the d20 if no immediate danger"),
+    "skills.opposed_checks":         (IMPLEMENTED,    "skills.opposed_skill_check rolls both, ties go to defender (initiator must beat opponent's total)"),
+    "skills.aid_another_skill":      (IMPLEMENTED,    "skills.aid_another_skill: DC 10 check returns +2 bonus on success; caller passes via skill_check(extra_bonus=2)"),
+    "skills.take_10":                (PARTIAL,        "skills.skill_check supports take_10=True (substitutes 10 for d20); caller is responsible for the 'no immediate danger' restriction"),
     "skills.take_20":                (OUT_OF_SCOPE,   "20× time; no time-pressure model in v1"),
     "skills.class_skill_bonus":      (IMPLEMENTED,    "+3 to skill_total when 1+ ranks invested in class skill"),
     "skills.skill_synergy":          (OUT_OF_SCOPE,   "3.5e holdover; PF1 doesn't have skill synergies"),
