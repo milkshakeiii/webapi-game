@@ -45,11 +45,12 @@ Run the suite verbosely (`python3 -m unittest dnd.tests.test_coverage
 | Category | Total | IMPL | PARTIAL | NOT_IMPL | OOS |
 |---|---:|---:|---:|---:|---:|
 | Player race traits | 33 | 10 | 0 | 21 | 2 |
-| Monster racial traits | 11 | 1 | 2 | 8 | 0 |
+| Monster racial traits | 11 | 4 | 4 | 2 | 1 |
 | Class features (L1) | 35 | 7 | 2 | 24 | 2 |
 | Conditions | 35 | 3 | 13 | 18 | 1 |
 | Feats | 30 | 19 | 0 | 11 | 0 |
 | Spell effect kinds | 9 | 9 | 0 | 0 | 0 |
+| Core mechanics | 143 | 40 | 16 | 80 | 7 |
 
 ## What's tracked
 
@@ -97,6 +98,28 @@ Internal taxonomy used in `spells.py`. A spell with effect kind
 `_handle_scaling_damage`; a spell with `apply_condition_save`
 (color spray, hold person) by `_handle_apply_condition_save`; etc.
 All declared kinds currently have handlers.
+
+### Core mechanics
+
+The base PF1 rules that apply to everyone, regardless of class /
+race / feat / spell — initiative, AoOs, charge, range increments,
+combat maneuvers (trip / disarm / sunder / grapple / …),
+concentration math, casting components, encumbrance, vision,
+and so on. Roughly the contents of the SRD's Combat (Ch. 7),
+Magic (Ch. 8), Skills (Ch. 4), and Adventuring (Ch. 11) chapters.
+
+Keys are dotted (`combat.charge`, `magic.spell_save_dc`,
+`skills.take_10`) to keep the dict navigable. **Unlike other
+categories there is no content-side scanner** — these rules don't
+appear as YAML items in any pack; they're rulebook prose. The
+discipline is "when a new base rule comes up in playtest or
+implementation, add an entry."
+
+The *largest single category* by far (143 entries, vs 33-35 for
+the next biggest), and the most consequential when something is
+`NOT_IMPLEMENTED` — base rules apply universally, so a missing
+one shows up in every encounter, not just the ones that touch a
+specific feat.
 
 ## How to use this doc when fixing a bug
 

@@ -289,6 +289,204 @@ SPELL_EFFECT_KINDS: dict[str, Entry] = {
 
 
 # ---------------------------------------------------------------------------
+# Core mechanics — base rules that apply to everyone, not declared as
+# content items.
+#
+# These rules live in the SRD chapter prose (Combat, Magic, Skills,
+# Equipment, Adventuring), not as YAML in any pack. Keys are dotted
+# (e.g., ``combat.charge``); the human-readable narrative is in
+# ``PF1_COVERAGE.md``.
+#
+# Unlike other categories, this one has NO content-side scanner — we
+# can't auto-detect omissions from this list. Discipline: when a new
+# base rule comes up in playtest or implementation, add it here.
+# ---------------------------------------------------------------------------
+
+CORE_MECHANICS: dict[str, Entry] = {
+    # ── Combat: turn structure & action economy ──────────────────────────
+    "combat.initiative":             (IMPLEMENTED,    "d20 + Dex; encounter.roll_initiative"),
+    "combat.surprise_round":         (NOT_IMPLEMENTED, "no surprise mechanic; all combatants act from round 1"),
+    "combat.action_types":           (IMPLEMENTED,    "Turn slots cover standard/move/swift/free/full_round/5ft_step"),
+    "combat.5_foot_step":            (IMPLEMENTED,    "validate_turn enforces exclusivity; one square only"),
+    "combat.full_round_action":      (IMPLEMENTED,    "Turn.full_round forbids standard+move; charge/withdraw/full_attack are full-round"),
+    "combat.swift_action":           (PARTIAL,        "Turn.swift slot exists but most consumers (smite_evil, etc.) call it composite — minor; immediate-action conversion not modeled"),
+    "combat.free_action":            (PARTIAL,        "validation accepts a fixed allowlist (drop_item, fall_prone, speak, signal, end_concentration, drop_held_charge); not all RAW free actions enumerated"),
+    "combat.immediate_action":       (NOT_IMPLEMENTED, "consumes next round's swift; no model"),
+
+    # ── Combat: attack rolls & critical hits ────────────────────────────
+    "combat.attack_roll":            (IMPLEMENTED,    "d20 + bonuses; nat 1 auto-miss; nat 20 auto-hit"),
+    "combat.iterative_attacks":      (IMPLEMENTED,    "BAB-scaled in _do_full_attack: 1@BAB1-5, 2@6-10, 3@11-15, 4@16+"),
+    "combat.crit_threat_and_confirm": (IMPLEMENTED,   "weapon crit_range threats; confirmation roll same bonuses; nat 1 fails confirm"),
+    "combat.crit_multiplier":        (IMPLEMENTED,    "damage_roll multiplies dice + static bonus by weapon's crit_multiplier"),
+    "combat.precision_damage":       (IMPLEMENTED,    "AttackProfile.precision_damage_dice rolled separately, NOT multiplied on crit"),
+    "combat.touch_attack":           (IMPLEMENTED,    "AC variant via defense_profile().touch_ac"),
+    "combat.ranged_touch_attack":    (IMPLEMENTED,    "same touch AC; range increment not yet enforced"),
+    "combat.flat_footed_ac":         (IMPLEMENTED,    "AC variant via defense_profile().flat_footed_ac"),
+
+    # ── Combat: damage, DR, energy ──────────────────────────────────────
+    "combat.dr_application":         (IMPLEMENTED,    "_apply_dr in combat.py; bypass keywords (S/P/B/silver/magic/etc.); first-DR-wins on multi-DR creatures (rare today)"),
+    "combat.dr_multi_keyword":       (NOT_IMPLEMENTED, "DR 10/silver and magic — bypass-keyword set is OR; AND semantics needed"),
+    "combat.energy_damage":          (NOT_IMPLEMENTED, "no engine source of fire/cold/electricity/acid/sonic damage yet"),
+    "combat.energy_resistance":      (NOT_IMPLEMENTED, "no consumers — pair with first energy-damage spell"),
+    "combat.energy_immunity":        (NOT_IMPLEMENTED, "same"),
+    "combat.bleed_damage":           (PARTIAL,        "ferocity-bleed implemented in tick_round; no generic bleed-condition system"),
+    "combat.nonlethal_damage":       (NOT_IMPLEMENTED, "no separate nonlethal HP track"),
+
+    # ── Combat: defenses, cover, concealment, flanking ───────────────────
+    "combat.cover":                  (NOT_IMPLEMENTED, "+4 AC, +2 Reflex; no cover model on grid"),
+    "combat.greater_cover":          (NOT_IMPLEMENTED, "+8 AC, +4 Reflex"),
+    "combat.soft_cover":             (NOT_IMPLEMENTED, "intervening creatures grant +4 AC vs ranged"),
+    "combat.total_cover":            (NOT_IMPLEMENTED, "blocks line of effect entirely"),
+    "combat.concealment":            (NOT_IMPLEMENTED, "20% miss chance"),
+    "combat.total_concealment":      (NOT_IMPLEMENTED, "50% miss chance"),
+    "combat.flanking":               (IMPLEMENTED,    "+2 attack to both flankers; grid.is_flanked_by + _flanking_attack_bonus"),
+    "combat.higher_ground":          (NOT_IMPLEMENTED, "+1 attack from above"),
+
+    # ── Combat: AoOs ────────────────────────────────────────────────────
+    "combat.aoo":                    (IMPLEMENTED,    "1 AoO/round; aoo_triggers_for_movement + _do_aoo"),
+    "combat.aoo_extra_combat_reflexes": (NOT_IMPLEMENTED, "Combat Reflexes feat unwired; only 1 AoO/round"),
+    "combat.aoo_provoking_actions":  (PARTIAL,        "leaving threatened square triggers; PROVOKING_ACTION_TYPES set lists casting/drinking/etc. but not all wired"),
+    "combat.threatened_squares":     (PARTIAL,        "grid.threatened_squares; 5-ft (normal) and 10-ft (reach weapons) not differentiated yet"),
+    "combat.reach_weapons":          (NOT_IMPLEMENTED, "10-ft threat with no adjacent — not modeled"),
+
+    # ── Combat: special attacks & maneuvers ──────────────────────────────
+    "combat.combat_maneuver_basic":  (NOT_IMPLEMENTED, "CMB vs CMD framework not built"),
+    "combat.bull_rush":              (NOT_IMPLEMENTED, "push 5 ft + 5/+5 over CMD"),
+    "combat.disarm":                 (NOT_IMPLEMENTED, "force drop weapon"),
+    "combat.drag":                   (NOT_IMPLEMENTED, "pull target"),
+    "combat.grapple":                (NOT_IMPLEMENTED, "restrain target"),
+    "combat.overrun":                (NOT_IMPLEMENTED, "move through enemy"),
+    "combat.reposition":             (NOT_IMPLEMENTED, "move target around"),
+    "combat.steal":                  (NOT_IMPLEMENTED, "take item"),
+    "combat.sunder":                 (NOT_IMPLEMENTED, "damage object/weapon"),
+    "combat.trip":                   (NOT_IMPLEMENTED, "knock prone; wolf trip-on-bite is the immediate consumer"),
+    "combat.coup_de_grace":          (NOT_IMPLEMENTED, "auto-crit on helpless + Fort save vs death"),
+    "combat.massive_damage":         (NOT_IMPLEMENTED, "Fort save vs die at 50+ damage from one source"),
+    "combat.aid_another":            (NOT_IMPLEMENTED, "+2 to ally's next attack/AC; DC 10 attack roll"),
+    "combat.fight_defensively":      (NOT_IMPLEMENTED, "-4 attack for +2 dodge AC"),
+    "combat.total_defense":          (PARTIAL,        "action accepted but no AC bonus applied — just emits a 'total_defense' event"),
+
+    # ── Combat: charge & full-round movement ─────────────────────────────
+    "combat.charge":                 (PARTIAL,        "min-distance, straight-line, lane-clear, end-adjacent enforced; difficult terrain not (engine has no terrain types)"),
+    "combat.partial_charge":         (NOT_IMPLEMENTED, "charge as standard action when full-round unavailable"),
+    "combat.withdraw":               (PARTIAL,        "full-round; first-square-no-AoO not yet enforced (just moves)"),
+    "combat.run":                    (NOT_IMPLEMENTED, "x4 speed, lose Dex to AC, straight line"),
+
+    # ── Combat: ranged attacks ──────────────────────────────────────────
+    "combat.range_increments":       (NOT_IMPLEMENTED, "-2 attack per increment; max 5 (thrown) / 10 (projectile)"),
+    "combat.firing_into_melee":      (NOT_IMPLEMENTED, "-4 attack unless Precise Shot"),
+    "combat.point_blank_shot":       (IMPLEMENTED,    "feat applies +1 attack/damage to ranged via attack:ranged modifier"),
+
+    # ── Combat: weapon use & wielding ───────────────────────────────────
+    "combat.weapon_proficiency_penalty": (NOT_IMPLEMENTED, "-4 attack if not proficient with weapon used"),
+    "combat.armor_proficiency_penalty": (NOT_IMPLEMENTED, "ACP applies to attack rolls without armor proficiency"),
+    "combat.armor_check_penalty":    (IMPLEMENTED,    "ACP applied to relevant skill checks via combatant_from_character"),
+    "combat.armor_max_dex":          (IMPLEMENTED,    "Dex bonus to AC capped by armor's max_dex_bonus"),
+    "combat.two_handed_str_bonus":   (IMPLEMENTED,    "1.5×Str damage when wield='two_handed'"),
+    "combat.off_hand_str_bonus":     (NOT_IMPLEMENTED, "0.5×Str off-hand; pair with two-weapon fighting work"),
+    "combat.off_hand_attack":        (NOT_IMPLEMENTED, "no off-hand attack path in _do_full_attack"),
+    "combat.shield_use":             (IMPLEMENTED,    "shield AC applied via combatant_from_character; no shield-bash attack profile yet"),
+    "combat.weapon_finesse_use":     (IMPLEMENTED,    "Dex to attack for finesse weapons; combatant_from_character"),
+
+    # ── Combat: HP, dying, death ────────────────────────────────────────
+    "combat.hp_max":                 (IMPLEMENTED,    "computed from class HD + Con + bonuses"),
+    "combat.dying":                  (PARTIAL,        "condition set when HP <= 0; no HP-loss-per-round nor stabilization roll"),
+    "combat.disabled":               (NOT_IMPLEMENTED, "0 HP exactly: 1 standard or move; standard hurts you 1 HP"),
+    "combat.stable":                 (NOT_IMPLEMENTED, "stops dying HP loss; bedrest"),
+    "combat.unconscious":            (PARTIAL,        "is_unconscious checks the condition; turn validation prevents acts"),
+    "combat.dead_threshold":         (PARTIAL,        "HP <= -10 triggers dead (3.5e); PF1 RAW is HP <= -CON_score; see WORK_QUEUE P0"),
+    "combat.helpless_attacker_bonus": (NOT_IMPLEMENTED, "+4 melee attack vs helpless; Dex treated as 0"),
+
+    # ── Combat: healing ─────────────────────────────────────────────────
+    "combat.healing_natural":        (NOT_IMPLEMENTED, "1 HP/level/8 hr; no rest-time mechanic in combat-only loop"),
+    "combat.healing_full_rest":      (NOT_IMPLEMENTED, "full HP after 8 hr rest"),
+    "combat.healing_magical":        (IMPLEMENTED,    "cure spells implemented as heal effect kind"),
+    "combat.fast_healing":           (NOT_IMPLEMENTED, "X HP/round automatic"),
+    "combat.regeneration":           (NOT_IMPLEMENTED, "HP/round + bypass-by-energy-type semantics"),
+
+    # ── Combat: movement modes & terrain ────────────────────────────────
+    "combat.movement_walk":          (IMPLEMENTED,    "speed-30 walk = 6 cells/round in our grid"),
+    "combat.movement_difficult_terrain": (NOT_IMPLEMENTED, "2x cost; engine has no terrain types"),
+    "combat.movement_fly":           (NOT_IMPLEMENTED, "no fly mode; some monsters have it as a tag only"),
+    "combat.movement_swim":          (NOT_IMPLEMENTED, "no swim mode"),
+    "combat.movement_climb":         (NOT_IMPLEMENTED, "no climb mode"),
+    "combat.movement_burrow":        (NOT_IMPLEMENTED, "no burrow mode"),
+    "combat.mounted_combat":         (NOT_IMPLEMENTED, "no mount/rider system"),
+    "combat.underwater_combat":      (NOT_IMPLEMENTED, "no underwater terrain"),
+    "combat.squeezing":              (OUT_OF_SCOPE,   "v1 doesn't model tight-quarters movement"),
+
+    # ── Magic: spell mechanics ──────────────────────────────────────────
+    "magic.spell_slots":             (IMPLEMENTED,    "per-Combatant resources, populated from class table at level-up"),
+    "magic.bonus_spells_high_ability": (PARTIAL,      "ability-based bonus slots not added on top of class table"),
+    "magic.spell_save_dc":           (IMPLEMENTED,    "10 + spell_level + key_ability_mod via spells.save_dc_for"),
+    "magic.spell_resistance":        (IMPLEMENTED,    "d20 + caster_level vs target SR via spells.overcomes_sr"),
+    "magic.caster_level":            (IMPLEMENTED,    "spells.caster_level returns char.level for v1; multiclass partial"),
+    "magic.spell_failure_armor":     (NOT_IMPLEMENTED, "arcane casters in armor have % failure chance"),
+    "magic.spell_known_vs_prepared": (PARTIAL,        "castable_spells set populated; preparation slot system not fully modeled"),
+
+    # ── Magic: components & casting ─────────────────────────────────────
+    "magic.casting_components_v":    (NOT_IMPLEMENTED, "verbal — silenced/deafened cannot cast"),
+    "magic.casting_components_s":    (NOT_IMPLEMENTED, "somatic — needs free hand"),
+    "magic.casting_components_m":    (NOT_IMPLEMENTED, "material — needs component"),
+    "magic.casting_components_f":    (NOT_IMPLEMENTED, "focus item required"),
+    "magic.casting_components_df":   (NOT_IMPLEMENTED, "divine focus (holy symbol)"),
+    "magic.casting_components_xp":   (OUT_OF_SCOPE,   "3.5e XP-cost components; PF1 uses gp instead"),
+    "magic.casting_in_threatened_square": (IMPLEMENTED, "non-defensive cast provokes; defensive concentration check via spells.cast_spell"),
+    "magic.casting_defensively":     (IMPLEMENTED,    "DC 15 + spell level concentration; nat 1 fails"),
+    "magic.concentration_on_damage": (NOT_IMPLEMENTED, "DC 10 + damage dealt; not modeled mid-cast"),
+    "magic.concentration_grappled":  (NOT_IMPLEMENTED, "DC 10 + spell level + grapple CMB"),
+    "magic.dispel_magic":            (NOT_IMPLEMENTED, "caster level check vs target's CL"),
+    "magic.counterspell":            (NOT_IMPLEMENTED, "ready action with same/dispel + CL check"),
+    "magic.metamagic":               (NOT_IMPLEMENTED, "Empower/Maximize/Quicken/Still/Silent — none wired"),
+
+    # ── Magic: spell areas & targeting ──────────────────────────────────
+    "magic.target_personal":         (IMPLEMENTED,    "self-only spells (e.g., cat's grace)"),
+    "magic.target_touch":            (IMPLEMENTED,    "single creature touched"),
+    "magic.target_ranged":           (IMPLEMENTED,    "single creature at close/medium/long range"),
+    "magic.area_burst":              (IMPLEMENTED,    "_expand_aoe_burst by radius from center"),
+    "magic.area_emanation":          (NOT_IMPLEMENTED, "lasting aura from caster outward"),
+    "magic.area_cone":               (IMPLEMENTED,    "_expand_aoe_cone via 90° wedge test"),
+    "magic.area_line":               (NOT_IMPLEMENTED, "narrow line from caster"),
+    "magic.spread":                  (NOT_IMPLEMENTED, "burst that follows corners/around obstacles"),
+
+    # ── Magic: save semantics ───────────────────────────────────────────
+    "magic.save_negates":            (IMPLEMENTED,    "save = no effect"),
+    "magic.save_half":               (IMPLEMENTED,    "save = halve damage"),
+    "magic.save_partial":            (PARTIAL,        "some apply_condition_save handlers do partial; varies per spell"),
+    "magic.save_disbelief":          (NOT_IMPLEMENTED, "illusions allow disbelief save on interaction"),
+
+    # ── Skills ──────────────────────────────────────────────────────────
+    "skills.untrained_checks":       (IMPLEMENTED,    "skill_total works regardless of ranks unless trained-only"),
+    "skills.trained_only":           (NOT_IMPLEMENTED, "trained-only skills (Disable Device, etc.) usable at 0 ranks"),
+    "skills.armor_check_penalty":    (IMPLEMENTED,    "applied to ACP-affected skills via combatant_from_character"),
+    "skills.opposed_checks":         (NOT_IMPLEMENTED, "engine has no opposed-check API"),
+    "skills.aid_another_skill":      (NOT_IMPLEMENTED, "DC 10 to grant +2 to another's check"),
+    "skills.take_10":                (NOT_IMPLEMENTED, "skip the d20 if no immediate danger"),
+    "skills.take_20":                (OUT_OF_SCOPE,   "20× time; no time-pressure model in v1"),
+    "skills.class_skill_bonus":      (IMPLEMENTED,    "+3 to skill_total when 1+ ranks invested in class skill"),
+    "skills.skill_synergy":          (OUT_OF_SCOPE,   "3.5e holdover; PF1 doesn't have skill synergies"),
+
+    # ── Equipment & encumbrance ─────────────────────────────────────────
+    "equipment.weapon_categories":   (PARTIAL,        "weapon JSONs declare type but no category-based proficiency check"),
+    "equipment.weapon_special_properties": (PARTIAL, "JSONs carry properties (reach, double, brace, trip-bonus); rarely consulted at attack time"),
+    "equipment.encumbrance":         (NOT_IMPLEMENTED, "no encumbrance tracking; carried items have no weight"),
+    "equipment.armor_donning_time":  (NOT_IMPLEMENTED, "no time-to-don model"),
+
+    # ── Adventuring: vision, environment ────────────────────────────────
+    "adventuring.vision_normal":     (NOT_IMPLEMENTED, "no light-level model"),
+    "adventuring.vision_low_light":  (NOT_IMPLEMENTED, "doubles range in dim light"),
+    "adventuring.vision_darkvision": (NOT_IMPLEMENTED, "60 ft in total darkness; declared on monsters but not consulted"),
+    "adventuring.light_sources":     (NOT_IMPLEMENTED, "torch/lantern/sunrod ranges"),
+    "adventuring.falling_damage":    (NOT_IMPLEMENTED, "1d6 per 10 ft, max 20d6"),
+    "adventuring.drowning":          (NOT_IMPLEMENTED, "Con score in rounds, then HP/round"),
+    "adventuring.environmental_temperature": (NOT_IMPLEMENTED, "heat/cold non-lethal damage tracks"),
+    "adventuring.travel_overland":   (OUT_OF_SCOPE,   "world tick is 6s/round; overland travel is per-cell movement at PF1 speed"),
+    "adventuring.forced_march":      (OUT_OF_SCOPE,   "no day-level travel model"),
+    "adventuring.aging":             (OUT_OF_SCOPE,   "no aging mechanic; characters don't change ability scores over time in v1"),
+}
+
+
+# ---------------------------------------------------------------------------
 # Top-level lookup helper
 # ---------------------------------------------------------------------------
 
@@ -300,6 +498,7 @@ CATEGORIES: dict[str, dict[str, Entry]] = {
     "conditions":            CONDITIONS,
     "feats":                 FEATS,
     "spell_effect_kinds":    SPELL_EFFECT_KINDS,
+    "core_mechanics":        CORE_MECHANICS,
 }
 
 
