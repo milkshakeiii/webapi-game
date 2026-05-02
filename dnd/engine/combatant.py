@@ -89,6 +89,13 @@ class Combatant:
     # by ``defense_profile()`` and applied by combat.resolve_attack.
     damage_reduction: tuple[int, frozenset[str]] | None = None
 
+    # PF1 RAW: a creature dies when HP drops to a negative amount equal
+    # to its Constitution score. Cached at construction time from
+    # template data. Undead and constructs are destroyed at HP 0
+    # (threshold = 0). Default fallback -10 (3.5e behavior) for
+    # combatants built without enough info.
+    death_threshold: int = -10
+
     # ── Derived stat queries ──────────────────────────────────────────────
 
     def ac(self, situation: str = "normal") -> int:
@@ -151,6 +158,18 @@ class Combatant:
     def is_unconscious(self) -> bool:
         return "unconscious" in self.conditions or "dying" in self.conditions
 
+    def is_immune_to_bleed(self) -> bool:
+        """Undead and constructs ignore bleed effects per PF1.
+
+        Used by ``tick_round`` to skip ferocity-bleed and dying-bleed
+        for these creature types. Living creatures are always
+        susceptible.
+        """
+        if self.template_kind != "monster" or self.template is None:
+            return False
+        mtype = (getattr(self.template, "type", "") or "").lower()
+        return mtype in ("undead", "construct")
+
     # ── Mutations ─────────────────────────────────────────────────────────
 
     def take_damage(self, amount: int) -> None:
@@ -177,16 +196,43 @@ class Combatant:
 
     def tick_round(self, current_round: int) -> list[Modifier]:
         """End-of-round housekeeping: prune expired modifiers, apply
-        per-round HP losses (ferocity bleed), check death."""
+        per-round HP losses (ferocity bleed and dying bleed), expire
+        timed conditions (stunned), check death."""
         expired = self.modifiers.prune_expired(current_round)
+        # Expire timed conditions tracked via side-channel resources.
+        stun_until = self.resources.get("stunned_until_round")
+        if stun_until is not None and current_round >= stun_until:
+            self.remove_condition("stunned")
+            del self.resources["stunned_until_round"]
+        # Bleed effects (ferocity and dying) — skip if the creature is
+        # immune to bleed (undead and constructs).
+        bleed_immune = self.is_immune_to_bleed()
         # PF1 ferocity: a creature kept conscious below 0 HP bleeds
         # 1 HP per round until killed outright.
-        if "ferocity_active" in self.conditions and self.current_hp <= 0:
+        if (
+            "ferocity_active" in self.conditions
+            and self.current_hp <= 0
+            and not bleed_immune
+        ):
             self.current_hp -= 1
-            if self.current_hp <= -10:
+            if self.current_hp <= self.death_threshold:
                 self.add_condition("dead")
                 self.remove_condition("ferocity_active")
                 self.remove_condition("staggered")
+                self.remove_condition("dying")
+        # PF1 dying: a dying creature loses 1 HP per round and dies
+        # when it reaches its negative-Con threshold. Stabilization
+        # (DC 10 Con check or Heal aid) suppresses the loss; not
+        # modeled in v1 — see WORK_QUEUE.
+        elif (
+            "dying" in self.conditions
+            and "stable" not in self.conditions
+            and "dead" not in self.conditions
+            and not bleed_immune
+        ):
+            self.current_hp -= 1
+            if self.current_hp <= self.death_threshold:
+                self.add_condition("dead")
                 self.remove_condition("dying")
         return expired
 
@@ -235,6 +281,23 @@ def _monster_damage_reduction(
         if parsed is not None:
             return parsed
     return None
+
+
+def _monster_death_threshold(monster: Monster) -> int:
+    """PF1 RAW: HP <= -CON kills a living creature.
+
+    Undead and constructs have no Con score and are destroyed when
+    reduced to 0 HP — return 0 for them.
+    """
+    mtype = (monster.type or "").lower()
+    if mtype in ("undead", "construct"):
+        return 0
+    con = int((monster.ability_scores or {}).get("con", 10) or 0)
+    if con <= 0:
+        # Defensive: a living creature with no Con shouldn't exist;
+        # treat as instant-kill at 0 HP.
+        return 0
+    return -con
 
 
 # Map keys in monster.ac dict → modifier types.
@@ -317,6 +380,7 @@ def combatant_from_monster(
         template_kind="monster",
         template=monster,
         damage_reduction=_monster_damage_reduction(monster),
+        death_threshold=_monster_death_threshold(monster),
     )
 
 
@@ -603,4 +667,5 @@ def combatant_from_character(
         template_kind="character",
         template=character,
         castable_spells=castable,
+        death_threshold=-int(final_scores.get("con") or 10),
     )

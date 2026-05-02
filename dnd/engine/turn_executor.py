@@ -163,6 +163,9 @@ def _execute_composite(
     if composite == "bardic_performance":
         _do_bardic_performance(actor, args, encounter, grid, ns, events)
         return
+    if composite == "stunning_fist":
+        _do_stunning_fist(actor, args, encounter, grid, roller, ns, events)
+        return
     raise NotImplementedError(f"composite action {composite!r} not yet implemented")
 
 
@@ -634,6 +637,16 @@ def _charge_path_clear(
     return True
 
 
+def _iterative_attack_count(bab: int) -> int:
+    """Number of iterative attacks PF1 grants at this BAB.
+
+    PF1 RAW: 1 attack at BAB 0-5, 2 at 6-10, 3 at 11-15, 4 at 16+.
+    Always at least 1 even at BAB 0 (everyone gets a single attack).
+    Each iterative beyond the first takes an additional -5 cumulative.
+    """
+    return max(1, (bab - 1) // 5 + 1)
+
+
 def _do_full_attack(
     actor: Combatant,
     target: Combatant,
@@ -647,10 +660,8 @@ def _do_full_attack(
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "full_attack: target not in melee"}))
         return
-    # Iterative attacks based on BAB. At BAB +1..+5 → 1 attack;
-    # +6..+10 → 2 attacks (-5 on second); etc.
     bab = actor.bases.get("bab", 0)
-    n_attacks = max(1, (bab - 1) // 5 + 1)
+    n_attacks = _iterative_attack_count(bab)
     for i in range(n_attacks):
         if not target.is_alive() or target.current_hp <= 0:
             break
@@ -771,6 +782,14 @@ def _do_attack(
     if outcome.hit and outcome.damage > 0:
         target.take_damage(outcome.damage)
         _apply_post_damage_state(target)
+    # Stunning Fist rider: if the attacker has declared a stunning_fist
+    # this turn and the attack hit, the target rolls a Fort save vs the
+    # cached DC; on failure, target is stunned 1 round.
+    stunning_fist_event: dict | None = None
+    if outcome.hit and "stunning_fist_pending" in actor.conditions:
+        stunning_fist_event = _resolve_stunning_fist(
+            actor, target, roller, encounter,
+        )
     events.append(TurnEvent(actor.id, label, {
         "target_id": target.id,
         "weapon": profile.name,
@@ -779,6 +798,9 @@ def _do_attack(
         "damage": outcome.damage,
         "trace": outcome.log,
     }))
+    if stunning_fist_event is not None:
+        events.append(TurnEvent(actor.id, "stunning_fist_save",
+                                stunning_fist_event))
 
 
 # ---------------------------------------------------------------------------
@@ -1316,6 +1338,110 @@ def _do_bardic_performance(
     }))
 
 
+def _character_level(actor: Combatant) -> int:
+    """Total character level for the actor; 1 for monsters / unknowns."""
+    if actor.template_kind != "character" or actor.template is None:
+        return 1
+    lvl = getattr(actor.template, "level", None)
+    return int(lvl) if lvl else 1
+
+
+def _resolve_stunning_fist(
+    attacker: Combatant,
+    target: Combatant,
+    roller: Roller,
+    encounter,
+) -> dict:
+    """Apply the Stunning Fist Fort save to ``target`` on a successful
+    hit. Returns an event-detail dict; the caller appends the event."""
+    from .spells import roll_save
+    dc = int(attacker.resources.get("stunning_fist_dc", 14))
+    cur_round = encounter.round_number if encounter else 1
+    passed, nat, total = roll_save(target, "fort", dc, roller)
+    if passed:
+        return {
+            "target_id": target.id, "dc": dc,
+            "save_natural": nat, "save_total": total,
+            "passed": True,
+        }
+    # Fail: target is stunned 1 round. We use a side-channel resource
+    # to track expiration, since conditions don't have built-in
+    # durations. Combatant.tick_round clears it on expiry.
+    target.add_condition("stunned")
+    target.resources["stunned_until_round"] = cur_round + 1
+    return {
+        "target_id": target.id, "dc": dc,
+        "save_natural": nat, "save_total": total,
+        "passed": False, "stunned_until_round": cur_round + 1,
+    }
+
+
+def _do_stunning_fist(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Stunning Fist: declare a Fort-save rider on a melee attack.
+
+    PF1: as part of using the feat (or monk class feature), the next
+    melee attack you make this turn carries a Fort save (DC 10 + 1/2
+    character level + Wis modifier). On hit, target rolls Fort or
+    becomes stunned for 1 round. The use is consumed regardless of
+    whether the attack hits.
+
+    For v1 this composite bundles the declaration + the attack into
+    a single action: pick a target, swing, and (on hit) the Fort
+    save fires automatically.
+    """
+    uses = actor.resources.get("stunning_fist_uses", 0)
+    if uses <= 0:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "no stunning_fist uses left"}))
+        return
+    target = _resolve_target(args.get("target"), ns)
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "stunning_fist: no target"}))
+        return
+    if not grid.is_adjacent(actor, target):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "stunning_fist: target not adjacent"}))
+        return
+
+    # Consume the use (PF1 RAW: lost whether or not the attack lands).
+    actor.resources["stunning_fist_uses"] = uses - 1
+
+    # Compute the save DC: 10 + 1/2 char level + Wis mod.
+    cur_round = encounter.round_number if encounter else 1
+    char_level = _character_level(actor)
+    wis_mod = _ability_modifier(actor, "wis")
+    dc = 10 + char_level // 2 + wis_mod
+
+    # Stash the DC so _do_attack can read it after rolling the attack.
+    actor.add_condition("stunning_fist_pending")
+    actor.resources["stunning_fist_dc"] = dc
+    actor.resources["stunning_fist_round"] = cur_round
+
+    events.append(TurnEvent(actor.id, "stunning_fist_declare", {
+        "target_id": target.id, "dc": dc,
+        "uses_remaining": actor.resources["stunning_fist_uses"],
+    }))
+
+    # Now run the attack; _do_attack handles the post-hit Fort save.
+    _do_attack(actor, target, grid, roller, events,
+               label="stunning_fist_attack", encounter=encounter,
+               script_options=args.get("options") or {})
+
+    # Clear the pending flag whether or not the attack hit.
+    actor.remove_condition("stunning_fist_pending")
+    actor.resources.pop("stunning_fist_dc", None)
+    actor.resources.pop("stunning_fist_round", None)
+
+
 def _do_cast(
     actor: Combatant,
     args: dict,
@@ -1664,29 +1790,41 @@ def _apply_post_damage_state(target: Combatant) -> None:
     """Centralized HP-threshold transitions after damage.
 
     All damage sites must call this *after* ``target.take_damage(...)``.
-    It handles the three transitions:
+    It handles four transitions, by HP threshold:
 
-    * HP <= -10 (engine convention) → dead.
-    * HP <= 0 with ferocity (orcs etc.) → ``ferocity_active`` +
-      ``staggered``. The creature stays conscious and continues to
-      fight at reduced effectiveness; ``Combatant.tick_round`` bleeds
-      1 HP/round until it's killed outright.
-    * HP <= 0 without ferocity → ``dying``.
+    * HP <= ``target.death_threshold`` → dead. PF1 RAW: -CON for living
+      creatures; 0 for undead/constructs.
+    * HP <= 0 (but above death threshold) with ferocity → stay
+      conscious + ``ferocity_active`` + ``staggered``. Tick_round
+      bleeds 1 HP/round until killed outright.
+    * HP < 0 (negative but above death threshold) without ferocity →
+      ``dying``. Tick_round bleeds 1 HP/round.
+    * HP exactly 0 → ``disabled`` (PF1 distinction): conscious, can
+      take 1 standard or 1 move (not both); standard actions deal 1
+      HP back to self (not yet modeled — PARTIAL).
     """
-    if target.current_hp <= -10:
+    threshold = target.death_threshold
+    if target.current_hp <= threshold:
         target.add_condition("dead")
         target.remove_condition("dying")
+        target.remove_condition("disabled")
         target.remove_condition("ferocity_active")
         target.remove_condition("staggered")
         return
-    if target.current_hp <= 0:
+    if target.current_hp == 0:
+        target.add_condition("disabled")
+        target.remove_condition("dying")
+        return
+    if target.current_hp < 0:
         if _has_racial_trait(target, "ferocity"):
             # Stay conscious and keep fighting; suppress dying.
             target.add_condition("ferocity_active")
             target.add_condition("staggered")
             target.remove_condition("dying")
+            target.remove_condition("disabled")
         else:
             target.add_condition("dying")
+            target.remove_condition("disabled")
 
 
 def _do_aoo(

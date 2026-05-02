@@ -495,6 +495,10 @@ class CharacterRequest:
     # Level-up plan (optional). When provided, the character is built
     # all the way up to plan.target_level.
     level_plan: dict | None = None
+    # Half-elf Adaptability racial trait: bonus Skill Focus feat at L1.
+    # Skill ID for the bonus Skill Focus. Defaults to "perception" if
+    # omitted; ignored unless race is half-elf.
+    adaptability_skill_focus: str | None = None
 
     @classmethod
     def from_dict(cls, d: dict) -> CharacterRequest:
@@ -528,6 +532,7 @@ class CharacterRequest:
             weapon_explicitly_none=(weapon_present and equipment.get("weapon") is None),
             shield_explicitly_none=(shield_present and equipment.get("shield") is None),
             level_plan=d.get("level_plan"),
+            adaptability_skill_focus=d.get("adaptability_skill_focus"),
         )
 
 
@@ -589,6 +594,12 @@ def create_character(
             f"{len(chosen_general_feats)}"
         )
     all_feats = chosen_general_feats + class_bonus_feats
+    # Half-elf Adaptability racial trait: bonus Skill Focus at L1.
+    if race.id == "half_elf":
+        skill_id = request.adaptability_skill_focus or "perception"
+        adaptability_feat = f"skill_focus_{skill_id}"
+        if adaptability_feat not in all_feats:
+            all_feats.append(adaptability_feat)
     validate_feats(all_feats, final_scores, class_, registry)
 
     # Skill ranks.

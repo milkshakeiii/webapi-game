@@ -63,7 +63,7 @@ PLAYER_RACE_TRAITS: dict[str, Entry] = {
     "weapon_familiarity_gnome": (NOT_IMPLEMENTED, "no weapon-familiarity model yet"),
 
     # Half-elf
-    "adaptability":          (NOT_IMPLEMENTED, "Skill Focus as bonus feat at L1"),
+    "adaptability":          (IMPLEMENTED,     "auto-adds skill_focus_<skill> at L1; configurable via CharacterRequest.adaptability_skill_focus, defaults to perception"),
     "elf_blood":             (OUT_OF_SCOPE,    "tag-only trait, no mechanical effect"),
     "elven_immunities_he":   (NOT_IMPLEMENTED, "same as elven_immunities"),
     "keen_senses_he":        (IMPLEMENTED,     "+2 racial Perception"),
@@ -107,7 +107,7 @@ MONSTER_RACIAL_TRAITS: dict[str, Entry] = {
     "light_sensitivity_orc": (PARTIAL,         "same as light_sensitivity"),
 
     # Skeleton
-    "undead_traits":         (PARTIAL,         "type='undead' recognized for channel; immunities (mind-affecting, bleed, disease, paralysis, poison, sleep, stun) not enforced — dormant until consumers add those effects"),
+    "undead_traits":         (PARTIAL,         "type='undead' recognized for channel; bleed immunity wired in tick_round; mind-affecting, disease, paralysis, poison, sleep, stun immunities still dormant until consumers exist"),
     "dr_5_bludgeoning":      (IMPLEMENTED,     "wired via _parse_dr_trait + Combatant.damage_reduction; resolve_attack honors it"),
     "cold_immunity":         (NOT_IMPLEMENTED, "no engine source of cold damage yet; build immunity infra alongside the first cold-damage spell"),
 
@@ -153,7 +153,7 @@ CLASS_FEATURES_L1: dict[str, Entry] = {
     # Monk
     "ac_bonus_monk":          (NOT_IMPLEMENTED, "+Wis to AC + class-level bonus, conditional on no armor"),
     "flurry_of_blows":        (NOT_IMPLEMENTED, "extra unarmed attacks at -2/-2"),
-    "stunning_fist_1day":     (PARTIAL,         "resource counter populated; composite action not yet exposed"),
+    "stunning_fist_1day":     (IMPLEMENTED,     "stunning_fist composite: declares + attacks; on hit target rolls Fort vs DC 10 + 1/2 level + Wis or stunned 1 round; use consumed regardless of hit"),
     "unarmed_strike":         (NOT_IMPLEMENTED, "improved unarmed strike auto-feat + scaling damage"),
     "monk_bonus_feat_1":      (IMPLEMENTED,     "extra feat at L1; selected via class_choices"),
 
@@ -390,11 +390,11 @@ CORE_MECHANICS: dict[str, Entry] = {
 
     # ── Combat: HP, dying, death ────────────────────────────────────────
     "combat.hp_max":                 (IMPLEMENTED,    "computed from class HD + Con + bonuses"),
-    "combat.dying":                  (PARTIAL,        "condition set when HP <= 0; no HP-loss-per-round nor stabilization roll"),
-    "combat.disabled":               (NOT_IMPLEMENTED, "0 HP exactly: 1 standard or move; standard hurts you 1 HP"),
-    "combat.stable":                 (NOT_IMPLEMENTED, "stops dying HP loss; bedrest"),
+    "combat.dying":                  (PARTIAL,        "set when HP < 0 (above death threshold); 1 HP/round bleed via tick_round; DC 10 Con stabilization roll not yet modeled"),
+    "combat.disabled":               (PARTIAL,        "set when HP exactly 0; turn validation restricts to 1 standard or 1 move; 1-HP-on-standard not yet modeled"),
+    "combat.stable":                 (PARTIAL,        "suppresses dying-bleed when set on combatant; auto-stabilization roll + Heal-skill aid not modeled"),
     "combat.unconscious":            (PARTIAL,        "is_unconscious checks the condition; turn validation prevents acts"),
-    "combat.dead_threshold":         (PARTIAL,        "HP <= -10 triggers dead (3.5e); PF1 RAW is HP <= -CON_score; see WORK_QUEUE P0"),
+    "combat.dead_threshold":         (IMPLEMENTED,    "PF1 RAW: HP <= -CON for living; 0 for undead/constructs (no Con score). Cached on Combatant.death_threshold at construction"),
     "combat.helpless_attacker_bonus": (NOT_IMPLEMENTED, "+4 melee attack vs helpless; Dex treated as 0"),
 
     # ── Combat: healing ─────────────────────────────────────────────────

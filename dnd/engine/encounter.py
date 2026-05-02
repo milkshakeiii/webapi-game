@@ -184,6 +184,19 @@ def _check_actor_legality(turn: Turn, combatant: Combatant) -> None:
                 "staggered combatant can take a single move OR standard action, not both"
             )
 
+    if "disabled" in conds:
+        # Disabled (HP exactly 0): same action restriction as staggered;
+        # additionally, standard actions deal 1 HP damage to self
+        # (not modeled here — see WORK_QUEUE).
+        if turn.full_round is not None:
+            raise TurnValidationError(
+                "disabled combatant cannot take a full-round action"
+            )
+        if turn.standard is not None and turn.move is not None:
+            raise TurnValidationError(
+                "disabled combatant can take a single move OR standard action, not both"
+            )
+
     if "grappled" in conds:
         # Heavily restricted; for v1 we only check standard slot for
         # specific forbidden actions.

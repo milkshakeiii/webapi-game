@@ -68,9 +68,17 @@ class TestPostDamageState(unittest.TestCase):
         self.assertIn("dying", goblin.conditions)
         self.assertNotIn("ferocity_active", goblin.conditions)
 
-    def test_orc_at_or_below_minus_10_dies(self):
+    def test_orc_at_or_below_death_threshold_dies(self):
+        # PF1 RAW: orc has CON 12, so dies at HP <= -12 (not -10).
         orc = _orc()
+        self.assertEqual(orc.death_threshold, -12)
+        # At -10 the orc is still in ferocity, NOT dead.
         orc.current_hp = -10
+        _apply_post_damage_state(orc)
+        self.assertNotIn("dead", orc.conditions)
+        self.assertIn("ferocity_active", orc.conditions)
+        # At -12 the orc is dead.
+        orc.current_hp = -12
         _apply_post_damage_state(orc)
         self.assertIn("dead", orc.conditions)
         self.assertNotIn("ferocity_active", orc.conditions)
@@ -118,14 +126,17 @@ class TestFerocityBleed(unittest.TestCase):
         self.assertEqual(orc.current_hp, -5)
 
     def test_bleed_eventually_kills(self):
+        # Orc CON 12 → dies at HP <= -12.
         orc = _orc()
-        orc.current_hp = -8
+        orc.current_hp = -10
         _apply_post_damage_state(orc)
         self.assertIn("ferocity_active", orc.conditions)
-        # 2 rounds of bleed pushes HP from -8 to -10 → dead.
-        orc.tick_round(2)  # -9
+        # 2 rounds of bleed: -10 → -11 → -12 (dead).
+        orc.tick_round(2)
+        self.assertEqual(orc.current_hp, -11)
         self.assertNotIn("dead", orc.conditions)
-        orc.tick_round(3)  # -10 → dead
+        orc.tick_round(3)
+        self.assertEqual(orc.current_hp, -12)
         self.assertIn("dead", orc.conditions)
         self.assertNotIn("ferocity_active", orc.conditions)
         self.assertNotIn("staggered", orc.conditions)
