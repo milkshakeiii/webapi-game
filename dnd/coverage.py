@@ -217,7 +217,7 @@ CONDITIONS: dict[str, Entry] = {
     "paralyzed":       (PARTIAL,         "denies Dex (sneak attack qualifies); turn validation prevents acts; helpless follow-on not modeled"),
     "petrified":       (PARTIAL,         "turn validation prevents physical acts; helpless follow-on not modeled"),
     "pinned":          (PARTIAL,         "denies Dex (sneak attack qualifies); pinned action set not modeled"),
-    "prone":           (PARTIAL,         "stand_up move action exists; -4 melee attack / +4 AC vs ranged not applied"),
+    "prone":           (IMPLEMENTED,     "fall_prone free action applies the condition; stand_up move action provokes AoO from threateners; -4 melee attacker, +4 melee-attacker-vs-target, -4 ranged-attacker-vs-target wired in _do_attack"),
     "shaken":          (NOT_IMPLEMENTED, "-2 attack/save/skill"),
     "sickened":        (NOT_IMPLEMENTED, "-2 attack/damage/save/skill"),
     "sleeping":        (PARTIAL,         "denies Dex (sneak attack qualifies); helpless follow-on not modeled"),
@@ -254,7 +254,7 @@ FEATS: dict[str, Entry] = {
     "persuasive":            (IMPLEMENTED,     "+2 diplomacy/intimidate"),
     "point_blank_shot":      (IMPLEMENTED,     "+1 attack/damage with ranged"),
     "power_attack":          (IMPLEMENTED,     "attack-time tradeoff; wield-scaled damage bonus"),
-    "precise_shot":          (NOT_IMPLEMENTED, "no -4 firing into melee"),
+    "precise_shot":          (IMPLEMENTED,     "negates the -4 firing-into-melee penalty in _firing_into_melee_penalty"),
     "rapid_shot":            (NOT_IMPLEMENTED, "extra ranged attack at -2/-2"),
     "run":                   (NOT_IMPLEMENTED, "x4 speed for run action"),
     "scribe_scroll":         (NOT_IMPLEMENTED, "crafting feat — deferred to Phase 4"),
@@ -345,7 +345,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     # ── Combat: AoOs ────────────────────────────────────────────────────
     "combat.aoo":                    (IMPLEMENTED,    "1 AoO/round; aoo_triggers_for_movement + _do_aoo"),
     "combat.aoo_extra_combat_reflexes": (NOT_IMPLEMENTED, "Combat Reflexes feat unwired; only 1 AoO/round"),
-    "combat.aoo_provoking_actions":  (PARTIAL,        "leaving threatened square triggers; PROVOKING_ACTION_TYPES set lists casting/drinking/etc. but not all wired"),
+    "combat.aoo_provoking_actions":  (PARTIAL,        "leaving threatened square + stand_up + non-defensive cast trigger; drink-potion / draw-weapon / retrieve-stowed-item not wired"),
     "combat.threatened_squares":     (PARTIAL,        "grid.threatened_squares; 5-ft (normal) and 10-ft (reach weapons) not differentiated yet"),
     "combat.reach_weapons":          (NOT_IMPLEMENTED, "10-ft threat with no adjacent — not modeled"),
 
@@ -362,9 +362,9 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.trip":                   (NOT_IMPLEMENTED, "knock prone; wolf trip-on-bite is the immediate consumer"),
     "combat.coup_de_grace":          (NOT_IMPLEMENTED, "auto-crit on helpless + Fort save vs death"),
     "combat.massive_damage":         (NOT_IMPLEMENTED, "Fort save vs die at 50+ damage from one source"),
-    "combat.aid_another":            (NOT_IMPLEMENTED, "+2 to ally's next attack/AC; DC 10 attack roll"),
+    "combat.aid_another":            (PARTIAL,         "composite 'aid_another' with mode='attack'|'ac'; DC 10 attack roll → +2 (circumstance) attack OR +2 dodge AC for 1 round; 'vs that specific foe' restriction not modeled (bonus is universal)"),
     "combat.fight_defensively":      (NOT_IMPLEMENTED, "-4 attack for +2 dodge AC"),
-    "combat.total_defense":          (PARTIAL,        "action accepted but no AC bonus applied — just emits a 'total_defense' event"),
+    "combat.total_defense":          (IMPLEMENTED,    "+4 dodge AC for 1 round (expires_round = current_round + 1); via _do_standard"),
 
     # ── Combat: charge & full-round movement ─────────────────────────────
     "combat.charge":                 (PARTIAL,        "min-distance, straight-line, lane-clear, end-adjacent enforced; difficult terrain not (engine has no terrain types)"),
@@ -373,8 +373,8 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.run":                    (NOT_IMPLEMENTED, "x4 speed, lose Dex to AC, straight line"),
 
     # ── Combat: ranged attacks ──────────────────────────────────────────
-    "combat.range_increments":       (NOT_IMPLEMENTED, "-2 attack per increment; max 5 (thrown) / 10 (projectile)"),
-    "combat.firing_into_melee":      (NOT_IMPLEMENTED, "-4 attack unless Precise Shot"),
+    "combat.range_increments":       (PARTIAL,         "-2 attack per increment via _range_increment_penalty in _do_attack; max-range cap (5/10 increments) not yet enforced — long shots are punished but not forbidden"),
+    "combat.firing_into_melee":      (IMPLEMENTED,    "-4 attack via _firing_into_melee_penalty in _do_attack; negated by Precise Shot feat. Detection: any other combatant adjacent to target."),
     "combat.point_blank_shot":       (IMPLEMENTED,    "feat applies +1 attack/damage to ranged via attack:ranged modifier"),
 
     # ── Combat: weapon use & wielding ───────────────────────────────────

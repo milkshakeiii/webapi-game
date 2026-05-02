@@ -88,8 +88,14 @@ def execute_turn(
 
     # Free actions first.
     for fa in do.get("free", []) or []:
-        events.append(TurnEvent(actor.id, "free",
-                                {"action": fa}))
+        fa_type = fa.get("type") if isinstance(fa, dict) else None
+        if fa_type == "fall_prone":
+            if "prone" not in actor.conditions:
+                actor.add_condition("prone")
+            events.append(TurnEvent(actor.id, "fall_prone", {}))
+        else:
+            events.append(TurnEvent(actor.id, "free",
+                                    {"action": fa}))
 
     # Swift action.
     swift = do.get("swift")
@@ -166,6 +172,9 @@ def _execute_composite(
     if composite == "stunning_fist":
         _do_stunning_fist(actor, args, encounter, grid, roller, ns, events)
         return
+    if composite == "aid_another":
+        _do_aid_another(actor, args, encounter, grid, roller, ns, events)
+        return
     raise NotImplementedError(f"composite action {composite!r} not yet implemented")
 
 
@@ -234,6 +243,16 @@ def _do_move_action(
         _move_along(actor, dest, speed_squares, grid, events)
     elif mtype == "stand_up":
         if "prone" in actor.conditions:
+            # PF1: standing up provokes AoOs from threateners.
+            from .encounter import aoo_triggers_for_provoking_action
+            for threatener in aoo_triggers_for_provoking_action(
+                grid, actor, "stand_up",
+            ):
+                _do_aoo(threatener, actor, grid, events)
+                if not actor.is_alive() or actor.current_hp <= -10:
+                    events.append(TurnEvent(actor.id, "skip",
+                                            {"reason": "killed by AoO"}))
+                    return
             actor.remove_condition("prone")
             events.append(TurnEvent(actor.id, "stand_up", {}))
     elif mtype == "draw_weapon":
@@ -447,7 +466,19 @@ def _do_standard(
                    encounter=encounter,
                    script_options=std.get("options") or {})
     elif stype == "total_defense":
-        events.append(TurnEvent(actor.id, "total_defense", {}))
+        # PF1 RAW: standard action; +4 dodge AC for one round; can't
+        # attack. The dodge bonus expires at the start of the actor's
+        # next turn (current_round + 1).
+        cur_round = encounter.round_number if encounter else 1
+        src = "total_defense"
+        actor.modifiers.remove_by_source(src)
+        actor.modifiers.add(Modifier(
+            value=4, type="dodge", target="ac",
+            source=src, expires_round=cur_round + 1,
+        ))
+        events.append(TurnEvent(actor.id, "total_defense", {
+            "ac_bonus": 4, "expires_round": cur_round + 1,
+        }))
     elif stype == "cast":
         _do_cast(actor, std, encounter, grid, roller, ns, events)
     else:
@@ -754,6 +785,26 @@ def _do_attack(
         attack_general += _compute_mod(0, actor.modifiers.for_target("attack:ranged"))
         damage_general += _compute_mod(0, actor.modifiers.for_target("damage:ranged"))
 
+    # Range increment penalty for ranged attacks: -2 per increment
+    # beyond the first. PF1 RAW caps at 5 increments (thrown) / 10
+    # (projectile); for v1 we apply the penalty without enforcing a
+    # hard max range — long shots are punished but not forbidden.
+    range_penalty = _range_increment_penalty(chosen, actor, target, grid, is_ranged)
+    # Firing into melee: -4 ranged attack vs a target engaged with
+    # another combatant; negated by Precise Shot feat.
+    firing_penalty = _firing_into_melee_penalty(
+        actor, target, grid, encounter, is_ranged,
+    )
+    # Prone-position adjustments:
+    #   - prone attacker: -4 to melee attack rolls
+    #   - prone target:   +4 melee attacker / -4 ranged attacker
+    prone_atk_penalty = 0
+    if "prone" in actor.conditions and not is_ranged:
+        prone_atk_penalty = -4
+    prone_target_modifier = 0
+    if "prone" in target.conditions:
+        prone_target_modifier = -4 if is_ranged else 4
+
     profile = AttackProfile(
         attack_bonus=(
             int(chosen["attack_bonus"])
@@ -764,6 +815,10 @@ def _do_attack(
             + smite_atk
             + weapon_focus_bonus
             + attack_general
+            + range_penalty
+            + firing_penalty
+            + prone_atk_penalty
+            + prone_target_modifier
         ),
         damage_dice=str(chosen["damage"]),
         damage_bonus=(
@@ -1442,6 +1497,80 @@ def _do_stunning_fist(
     actor.resources.pop("stunning_fist_round", None)
 
 
+def _do_aid_another(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Aid Another (PF1).
+
+    Standard action. Pick an ally and a foe; roll an attack vs DC 10
+    (an attack roll against an "imaginary" AC 10). On success, your
+    ally gets a +2 bonus to either their next attack roll against that
+    foe (mode='attack') or +2 dodge AC vs that foe (mode='ac'),
+    until the start of your next turn.
+
+    Limitations in v1:
+      - The "vs that specific foe" restriction isn't modeled; the
+        bonus applies universally to the ally for one round.
+      - The "next attack" precision isn't modeled; uses 1-round
+        duration instead.
+    """
+    ally = _resolve_target(args.get("ally"), ns)
+    foe = _resolve_target(args.get("foe"), ns)
+    mode = args.get("mode", "attack")
+    if ally is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "aid_another: no ally"}))
+        return
+    if foe is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "aid_another: no foe"}))
+        return
+    if mode not in ("attack", "ac"):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": f"aid_another: unknown mode {mode!r}"}))
+        return
+    if not grid.is_adjacent(actor, foe):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "aid_another: foe not in melee reach"}))
+        return
+
+    # Roll d20 + actor's primary attack bonus vs DC 10.
+    if not actor.attack_options:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "aid_another: no attack options"}))
+        return
+    attack_bonus = int(actor.attack_options[0].get("attack_bonus", 0))
+    r = roller.roll("1d20")
+    nat = r.terms[0].rolls[0]
+    total = nat + attack_bonus
+    success = total >= 10
+
+    cur_round = encounter.round_number if encounter else 1
+    if success:
+        target_field = "attack" if mode == "attack" else "ac"
+        mod_type = "circumstance" if mode == "attack" else "dodge"
+        src = f"aid_another:{actor.id}:{cur_round}"
+        ally.modifiers.add(Modifier(
+            value=2, type=mod_type, target=target_field,
+            source=src, expires_round=cur_round + 1,
+        ))
+    events.append(TurnEvent(actor.id, "aid_another", {
+        "ally_id": ally.id,
+        "foe_id": foe.id,
+        "mode": mode,
+        "attack_natural": nat,
+        "attack_total": total,
+        "dc": 10,
+        "passed": success,
+    }))
+
+
 def _do_cast(
     actor: Combatant,
     args: dict,
@@ -1722,6 +1851,62 @@ def _is_flanking(
         if grid.is_flanked_by(target, actor, ally):
             return True
     return False
+
+
+def _firing_into_melee_penalty(
+    actor: Combatant,
+    target: Combatant,
+    grid: Grid | None,
+    encounter,
+    is_ranged: bool,
+) -> int:
+    """PF1 RAW: ranged attacks against a target engaged in melee suffer
+    a -4 penalty unless the attacker has the Precise Shot feat.
+
+    "Engaged in melee" is approximated as "another combatant is
+    adjacent to the target" — sufficient for 5-ft reach. Reach
+    weapons (10-ft) are deferred.
+    """
+    if not is_ranged or grid is None or encounter is None:
+        return 0
+    if _has_feat(actor, "precise_shot"):
+        return 0
+    for ir in encounter.initiative:
+        c = ir.combatant
+        if c.id == actor.id or c.id == target.id:
+            continue
+        if c.current_hp <= 0 or c.is_unconscious():
+            continue
+        if grid.is_adjacent(c, target):
+            return -4
+    return 0
+
+
+def _range_increment_penalty(
+    chosen: dict,
+    actor: Combatant,
+    target: Combatant,
+    grid: Grid | None,
+    is_ranged: bool,
+) -> int:
+    """PF1 RAW: ranged attacks take -2 per range increment beyond the
+    first.
+
+    ``range_increment`` on the attack option is in feet; we convert to
+    feet via ``5 * grid.distance_between(actor, target)``. A weapon
+    with no ``range_increment`` (purely melee) gets no penalty.
+    """
+    if not is_ranged or grid is None:
+        return 0
+    rinc_ft = int(chosen.get("range_increment") or 0)
+    if rinc_ft <= 0:
+        return 0
+    distance_ft = grid.distance_between(actor, target) * 5
+    if distance_ft <= 0:
+        return 0
+    # Number of increments used: ceil(distance / rinc).
+    increments = (distance_ft + rinc_ft - 1) // rinc_ft
+    return -2 * max(0, increments - 1)
 
 
 def _flanking_attack_bonus(
