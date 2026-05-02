@@ -390,9 +390,9 @@ CORE_MECHANICS: dict[str, Entry] = {
 
     # ── Combat: HP, dying, death ────────────────────────────────────────
     "combat.hp_max":                 (IMPLEMENTED,    "computed from class HD + Con + bonuses"),
-    "combat.dying":                  (PARTIAL,        "set when HP < 0 (above death threshold); 1 HP/round bleed via tick_round; DC 10 Con stabilization roll not yet modeled"),
+    "combat.dying":                  (IMPLEMENTED,    "set when HP < 0; 1 HP/round bleed via tick_round; DC 10 Con stabilization roll fires when a roller is provided to tick_round (Encounter passes its own)"),
     "combat.disabled":               (PARTIAL,        "set when HP exactly 0; turn validation restricts to 1 standard or 1 move; 1-HP-on-standard not yet modeled"),
-    "combat.stable":                 (PARTIAL,        "suppresses dying-bleed when set on combatant; auto-stabilization roll + Heal-skill aid not modeled"),
+    "combat.stable":                 (IMPLEMENTED,    "suppresses dying-bleed when set; reached via DC 10 Con check in tick_round or via the 'stable' condition being applied externally"),
     "combat.unconscious":            (PARTIAL,        "is_unconscious checks the condition; turn validation prevents acts"),
     "combat.dead_threshold":         (IMPLEMENTED,    "PF1 RAW: HP <= -CON for living; 0 for undead/constructs (no Con score). Cached on Combatant.death_threshold at construction"),
     "combat.helpless_attacker_bonus": (NOT_IMPLEMENTED, "+4 melee attack vs helpless; Dex treated as 0"),
@@ -401,8 +401,8 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.healing_natural":        (NOT_IMPLEMENTED, "1 HP/level/8 hr; no rest-time mechanic in combat-only loop"),
     "combat.healing_full_rest":      (NOT_IMPLEMENTED, "full HP after 8 hr rest"),
     "combat.healing_magical":        (IMPLEMENTED,    "cure spells implemented as heal effect kind"),
-    "combat.fast_healing":           (NOT_IMPLEMENTED, "X HP/round automatic"),
-    "combat.regeneration":           (NOT_IMPLEMENTED, "HP/round + bypass-by-energy-type semantics"),
+    "combat.fast_healing":           (IMPLEMENTED,    "Combatant.fast_healing: X HP/round in tick_round, capped at max_hp; dead creatures don't heal"),
+    "combat.regeneration":           (PARTIAL,        "Combatant.regeneration heals X/round in tick_round; non-bypass-damage-as-nonlethal semantics not yet modeled (since nonlethal-damage tracking itself isn't)"),
 
     # ── Combat: movement modes & terrain ────────────────────────────────
     "combat.movement_walk":          (IMPLEMENTED,    "speed-30 walk = 6 cells/round in our grid"),

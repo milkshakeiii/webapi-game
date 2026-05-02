@@ -116,6 +116,20 @@ class Combatant:
     # fist) check this set first and skip the application if matched.
     condition_immunities: set[str] = field(default_factory=set)
 
+    # Fast healing: HP automatically restored each round (capped by
+    # max_hp). Applied in ``tick_round``.
+    fast_healing: int = 0
+
+    # Regeneration: HP/round; like fast_healing but the creature also
+    # cannot die from non-bypassed damage (it falls to negative HP and
+    # stays there until the bypass-type damage finishes the kill).
+    # ``regeneration_bypass`` lists the damage-type keywords that DO
+    # finish the kill (e.g., ``frozenset({"fire", "acid"})`` for trolls).
+    # The "treat-non-bypass-damage-as-nonlethal" semantics aren't yet
+    # modeled; v1 just heals each round.
+    regeneration: int = 0
+    regeneration_bypass: frozenset[str] = field(default_factory=frozenset)
+
     # ── Derived stat queries ──────────────────────────────────────────────
 
     def ac(self, situation: str = "normal") -> int:
@@ -255,19 +269,42 @@ class Combatant:
     def remove_modifiers_from_source(self, source: str) -> int:
         return self.modifiers.remove_by_source(source)
 
-    def tick_round(self, current_round: int) -> list[Modifier]:
-        """End-of-round housekeeping: prune expired modifiers, apply
-        per-round HP losses (ferocity bleed and dying bleed), expire
-        timed conditions (stunned), check death."""
+    def tick_round(self, current_round: int, roller=None) -> list[Modifier]:
+        """End-of-round housekeeping.
+
+        Order:
+          1. Prune expired modifiers.
+          2. Expire timed conditions (stunned via side-channel
+             ``stunned_until_round``).
+          3. Apply per-round HP losses: ferocity bleed, dying bleed.
+             A dying creature first attempts a DC 10 Constitution
+             check (if a roller is provided) to stabilize and
+             suppress the bleed.
+          4. Apply per-round HP gains: fast healing, regeneration.
+
+        ``roller``: optional. When provided, dying combatants roll a
+        DC 10 Con stabilization check; on success, the ``stable``
+        condition is added (which suppresses the bleed below).
+        """
         expired = self.modifiers.prune_expired(current_round)
-        # Expire timed conditions tracked via side-channel resources.
         stun_until = self.resources.get("stunned_until_round")
         if stun_until is not None and current_round >= stun_until:
             self.remove_condition("stunned")
             del self.resources["stunned_until_round"]
-        # Bleed effects (ferocity and dying) — skip if the creature is
-        # immune to bleed (undead and constructs).
         bleed_immune = self.is_immune_to_bleed()
+        # Stabilization check: dying creature rolls Con vs DC 10.
+        if (
+            roller is not None
+            and "dying" in self.conditions
+            and "stable" not in self.conditions
+            and "dead" not in self.conditions
+        ):
+            r = roller.roll("1d20")
+            nat = r.terms[0].rolls[0]
+            con_score = self._read_con_score()
+            con_mod = (con_score - 10) // 2 if con_score > 0 else 0
+            if nat + con_mod >= 10:
+                self.add_condition("stable")
         # PF1 ferocity: a creature kept conscious below 0 HP bleeds
         # 1 HP per round until killed outright.
         if (
@@ -282,9 +319,8 @@ class Combatant:
                 self.remove_condition("staggered")
                 self.remove_condition("dying")
         # PF1 dying: a dying creature loses 1 HP per round and dies
-        # when it reaches its negative-Con threshold. Stabilization
-        # (DC 10 Con check or Heal aid) suppresses the loss; not
-        # modeled in v1 — see WORK_QUEUE.
+        # when it reaches its negative-Con threshold. Stable suppresses
+        # the loss.
         elif (
             "dying" in self.conditions
             and "stable" not in self.conditions
@@ -295,7 +331,30 @@ class Combatant:
             if self.current_hp <= self.death_threshold:
                 self.add_condition("dead")
                 self.remove_condition("dying")
+        # Per-round healing.
+        if "dead" not in self.conditions and self.current_hp < self.max_hp:
+            heal = self.fast_healing + self.regeneration
+            if heal > 0:
+                self.current_hp = min(self.max_hp, self.current_hp + heal)
         return expired
+
+    def _read_con_score(self) -> int:
+        """Read the combatant's effective Constitution score.
+
+        Used by the stabilization check. Returns 0 when no Con score
+        applies (undead, constructs).
+        """
+        if self.template is None:
+            return 10
+        if self.template_kind == "monster":
+            scores = getattr(self.template, "ability_scores", None) or {}
+            return int(scores.get("con", 10) or 0)
+        if self.template_kind == "character":
+            base = self.template.base_ability_scores.get("con") or 10
+            for m in self.modifiers.for_target("ability:con"):
+                base += m.value
+            return int(base)
+        return 10
 
 
 # ---------------------------------------------------------------------------

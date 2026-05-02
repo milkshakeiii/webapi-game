@@ -276,6 +276,9 @@ class Encounter:
     round_number: int = 0
     current_index: int = 0
     log: list[dict] = field(default_factory=list)
+    # Optional roller carried between rounds. Used by tick_round's
+    # stabilization check (and any other between-round dice rolls).
+    roller: Roller | None = None
 
     @classmethod
     def begin(
@@ -285,7 +288,10 @@ class Encounter:
         roller: Roller,
     ) -> Encounter:
         order = roll_initiative(combatants, roller)
-        return cls(grid=grid, initiative=order, round_number=1, current_index=0)
+        return cls(
+            grid=grid, initiative=order, round_number=1, current_index=0,
+            roller=roller,
+        )
 
     def current_actor(self) -> Combatant | None:
         if not self.initiative:
@@ -301,7 +307,7 @@ class Encounter:
             self.current_index = 0
             self.round_number += 1
             for ir in self.initiative:
-                ir.combatant.tick_round(self.round_number)
+                ir.combatant.tick_round(self.round_number, roller=self.roller)
 
     def alive_combatants_on(self, team: str) -> list[Combatant]:
         return [
