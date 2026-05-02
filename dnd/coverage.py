@@ -107,7 +107,7 @@ MONSTER_RACIAL_TRAITS: dict[str, Entry] = {
     "light_sensitivity_orc": (PARTIAL,         "same as light_sensitivity"),
 
     # Skeleton
-    "undead_traits":         (PARTIAL,         "type='undead' recognized for channel; bleed immunity wired in tick_round; mind-affecting, disease, paralysis, poison, sleep, stun immunities still dormant until consumers exist"),
+    "undead_traits":         (PARTIAL,         "type='undead' recognized for channel; bleed immunity wired in tick_round; condition immunities (mind-affecting / paralysis / sleep / stun / fatigue / nausea / fear / etc.) wired via Combatant.add_condition immunity check; disease/poison effect-types not yet modeled (no consumers)"),
     "dr_5_bludgeoning":      (IMPLEMENTED,     "wired via _parse_dr_trait + Combatant.damage_reduction; resolve_attack honors it"),
     "cold_immunity":         (NOT_IMPLEMENTED, "no engine source of cold damage yet; build immunity infra alongside the first cold-damage spell"),
 
@@ -115,7 +115,7 @@ MONSTER_RACIAL_TRAITS: dict[str, Entry] = {
     "trip_attack":           (NOT_IMPLEMENTED, "free trip on bite hit; needs CMB/CMD trip mechanic"),
 
     # Zombie
-    "undead_traits_zombie":  (PARTIAL,         "same as undead_traits"),
+    "undead_traits_zombie":  (PARTIAL,         "same as undead_traits — same immunity set wired"),
     "dr_5_slashing":         (IMPLEMENTED,     "wired via _parse_dr_trait; resolve_attack honors it"),
 }
 

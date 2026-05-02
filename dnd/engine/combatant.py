@@ -109,6 +109,13 @@ class Combatant:
     # ``turn_executor._has_feat``.
     extra_feats: list[str] = field(default_factory=list)
 
+    # Conditions this combatant is immune to (e.g., undead are immune
+    # to "stunned", "paralyzed", "charmed", etc.). Populated at
+    # construction from racial traits / monster type. Consumers that
+    # apply conditions (``add_condition``, spell handlers, stunning
+    # fist) check this set first and skip the application if matched.
+    condition_immunities: set[str] = field(default_factory=set)
+
     # ── Derived stat queries ──────────────────────────────────────────────
 
     def ac(self, situation: str = "normal") -> int:
@@ -195,8 +202,21 @@ class Combatant:
             raise ValueError(f"heal must be >= 0, got {amount}")
         self.current_hp = min(self.max_hp, self.current_hp + amount)
 
-    def add_condition(self, condition_id: str) -> None:
+    def add_condition(self, condition_id: str) -> bool:
+        """Apply ``condition_id`` unless the combatant is immune.
+
+        Returns True when the condition was actually applied, False
+        when blocked by an immunity. Callers that want to know which
+        path fired (e.g., for trace events) should check the return
+        value.
+        """
+        if self.is_immune_to_condition(condition_id):
+            return False
         self.conditions.add(condition_id)
+        return True
+
+    def is_immune_to_condition(self, condition_id: str) -> bool:
+        return condition_id in self.condition_immunities
 
     def remove_condition(self, condition_id: str) -> None:
         self.conditions.discard(condition_id)
@@ -313,6 +333,40 @@ def _monster_death_threshold(monster: Monster) -> int:
     return -con
 
 
+# PF1 RAW: undead are immune to mind-affecting effects, paralysis,
+# sleep, stun, fatigue/exhaustion, disease/poison/nausea/sickness,
+# bleed, and death effects.
+UNDEAD_CONDITION_IMMUNITIES: frozenset[str] = frozenset({
+    "charmed",       # mind-affecting / charm
+    "fascinated",    # mind-affecting / mental
+    "shaken",        # mind-affecting / fear
+    "frightened",    # mind-affecting / fear
+    "panicked",      # mind-affecting / fear
+    "cowering",      # mind-affecting / fear
+    "dazed",         # mind-affecting / mental
+    "confused",      # mind-affecting / mental
+    "sleeping",      # sleep effects
+    "paralyzed",     # paralysis
+    "stunned",       # stun effects
+    "fatigued",      # physical fatigue
+    "exhausted",     # exhaustion
+    "nauseated",     # disease / poison / smell-based
+    "sickened",      # disease / poison
+})
+
+# Constructs share most undead immunities (no metabolism either).
+CONSTRUCT_CONDITION_IMMUNITIES: frozenset[str] = UNDEAD_CONDITION_IMMUNITIES
+
+
+def _monster_condition_immunities(monster: Monster) -> set[str]:
+    mtype = (monster.type or "").lower()
+    if mtype == "undead":
+        return set(UNDEAD_CONDITION_IMMUNITIES)
+    if mtype == "construct":
+        return set(CONSTRUCT_CONDITION_IMMUNITIES)
+    return set()
+
+
 # Map keys in monster.ac dict → modifier types.
 _AC_KEY_TO_TYPE: dict[str, str] = {
     "armor":      "armor",
@@ -394,6 +448,7 @@ def combatant_from_monster(
         template=monster,
         damage_reduction=_monster_damage_reduction(monster),
         death_threshold=_monster_death_threshold(monster),
+        condition_immunities=_monster_condition_immunities(monster),
     )
 
 
