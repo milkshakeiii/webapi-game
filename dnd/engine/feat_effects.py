@@ -48,10 +48,16 @@ def feat_modifiers(feat_id: str, character) -> list[Modifier]:
 
     # ── Skill-pair feats (each +2 to two skills). ───────────────────
     skill_pairs = {
-        "alertness":  [("perception", 2), ("sense_motive", 2)],
-        "athletic":   [("climb", 2), ("swim", 2)],
-        "stealthy":   [("stealth", 2), ("escape_artist", 2)],
-        "persuasive": [("diplomacy", 2), ("intimidate", 2)],
+        "alertness":         [("perception", 2), ("sense_motive", 2)],
+        "athletic":          [("climb", 2), ("swim", 2)],
+        "stealthy":          [("stealth", 2), ("escape_artist", 2)],
+        "persuasive":        [("diplomacy", 2), ("intimidate", 2)],
+        "deceitful":         [("bluff", 2), ("disguise", 2)],
+        "deft_hands":        [("disable_device", 2), ("sleight_of_hand", 2)],
+        "magical_aptitude":  [("spellcraft", 2), ("use_magic_device", 2)],
+        "self_sufficient":   [("heal", 2), ("survival", 2)],
+        "animal_affinity":   [("handle_animal", 2), ("ride", 2)],
+        "acrobatic":         [("acrobatics", 2), ("fly", 2)],
     }
     if feat_id in skill_pairs:
         return [mod(v, "untyped", f"skill:{s}", src) for s, v in skill_pairs[feat_id]]
@@ -94,6 +100,28 @@ def feat_modifiers(feat_id: str, character) -> list[Modifier]:
             mod(1, "untyped", "attack:ranged", src),
             mod(1, "untyped", "damage:ranged", src),
         ]
+
+    # Greater Weapon Focus: +1 attack stacking with Weapon Focus.
+    if feat_id.startswith("greater_weapon_focus_"):
+        weapon_id = feat_id[len("greater_weapon_focus_"):]
+        return [mod(1, "untyped", f"attack:weapon:{weapon_id}", src)]
+    # Weapon Specialization: +2 damage with chosen weapon.
+    if feat_id.startswith("weapon_specialization_"):
+        weapon_id = feat_id[len("weapon_specialization_"):]
+        return [mod(2, "untyped", f"damage:weapon:{weapon_id}", src)]
+    # Greater Weapon Specialization: +2 damage stacking.
+    if feat_id.startswith("greater_weapon_specialization_"):
+        weapon_id = feat_id[len("greater_weapon_specialization_"):]
+        return [mod(2, "untyped", f"damage:weapon:{weapon_id}", src)]
+
+    # Greater Spell Focus: +1 DC stacking with Spell Focus.
+    if feat_id.startswith("greater_spell_focus_"):
+        school = feat_id[len("greater_spell_focus_"):]
+        return [mod(1, "untyped", f"spell_dc:{school}", src)]
+
+    # Greater Spell Penetration: +2 stacking with Spell Penetration.
+    if feat_id == "greater_spell_penetration":
+        return [mod(2, "untyped", "spell_resistance_check", src)]
 
     # Active / situational / not-yet-wired feats produce no modifiers.
     return []

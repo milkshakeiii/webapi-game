@@ -274,5 +274,425 @@
     "type": "combat",
     "prerequisites": {"feats": ["mounted_combat"]},
     "summary": "While mounted, may attempt overruns; opponents knocked prone are dealt mount's hoof damage."
+  },
+  {
+    "id": "deceitful",
+    "name": "Deceitful",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 Bluff and +2 Disguise (+4 each at 10 ranks)."
+  },
+  {
+    "id": "deft_hands",
+    "name": "Deft Hands",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 Disable Device and +2 Sleight of Hand (+4 each at 10 ranks)."
+  },
+  {
+    "id": "magical_aptitude",
+    "name": "Magical Aptitude",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 Spellcraft and +2 Use Magic Device (+4 each at 10 ranks)."
+  },
+  {
+    "id": "self_sufficient",
+    "name": "Self-Sufficient",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 Heal and +2 Survival (+4 each at 10 ranks)."
+  },
+  {
+    "id": "animal_affinity",
+    "name": "Animal Affinity",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 Handle Animal and +2 Ride (+4 each at 10 ranks)."
+  },
+  {
+    "id": "acrobatic",
+    "name": "Acrobatic",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "+2 Acrobatics and +2 Fly (+4 each at 10 ranks)."
+  },
+  {
+    "id": "improved_critical",
+    "name": "Improved Critical",
+    "type": "combat",
+    "prerequisites": {"bab": 8},
+    "subtype": "weapon",
+    "summary": "Doubles the threat range of a chosen weapon. Doesn't stack with keen edge or similar."
+  },
+  {
+    "id": "vital_strike",
+    "name": "Vital Strike",
+    "type": "combat",
+    "prerequisites": {"bab": 6},
+    "summary": "When using the attack action, roll the weapon's damage dice twice (only on a single attack action — not iterative or full attacks)."
+  },
+  {
+    "id": "improved_vital_strike",
+    "name": "Improved Vital Strike",
+    "type": "combat",
+    "prerequisites": {"bab": 11, "feats": ["vital_strike"]},
+    "summary": "Like Vital Strike, but roll damage dice three times."
+  },
+  {
+    "id": "greater_vital_strike",
+    "name": "Greater Vital Strike",
+    "type": "combat",
+    "prerequisites": {"bab": 16, "feats": ["improved_vital_strike", "vital_strike"]},
+    "summary": "Like Vital Strike, but roll damage dice four times."
+  },
+  {
+    "id": "weapon_specialization",
+    "name": "Weapon Specialization",
+    "type": "combat",
+    "prerequisites": {"feats": ["weapon_focus"], "bab": 4, "fighter_level": 4},
+    "subtype": "weapon",
+    "summary": "+2 damage with the chosen weapon."
+  },
+  {
+    "id": "greater_weapon_focus",
+    "name": "Greater Weapon Focus",
+    "type": "combat",
+    "prerequisites": {"feats": ["weapon_focus"], "bab": 8, "fighter_level": 8},
+    "subtype": "weapon",
+    "summary": "+1 attack with the chosen weapon (stacks with Weapon Focus → +2 total)."
+  },
+  {
+    "id": "greater_weapon_specialization",
+    "name": "Greater Weapon Specialization",
+    "type": "combat",
+    "prerequisites": {"feats": ["weapon_specialization", "greater_weapon_focus"], "bab": 12, "fighter_level": 12},
+    "subtype": "weapon",
+    "summary": "+2 damage with the chosen weapon (stacks with Weapon Specialization → +4 total)."
+  },
+  {
+    "id": "two_weapon_defense",
+    "name": "Two-Weapon Defense",
+    "type": "combat",
+    "prerequisites": {"feats": ["two_weapon_fighting"]},
+    "summary": "While wielding two weapons, gain +1 shield bonus to AC. When fighting defensively or using total defense, doubles to +2."
+  },
+  {
+    "id": "improved_two_weapon_fighting",
+    "name": "Improved Two-Weapon Fighting",
+    "type": "combat",
+    "prerequisites": {"feats": ["two_weapon_fighting"], "bab": 6, "abilities": {"dex": 17}},
+    "summary": "Make one extra off-hand attack at -5 cumulative."
+  },
+  {
+    "id": "greater_two_weapon_fighting",
+    "name": "Greater Two-Weapon Fighting",
+    "type": "combat",
+    "prerequisites": {"feats": ["improved_two_weapon_fighting", "two_weapon_fighting"], "bab": 11, "abilities": {"dex": 19}},
+    "summary": "Make one further off-hand attack at -10 cumulative."
+  },
+  {
+    "id": "improved_initiative_chain",
+    "name": "Reactionary",
+    "type": "general",
+    "prerequisites": {},
+    "summary": "(trait alternative) +2 initiative; can re-roll initiative once per encounter."
+  },
+  {
+    "id": "iron_will_chain",
+    "name": "Improved Iron Will",
+    "type": "general",
+    "prerequisites": {"feats": ["iron_will"]},
+    "summary": "Once per day after a failed Will save, you may re-roll it."
+  },
+  {
+    "id": "great_fortitude_chain",
+    "name": "Improved Great Fortitude",
+    "type": "general",
+    "prerequisites": {"feats": ["great_fortitude"]},
+    "summary": "Once per day after a failed Fortitude save, you may re-roll it."
+  },
+  {
+    "id": "lightning_reflexes_chain",
+    "name": "Improved Lightning Reflexes",
+    "type": "general",
+    "prerequisites": {"feats": ["lightning_reflexes"]},
+    "summary": "Once per day after a failed Reflex save, you may re-roll it."
+  },
+  {
+    "id": "greater_spell_focus",
+    "name": "Greater Spell Focus",
+    "type": "general",
+    "prerequisites": {"feats": ["spell_focus"]},
+    "subtype": "school",
+    "summary": "+1 DC for all spells of the chosen school (stacks with Spell Focus → +2 total)."
+  },
+  {
+    "id": "greater_spell_penetration",
+    "name": "Greater Spell Penetration",
+    "type": "general",
+    "prerequisites": {"feats": ["spell_penetration"]},
+    "summary": "+2 caster-level checks to overcome SR (stacks with Spell Penetration → +4 total)."
+  },
+  {
+    "id": "augment_summoning",
+    "name": "Augment Summoning",
+    "type": "general",
+    "prerequisites": {"feats": ["spell_focus"]},
+    "summary": "Each summoned creature gets +4 enhancement to Strength and Constitution for the duration of the spell."
+  },
+  {
+    "id": "natural_spell",
+    "name": "Natural Spell",
+    "type": "general",
+    "prerequisites": {"abilities": {"wis": 13}, "feats": ["wild_shape"]},
+    "summary": "Cast spells while in wild shape using only verbal/material components from the form's vocal range."
+  },
+  {
+    "id": "wild_shape",
+    "name": "Wild Shape",
+    "type": "class_feature_marker",
+    "prerequisites": {"druid_level": 4},
+    "summary": "Druid class feature gating Natural Spell."
+  },
+  {
+    "id": "improved_grapple",
+    "name": "Improved Grapple",
+    "type": "combat",
+    "prerequisites": {"feats": ["improved_unarmed_strike"], "abilities": {"dex": 13}},
+    "summary": "Initiate grapple without provoking. +2 to grapple CMB and CMD."
+  },
+  {
+    "id": "improved_disarm",
+    "name": "Improved Disarm",
+    "type": "combat",
+    "prerequisites": {"feats": ["combat_expertise"], "abilities": {"int": 13}},
+    "summary": "Disarm without provoking. +2 to disarm CMB and to CMD against disarms."
+  },
+  {
+    "id": "improved_trip",
+    "name": "Improved Trip",
+    "type": "combat",
+    "prerequisites": {"feats": ["combat_expertise"], "abilities": {"int": 13}},
+    "summary": "Trip without provoking. +2 to trip CMB and to CMD against trips."
+  },
+  {
+    "id": "improved_sunder",
+    "name": "Improved Sunder",
+    "type": "combat",
+    "prerequisites": {"feats": ["power_attack"], "abilities": {"str": 13}, "bab": 1},
+    "summary": "Sunder without provoking. +2 to sunder CMB and to CMD against sunders."
+  },
+  {
+    "id": "improved_bull_rush",
+    "name": "Improved Bull Rush",
+    "type": "combat",
+    "prerequisites": {"feats": ["power_attack"], "abilities": {"str": 13}, "bab": 1},
+    "summary": "Bull rush without provoking. +2 to bull rush CMB and to CMD against bull rushes."
+  },
+  {
+    "id": "improved_overrun",
+    "name": "Improved Overrun",
+    "type": "combat",
+    "prerequisites": {"feats": ["power_attack"], "abilities": {"str": 13}, "bab": 1},
+    "summary": "Overrun without provoking. +2 to overrun CMB. Targets cannot avoid overrun."
+  },
+  {
+    "id": "improved_feint",
+    "name": "Improved Feint",
+    "type": "combat",
+    "prerequisites": {"feats": ["combat_expertise"], "abilities": {"int": 13}},
+    "summary": "Feint as a move action."
+  },
+  {
+    "id": "deadly_aim",
+    "name": "Deadly Aim",
+    "type": "combat",
+    "prerequisites": {"abilities": {"dex": 13}, "bab": 1},
+    "summary": "Take -1 to ranged attack rolls to gain +2 to ranged damage (scales with BAB, like Power Attack)."
+  },
+  {
+    "id": "manyshot",
+    "name": "Manyshot",
+    "type": "combat",
+    "prerequisites": {"feats": ["rapid_shot"], "abilities": {"dex": 17}, "bab": 6},
+    "summary": "When making a full-attack with a bow, the first attack fires two arrows that share a single attack roll."
+  },
+  {
+    "id": "improved_precise_shot",
+    "name": "Improved Precise Shot",
+    "type": "combat",
+    "prerequisites": {"feats": ["precise_shot"], "abilities": {"dex": 19}, "bab": 11},
+    "summary": "Ignore concealment less than total and the cover bonus less than total cover from intervening combatants."
+  },
+  {
+    "id": "shot_on_the_run",
+    "name": "Shot on the Run",
+    "type": "combat",
+    "prerequisites": {"feats": ["dodge", "point_blank_shot"], "abilities": {"dex": 13}, "bab": 4},
+    "summary": "When making a full-round move, you may break it up to make a single ranged attack at any point."
+  },
+  {
+    "id": "spring_attack",
+    "name": "Spring Attack",
+    "type": "combat",
+    "prerequisites": {"feats": ["dodge", "mobility"], "bab": 4},
+    "summary": "When making a full-round move, you may break it up to make a single melee attack at any point. Doesn't provoke AoO from the target for the move."
+  },
+  {
+    "id": "mobility",
+    "name": "Mobility",
+    "type": "combat",
+    "prerequisites": {"feats": ["dodge"]},
+    "summary": "+4 dodge AC against attacks of opportunity caused by movement."
+  },
+  {
+    "id": "whirlwind_attack",
+    "name": "Whirlwind Attack",
+    "type": "combat",
+    "prerequisites": {"feats": ["combat_expertise", "dodge", "mobility", "spring_attack"], "bab": 4},
+    "summary": "As a full-round action, make a single melee attack against every opponent in reach."
+  },
+  {
+    "id": "stunning_fist",
+    "name": "Stunning Fist",
+    "type": "combat",
+    "prerequisites": {"feats": ["improved_unarmed_strike"], "abilities": {"dex": 13, "wis": 13}, "bab": 8},
+    "summary": "Once per day per 4 levels (or per monk level), declare an unarmed strike that stuns on a hit unless target makes a Fort save (DC 10 + 1/2 char level + Wis mod) for 1 round."
+  },
+  {
+    "id": "deflect_arrows",
+    "name": "Deflect Arrows",
+    "type": "combat",
+    "prerequisites": {"feats": ["improved_unarmed_strike"], "abilities": {"dex": 13}},
+    "summary": "Once per round, when targeted by a ranged attack you're aware of, treat it as a miss."
+  },
+  {
+    "id": "snatch_arrows",
+    "name": "Snatch Arrows",
+    "type": "combat",
+    "prerequisites": {"feats": ["deflect_arrows"], "abilities": {"dex": 15}},
+    "summary": "When you would deflect an arrow, you may catch it instead. Thrown weapons can be hurled back as a free action."
+  },
+  {
+    "id": "brew_potion",
+    "name": "Brew Potion",
+    "type": "item_creation",
+    "prerequisites": {"caster_level": 3},
+    "summary": "Create potions of spells of 3rd level or lower. Cost: spell level × caster level × 50 gp; 1 day per 1,000 gp of base price."
+  },
+  {
+    "id": "craft_wand",
+    "name": "Craft Wand",
+    "type": "item_creation",
+    "prerequisites": {"caster_level": 5},
+    "summary": "Create wands of spells of 4th level or lower (50 charges)."
+  },
+  {
+    "id": "craft_wondrous_item",
+    "name": "Craft Wondrous Item",
+    "type": "item_creation",
+    "prerequisites": {"caster_level": 3},
+    "summary": "Create wondrous magic items (cloaks, headbands, rings, etc.)."
+  },
+  {
+    "id": "craft_magic_arms_and_armor",
+    "name": "Craft Magic Arms and Armor",
+    "type": "item_creation",
+    "prerequisites": {"caster_level": 5},
+    "summary": "Create magic weapons, armor, and shields."
+  },
+  {
+    "id": "craft_rod",
+    "name": "Craft Rod",
+    "type": "item_creation",
+    "prerequisites": {"caster_level": 9},
+    "summary": "Create magic rods."
+  },
+  {
+    "id": "craft_staff",
+    "name": "Craft Staff",
+    "type": "item_creation",
+    "prerequisites": {"caster_level": 11},
+    "summary": "Create magic staves."
+  },
+  {
+    "id": "forge_ring",
+    "name": "Forge Ring",
+    "type": "item_creation",
+    "prerequisites": {"caster_level": 7},
+    "summary": "Create magic rings."
+  },
+  {
+    "id": "leadership",
+    "name": "Leadership",
+    "type": "general",
+    "prerequisites": {"character_level": 7},
+    "summary": "Attract a cohort and a number of followers, based on Leadership score."
+  },
+  {
+    "id": "blind_fight",
+    "name": "Blind-Fight",
+    "type": "combat",
+    "prerequisites": {},
+    "summary": "Re-roll miss chance from concealment. Half-speed (instead of 1/4) when blinded."
+  },
+  {
+    "id": "weapon_proficiency_simple",
+    "name": "Simple Weapon Proficiency",
+    "type": "combat",
+    "prerequisites": {},
+    "summary": "Proficiency with all simple weapons."
+  },
+  {
+    "id": "weapon_proficiency_martial",
+    "name": "Martial Weapon Proficiency",
+    "type": "combat",
+    "prerequisites": {},
+    "subtype": "weapon",
+    "summary": "Proficiency with one martial weapon."
+  },
+  {
+    "id": "weapon_proficiency_exotic",
+    "name": "Exotic Weapon Proficiency",
+    "type": "combat",
+    "prerequisites": {"bab": 1},
+    "subtype": "weapon",
+    "summary": "Proficiency with one exotic weapon."
+  },
+  {
+    "id": "armor_proficiency_light",
+    "name": "Armor Proficiency, Light",
+    "type": "combat",
+    "prerequisites": {},
+    "summary": "Proficiency with light armor."
+  },
+  {
+    "id": "armor_proficiency_medium",
+    "name": "Armor Proficiency, Medium",
+    "type": "combat",
+    "prerequisites": {"feats": ["armor_proficiency_light"]},
+    "summary": "Proficiency with medium armor."
+  },
+  {
+    "id": "armor_proficiency_heavy",
+    "name": "Armor Proficiency, Heavy",
+    "type": "combat",
+    "prerequisites": {"feats": ["armor_proficiency_medium"]},
+    "summary": "Proficiency with heavy armor."
+  },
+  {
+    "id": "shield_proficiency",
+    "name": "Shield Proficiency",
+    "type": "combat",
+    "prerequisites": {},
+    "summary": "Proficiency with all shields except tower shields."
+  },
+  {
+    "id": "tower_shield_proficiency",
+    "name": "Tower Shield Proficiency",
+    "type": "combat",
+    "prerequisites": {"feats": ["shield_proficiency"]},
+    "summary": "Proficiency with tower shields."
   }
 ]
