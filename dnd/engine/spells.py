@@ -188,6 +188,43 @@ def apply_typed_damage(
     return amount, note
 
 
+def disbelief_save(
+    target: Combatant,
+    source: str,
+    dc: int,
+    roller: Roller,
+    interacted: bool = False,
+) -> tuple[bool, int, int]:
+    """Roll a Will save to disbelieve an illusion sourced at ``source``.
+
+    PF1 RAW: a creature interacting with an illusion (touching it,
+    studying it, witnessing its effect contradict reality) gets a Will
+    save at +4. A creature merely seeing the illusion gets the save
+    without the +4 bonus.
+
+    On a successful save, all effects sourced at ``source`` are
+    cleared from ``target`` via ``remove_effects_from_source`` —
+    matching modifier records and tracked conditions are removed.
+
+    Returns ``(passed, natural, total)``.
+    """
+    bonus = target.save("will")
+    if interacted:
+        bonus += 4
+    r = roller.roll("1d20")
+    nat = r.terms[0].rolls[0]
+    total = nat + bonus
+    if nat == 1:
+        passed = False
+    elif nat == 20:
+        passed = True
+    else:
+        passed = total >= dc
+    if passed:
+        target.remove_effects_from_source(source)
+    return passed, nat, total
+
+
 def parse_saving_throw(saving_throw_str: str) -> tuple[str | None, str]:
     """Return (save_kind, semantic).
 

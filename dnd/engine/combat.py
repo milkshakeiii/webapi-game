@@ -100,21 +100,45 @@ def _ac_for_situation(defense: DefenseProfile, situation: str) -> int:
     raise ValueError(f"unknown ac situation {situation!r}; expected normal/touch/flat_footed")
 
 
-def _bypass_dr(damage_type: str, bypass: Iterable[str]) -> bool:
-    """Does ``damage_type`` (e.g., "S", "P/S") bypass the listed DR keywords?
+def _bypass_dr(damage_type: str, bypass) -> bool:
+    """Does ``damage_type`` bypass the listed DR keywords?
 
-    DR-bypass keywords use full words ("slashing", "piercing", "bludgeoning",
-    "magic", etc). Damage-type strings use abbreviations ("S", "P", "B")
-    and may include multiple options separated by '/'.
+    DR-bypass keywords use full words ("slashing", "piercing",
+    "bludgeoning", "magic", "silver", "cold_iron", "adamantine",
+    "good", "lawful", "epic", etc). Damage-type strings use
+    abbreviations ("S", "P", "B") and may include multiple options
+    separated by '/'.
 
-    The attack bypasses DR if any of its damage types matches any bypass
-    keyword. (PF1 lets you pick the most favorable type for a multi-type
-    attack.)
+    Two shapes are accepted for backwards compatibility:
+
+    - **flat OR-set** (legacy): a single ``frozenset`` / iterable of
+      keywords. Bypass succeeds if ANY damage-type matches ANY keyword.
+      Used for simple DR like "DR 10/silver" or "DR 10/silver or magic".
+
+    - **AND of OR-groups**: a tuple/list of frozensets, each an
+      OR-group. Bypass succeeds only when EVERY group is matched by
+      some damage-type. Used for "DR 10/silver and magic" → the
+      attack must be silver AND magic to bypass.
+
+    Detection: if ``bypass`` is empty, treat as flat. Otherwise, look
+    at the first element — if it's a string, this is a flat set; if
+    it's an iterable of strings, this is the AND form.
     """
     type_map = {"S": "slashing", "P": "piercing", "B": "bludgeoning"}
     types = {type_map.get(t.strip(), t.strip().lower()) for t in damage_type.split("/")}
-    bypass_set = {s.lower() for s in bypass}
-    return bool(types & bypass_set)
+    if not bypass:
+        return False
+    # Detect shape.
+    bypass_list = list(bypass)
+    if isinstance(bypass_list[0], str):
+        # Flat OR-set — legacy shape.
+        return bool(types & {s.lower() for s in bypass_list})
+    # AND-of-OR-groups: each element is an iterable of keywords.
+    for group in bypass_list:
+        group_set = {s.lower() for s in group}
+        if not (types & group_set):
+            return False
+    return True
 
 
 def _apply_dr(damage: int, defense: DefenseProfile, damage_type: str) -> tuple[int, int]:

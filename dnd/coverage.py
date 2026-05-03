@@ -335,7 +335,7 @@ CORE_MECHANICS: dict[str, Entry] = {
 
     # ── Combat: damage, DR, energy ──────────────────────────────────────
     "combat.dr_application":         (IMPLEMENTED,    "_apply_dr in combat.py; bypass keywords (S/P/B/silver/magic/etc.); first-DR-wins on multi-DR creatures (rare today)"),
-    "combat.dr_multi_keyword":       (NOT_IMPLEMENTED, "DR 10/silver and magic — bypass-keyword set is OR; AND semantics needed"),
+    "combat.dr_multi_keyword":       (IMPLEMENTED,    "_bypass_dr in combat.py supports two shapes: legacy flat OR-set (frozenset of keywords) and new AND-of-OR-groups (tuple of frozensets, every group must match). 'DR 10/silver and magic' = (10, (frozenset({'silver'}), frozenset({'magic'})))"),
     "combat.energy_damage":          (IMPLEMENTED,    "fire / cold / electricity / acid / sonic recognized in spells.apply_typed_damage; spell handlers (scaling_damage, magic_missile) read effect.damage_type and route through it. Spells: burning_hands, fireball, lightning_bolt, shocking_grasp, scorching_ray, cone_of_cold, acid_arrow, acid_splash"),
     "combat.energy_resistance":      (IMPLEMENTED,    "Combatant.energy_resistance: dict[damage_type, points-per-hit]; apply_typed_damage subtracts points before damage applies. Resistance caps at the damage amount (no negative damage)"),
     "combat.energy_immunity":        (IMPLEMENTED,    "Combatant.energy_immunity: set[damage_type]; apply_typed_damage drops damage to 0 with note='immune'"),
@@ -431,7 +431,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "magic.spell_save_dc":           (IMPLEMENTED,    "10 + spell_level + key_ability_mod via spells.save_dc_for"),
     "magic.spell_resistance":        (IMPLEMENTED,    "d20 + caster_level vs target SR via spells.overcomes_sr"),
     "magic.caster_level":            (IMPLEMENTED,    "spells.caster_level returns char.level for v1; multiclass partial"),
-    "magic.spell_failure_armor":     (NOT_IMPLEMENTED, "arcane casters in armor have % failure chance"),
+    "magic.spell_failure_armor":     (IMPLEMENTED,    "_is_arcane_caster + _arcane_spell_failure_pct in turn_executor; 1d100 ≤ ASF% in _do_cast for S-component spells. Slot consumed on failure. Skipped if 'still_spell' metamagic is applied"),
     "magic.spell_known_vs_prepared": (PARTIAL,        "castable_spells set populated; preparation slot system not fully modeled"),
 
     # ── Magic: components & casting ─────────────────────────────────────
@@ -454,16 +454,16 @@ CORE_MECHANICS: dict[str, Entry] = {
     "magic.target_touch":            (IMPLEMENTED,    "single creature touched"),
     "magic.target_ranged":           (IMPLEMENTED,    "single creature at close/medium/long range"),
     "magic.area_burst":              (IMPLEMENTED,    "_expand_aoe_burst by radius from center"),
-    "magic.area_emanation":          (NOT_IMPLEMENTED, "lasting aura from caster outward"),
+    "magic.area_emanation":          (IMPLEMENTED,    "_expand_aoe_emanation: snapshot of combatants within range of caster at cast time. The emanation 'follows' the caster via duration modifiers; the on-cast target list is point-in-time"),
     "magic.area_cone":               (IMPLEMENTED,    "_expand_aoe_cone via 90° wedge test"),
-    "magic.area_line":               (NOT_IMPLEMENTED, "narrow line from caster"),
-    "magic.spread":                  (NOT_IMPLEMENTED, "burst that follows corners/around obstacles"),
+    "magic.area_line":               (IMPLEMENTED,    "_expand_aoe_line: walks a unit-vector path from caster toward target square up to area.size_ft / 5; stops at the first wall (line of sight)"),
+    "magic.spread":                  (IMPLEMENTED,    "_expand_aoe_spread: BFS from origin through unblocked cells up to area.size_ft / 5 path-distance; walls block expansion (so spread fills around obstacles, doesn't go through them). Used by fireball"),
 
     # ── Magic: save semantics ───────────────────────────────────────────
     "magic.save_negates":            (IMPLEMENTED,    "save = no effect"),
     "magic.save_half":               (IMPLEMENTED,    "save = halve damage"),
     "magic.save_partial":            (PARTIAL,        "some apply_condition_save handlers do partial; varies per spell"),
-    "magic.save_disbelief":          (NOT_IMPLEMENTED, "illusions allow disbelief save on interaction"),
+    "magic.save_disbelief":          (IMPLEMENTED,    "spells.disbelief_save(target, source, dc, roller, interacted): rolls Will + (4 if interacted) vs DC; on success calls remove_effects_from_source which clears modifiers and tracked conditions sourced under the illusion. Caller decides when an interaction triggers the re-save"),
 
     # ── Skills ──────────────────────────────────────────────────────────
     "skills.untrained_checks":       (IMPLEMENTED,    "skill_total works regardless of ranks unless trained-only"),

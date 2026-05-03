@@ -2649,6 +2649,30 @@ def _do_cast(
         }))
         return
 
+    # ── Arcane spell failure from armor ─────────────────────────────
+    # Arcane casters wearing armor / shields with non-zero
+    # arcane_spell_failure roll a d100 per cast; failure consumes the
+    # slot. Still Spell removes the somatic component and skips this
+    # check (RAW). Only S-component spells trigger ASF (V-only or
+    # M-only spells aren't affected; in practice almost everything
+    # arcane has S).
+    asf_pct = _arcane_spell_failure_pct(actor)
+    is_arcane = _is_arcane_caster(actor)
+    has_s_for_asf = "S" in (spell.components or []) and (
+        "still_spell" not in metamagic
+    )
+    if is_arcane and has_s_for_asf and asf_pct > 0:
+        asf_roll = roller.roll("1d100")
+        if asf_roll.total <= asf_pct:
+            events.append(TurnEvent(actor.id, "cast_failed", {
+                "spell_id": spell_id,
+                "reason": "arcane_spell_failure",
+                "asf_pct": asf_pct,
+                "roll": asf_roll.total,
+            }))
+            actor.resources[slot_key] = remaining - 1
+            return
+
     # ── Spell components check ──────────────────────────────────────
     components = list(spell.components or [])
     has_v = "V" in components and "silent_spell" not in metamagic
@@ -2832,13 +2856,19 @@ def _expand_cast_targets(
                 out.append(c)
         return out
 
-    # AoE shapes — burst, cone.
+    # AoE shapes — burst, cone, line, spread, emanation.
     area = spell.effect.get("area") or {}
     shape = area.get("shape", "")
     if shape == "burst":
         return _expand_aoe_burst(actor, spell, args, ns, encounter, grid)
     if shape == "cone":
         return _expand_aoe_cone(actor, spell, args, ns, encounter, grid)
+    if shape == "line":
+        return _expand_aoe_line(actor, spell, args, ns, encounter, grid)
+    if shape == "spread":
+        return _expand_aoe_spread(actor, spell, args, ns, encounter, grid)
+    if shape == "emanation":
+        return _expand_aoe_emanation(actor, spell, args, ns, encounter, grid)
 
     # Single-target default: resolve from the args.target expression.
     target_expr = args.get("target")
@@ -2939,6 +2969,170 @@ def _expand_aoe_cone(
         if 2 * dot * dot < (dx * dx + dy * dy) * (vx * vx + vy * vy):
             continue
         out.append(c)
+    return out
+
+
+def _expand_aoe_line(
+    actor: Combatant,
+    spell,
+    args: dict,
+    ns: dict[str, Any],
+    encounter,
+    grid,
+) -> list[Combatant]:
+    """All combatants on a straight line from the caster to a target
+    point, up to ``area.size_ft`` distance.
+
+    Direction = unit vector from caster toward args.target. The line is
+    a single-cell-wide path along the Bresenham line. Walls block the
+    line at their cell (lightning bolt stops at the first wall).
+    """
+    if encounter is None or grid is None:
+        return []
+    eff = spell.effect
+    area = eff.get("area") or {}
+    length_squares = int(area.get("size_ft", 0)) // 5
+    target_expr = args.get("target")
+    target_obj = _resolve_target(target_expr, ns)
+    if hasattr(target_obj, "position"):
+        target_pos = target_obj.position
+    elif (isinstance(target_obj, tuple)
+          and len(target_obj) == 2
+          and all(isinstance(c, int) for c in target_obj)):
+        target_pos = target_obj
+    else:
+        return []
+    cx, cy = actor.position
+    tx, ty = target_pos
+    if (tx, ty) == (cx, cy):
+        return []
+    # Step direction: unit vector along the strongest axis.
+    ux = (tx > cx) - (tx < cx)
+    uy = (ty > cy) - (ty < cy)
+    # Walk cells along the line up to length_squares; stop at first wall.
+    line_cells: set[tuple[int, int]] = set()
+    cur = (cx, cy)
+    for _ in range(length_squares):
+        nxt = (cur[0] + ux, cur[1] + uy)
+        if not grid.in_bounds(*nxt):
+            break
+        f = grid.features.get(nxt)
+        if f is not None and f.blocks_line_of_sight:
+            break
+        line_cells.add(nxt)
+        cur = nxt
+    out: list[Combatant] = []
+    for ir in encounter.initiative:
+        c = ir.combatant
+        if c.id == actor.id:
+            continue
+        if c.current_hp <= -10:
+            continue
+        if c.position in line_cells:
+            out.append(c)
+    return out
+
+
+def _expand_aoe_spread(
+    actor: Combatant,
+    spell,
+    args: dict,
+    ns: dict[str, Any],
+    encounter,
+    grid,
+) -> list[Combatant]:
+    """Burst that follows corners — BFS from the spread origin to all
+    cells within ``area.size_ft``, treating walls as impassable.
+
+    Used for fireball / cloudkill / similar PF1 "spread" spells. The
+    distinction vs ``burst`` is path-based: a spread fills around
+    obstacles instead of going through them.
+    """
+    if encounter is None or grid is None:
+        return []
+    eff = spell.effect
+    area = eff.get("area") or {}
+    radius_squares = int(area.get("size_ft", 0)) // 5
+    target_expr = args.get("target")
+    target_obj = _resolve_target(target_expr, ns)
+    if hasattr(target_obj, "position"):
+        center = target_obj.position
+    elif (isinstance(target_obj, tuple)
+          and len(target_obj) == 2
+          and all(isinstance(c, int) for c in target_obj)):
+        center = target_obj
+    else:
+        return []
+    # BFS by actual path distance through unblocked cells. Each step
+    # costs 1 (orthogonal) or 1 (first diagonal) — we don't track the
+    # PF1 5-10-5 alternating diagonal cost in spread expansion since
+    # the spread radius is in feet/5 and the wave fills cell-by-cell.
+    # Walls block expansion entirely.
+    visited: dict[tuple[int, int], int] = {center: 0}
+    frontier: list[tuple[int, int]] = [center]
+    while frontier:
+        next_frontier: list[tuple[int, int]] = []
+        for cell in frontier:
+            cur_d = visited[cell]
+            if cur_d >= radius_squares:
+                continue
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    if dx == 0 and dy == 0:
+                        continue
+                    nb = (cell[0] + dx, cell[1] + dy)
+                    if nb in visited:
+                        continue
+                    if not grid.in_bounds(*nb):
+                        continue
+                    f = grid.features.get(nb)
+                    if f is not None and f.blocks_line_of_sight:
+                        continue
+                    visited[nb] = cur_d + 1
+                    next_frontier.append(nb)
+        frontier = next_frontier
+    out: list[Combatant] = []
+    for ir in encounter.initiative:
+        c = ir.combatant
+        if c.current_hp <= -10:
+            continue
+        if c.position in visited:
+            out.append(c)
+    return out
+
+
+def _expand_aoe_emanation(
+    actor: Combatant,
+    spell,
+    args: dict,
+    ns: dict[str, Any],
+    encounter,
+    grid,
+) -> list[Combatant]:
+    """Lasting aura from the caster outward to ``area.size_ft``.
+
+    For instantaneous-cast purposes we expand to all combatants within
+    range right now (the emanation continues to follow the caster
+    across rounds via the modifier expiration system; this expansion
+    is the on-cast snapshot of who's affected).
+
+    PF1 RAW: the caster is the center; an emanation moves with them.
+    Walls don't block (line of effect required for spell targeting,
+    but the emanation itself fills space around the caster — for v1
+    we just pick combatants by distance).
+    """
+    if encounter is None or grid is None:
+        return [actor]
+    eff = spell.effect
+    area = eff.get("area") or {}
+    radius_squares = int(area.get("size_ft", 0)) // 5
+    out: list[Combatant] = []
+    for ir in encounter.initiative:
+        c = ir.combatant
+        if c.current_hp <= -10:
+            continue
+        if grid.distance_squares(actor.position, c.position) <= radius_squares:
+            out.append(c)
     return out
 
 
@@ -3084,6 +3278,50 @@ _DEX_DENIED_CONDITIONS = frozenset({
 def _has_dex_denied(target: Combatant) -> bool:
     """Whether the target is denied its Dex bonus to AC."""
     return bool(target.conditions & _DEX_DENIED_CONDITIONS)
+
+
+_ARCANE_CASTER_CLASSES: frozenset[str] = frozenset({
+    "wizard", "sorcerer", "bard", "magus", "summoner", "witch",
+    "bloodrager", "skald",
+})
+
+
+def _is_arcane_caster(actor: Combatant) -> bool:
+    """True if the actor has any levels in an arcane casting class."""
+    if actor.template_kind != "character" or actor.template is None:
+        return False
+    char = actor.template
+    if getattr(char, "class_id", None) in _ARCANE_CASTER_CLASSES:
+        return True
+    plan = getattr(char, "level_plan", None) or {}
+    levels = plan.get("levels") if isinstance(plan, dict) else None
+    if levels:
+        for entry in levels.values():
+            if isinstance(entry, dict) and entry.get("class") in _ARCANE_CASTER_CLASSES:
+                return True
+    return False
+
+
+def _arcane_spell_failure_pct(actor: Combatant) -> int:
+    """Sum the arcane spell failure % from equipped armor + shield."""
+    if actor.template_kind != "character" or actor.template is None:
+        return 0
+    from .content import default_registry
+    registry = default_registry()
+    pct = 0
+    armor_id = getattr(actor.template, "equipped_armor", None)
+    if armor_id and armor_id != "none":
+        try:
+            pct += int(registry.get_armor(armor_id).arcane_spell_failure)
+        except Exception:
+            pass
+    shield_id = getattr(actor.template, "equipped_shield", None)
+    if shield_id:
+        try:
+            pct += int(registry.get_shield(shield_id).arcane_spell_failure)
+        except Exception:
+            pass
+    return pct
 
 
 def _armor_not_proficient_penalty(actor: Combatant) -> int:

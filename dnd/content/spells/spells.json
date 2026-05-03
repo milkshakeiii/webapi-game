@@ -256,7 +256,7 @@
       "damage_type": "fire",
       "scaling": "per_caster_level",
       "max_dice": 10,
-      "area": {"shape": "burst", "size_ft": 20}
+      "area": {"shape": "spread", "size_ft": 20}
     },
     "summary": "1d6 fire/CL (max 10d6) in a 20-ft-radius spread; Reflex half."
   },
@@ -355,6 +355,53 @@
       "area": {"shape": "cone", "size_ft": 60}
     },
     "summary": "1d6 cold/CL (max 15d6) in a 60-ft cone; Reflex half."
+  },
+  {
+    "id": "silent_image",
+    "name": "Silent Image",
+    "school": "illusion",
+    "subschool": "figment",
+    "descriptors": [],
+    "level_by_class": {"bard": 1, "sorcerer": 1, "wizard": 1},
+    "components": ["V", "S", "F"],
+    "casting_time": "standard",
+    "range": "long",
+    "target": "spread_burst",
+    "duration": "concentration",
+    "saving_throw": "will_disbelief",
+    "spell_resistance": "no",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "fascinated",
+      "save": "will",
+      "duration_rounds_per_caster_level": 1
+    },
+    "summary": "Visual figment; viewers may attempt Will save to disbelieve, with a +4 bonus on interaction."
+  },
+  {
+    "id": "bless_aura",
+    "name": "Bless (Emanation Variant)",
+    "school": "enchantment",
+    "subschool": "compulsion",
+    "descriptors": ["mind_affecting"],
+    "level_by_class": {"cleric": 1, "paladin": 1},
+    "components": ["V", "S", "DF"],
+    "casting_time": "standard",
+    "range": "personal",
+    "target": "emanation",
+    "duration": "minutes_per_level",
+    "saving_throw": "none",
+    "spell_resistance": "no",
+    "effect": {
+      "kind": "buff_party",
+      "modifiers": [
+        {"value": 1, "modifier_type": "morale", "target": "attack"},
+        {"value": 1, "modifier_type": "morale", "target": "fort_save"}
+      ],
+      "duration_minutes_per_caster_level": 1,
+      "area": {"shape": "emanation", "size_ft": 50}
+    },
+    "summary": "Allies within 50 ft of the caster get +1 morale to attack and saves vs fear."
   },
   {
     "id": "acid_arrow",
