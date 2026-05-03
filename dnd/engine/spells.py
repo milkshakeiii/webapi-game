@@ -195,7 +195,7 @@ def apply_typed_damage(
             amount = max(0, amount - resist)
             note = f"resisted {absorbed}"
     if amount > 0:
-        target.take_damage(amount)
+        target.take_damage(amount, damage_type=damage_type)
     return amount, note
 
 

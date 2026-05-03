@@ -321,10 +321,28 @@ class Combatant:
 
     # ── Mutations ─────────────────────────────────────────────────────────
 
-    def take_damage(self, amount: int) -> None:
+    def take_damage(self, amount: int, damage_type: str | None = None) -> None:
+        """Subtract ``amount`` from current HP.
+
+        ``damage_type`` is consulted only for regeneration: a
+        regenerating creature's HP cannot fall below -1 from damage
+        types not in its ``regeneration_bypass`` set. (PF1 RAW says
+        such damage is treated as nonlethal and bounces off; we
+        approximate by flooring at -1 since the engine doesn't model
+        nonlethal damage separately.) Bypass-type damage applies
+        normally and CAN drop the creature below -1, killing it.
+        """
         if amount < 0:
             raise ValueError(f"damage must be >= 0, got {amount}")
-        self.current_hp -= amount
+        new_hp = self.current_hp - amount
+        if (
+            self.regeneration > 0
+            and damage_type is not None
+            and damage_type.lower() not in self.regeneration_bypass
+            and new_hp < -1
+        ):
+            new_hp = -1
+        self.current_hp = new_hp
 
     def heal(self, amount: int) -> None:
         if amount < 0:
@@ -1090,12 +1108,21 @@ def combatant_from_character(
     # math as the primary, but damage uses 1/2 Str modifier (rounded
     # toward zero). Per-attack penalties for dual-wielding are applied
     # at full-attack time, not baked into ``attack_bonus`` here.
+    #
+    # Double weapon (e.g., quarterstaff): the primary weapon implicitly
+    # provides both a main-hand and off-hand attack — wielding a
+    # double weapon counts as two-weapon fighting with the second
+    # end as a light off-hand. We synthesize the off-hand option from
+    # the primary weapon when no explicit off-hand is equipped.
     offhand_weapon_data = None
     if (character.equipped_offhand_weapon
             and character.equipped_offhand_weapon != "none"):
         offhand_weapon_data = registry.get_weapon(
             character.equipped_offhand_weapon,
         )
+    elif weapon_data is not None and weapon_data.is_double:
+        # Double weapon → off-hand uses the same weapon as a light end.
+        offhand_weapon_data = weapon_data
     if offhand_weapon_data is not None:
         if offhand_weapon_data.is_melee:
             ability_mod = (max(str_mod, dex_mod)
@@ -1257,7 +1284,12 @@ def combatant_from_character(
         held_items["main_hand"] = make_weapon_item(
             character.equipped_weapon, registry,
         )
-    if offhand_weapon_data is not None:
+    # Off-hand inventory: only populate when there's an explicit
+    # off-hand weapon. Double weapons share their main_hand item;
+    # we don't duplicate the InventoryItem.
+    if (offhand_weapon_data is not None
+            and character.equipped_offhand_weapon
+            and character.equipped_offhand_weapon != "none"):
         held_items["off_hand"] = make_weapon_item(
             character.equipped_offhand_weapon, registry,
         )

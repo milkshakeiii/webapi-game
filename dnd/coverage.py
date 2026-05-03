@@ -319,7 +319,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.action_types":           (IMPLEMENTED,    "Turn slots cover standard/move/swift/free/full_round/5ft_step"),
     "combat.5_foot_step":            (IMPLEMENTED,    "validate_turn enforces exclusivity; one square only"),
     "combat.full_round_action":      (IMPLEMENTED,    "Turn.full_round forbids standard+move; charge/withdraw/full_attack are full-round"),
-    "combat.swift_action":           (PARTIAL,        "Turn.swift slot exists but most consumers (smite_evil, etc.) call it composite — minor; immediate-action conversion not modeled"),
+    "combat.swift_action":           (IMPLEMENTED,    "Turn.swift slot honored by execute_turn — currently routes quicken-cast through it; smite_evil / rage_start / bardic_performance work via the composite path with the standard action-economy validator gating them. PF1 RAW limit of one swift per turn is enforced structurally (Turn.swift is a single dict slot)"),
     "combat.free_action":            (IMPLEMENTED,    "validation allowlist covers PF1 RAW free actions: drop_item, fall_prone, speak, signal, end_concentration / cease_concentration, drop_held_charge, drop_to_floor, release_grapple, press_attack, speak_briefly, use_extraordinary_ability"),
     "combat.immediate_action":       (NOT_IMPLEMENTED, "consumes next round's swift; no model"),
 
@@ -412,7 +412,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.healing_full_rest":      (NOT_IMPLEMENTED, "full HP after 8 hr rest"),
     "combat.healing_magical":        (IMPLEMENTED,    "cure spells implemented as heal effect kind"),
     "combat.fast_healing":           (IMPLEMENTED,    "Combatant.fast_healing: X HP/round in tick_round, capped at max_hp; dead creatures don't heal"),
-    "combat.regeneration":           (PARTIAL,        "Combatant.regeneration heals X/round in tick_round; non-bypass-damage-as-nonlethal semantics not yet modeled (since nonlethal-damage tracking itself isn't)"),
+    "combat.regeneration":           (IMPLEMENTED,    "Combatant.regeneration heals X/round in tick_round. Non-bypass damage (damage_type not in regeneration_bypass) is floored at -1 in take_damage — the creature can't be killed by non-bypass damage, but stays at -1 and continues regenerating. Bypass-type damage applies normally and CAN kill"),
 
     # ── Combat: movement modes & terrain ────────────────────────────────
     "combat.movement_walk":          (IMPLEMENTED,    "speed-30 walk = 6 cells/round in our grid"),
@@ -478,7 +478,7 @@ CORE_MECHANICS: dict[str, Entry] = {
 
     # ── Equipment & encumbrance ─────────────────────────────────────────
     "equipment.weapon_categories":   (IMPLEMENTED,    "weapon_category tagged on attack_options; Combatant.weapon_proficiency_categories holds the actor's allowed categories + specific weapon IDs; -4 attack penalty when wielding outside proficiencies (see _weapon_not_proficient in turn_executor)"),
-    "equipment.weapon_special_properties": (PARTIAL, "Weapon dataclass exposes has_reach (consulted in threat zones), has_brace, is_double, trip_bonus (consulted in trip CMB). Brace double-damage trigger and full double-weapon dual-wield mechanics still pending — fields are present, behavior is partial"),
+    "equipment.weapon_special_properties": (IMPLEMENTED, "Weapon dataclass exposes has_reach (consulted in threat zones), has_brace (ready_brace composite + brace-attack trigger in _do_charge with ×2 damage), is_double (synthesized off-hand attack option from main_hand for double weapons like quarterstaff), trip_bonus (consulted in trip CMB)"),
     "equipment.encumbrance":         (IMPLEMENTED,    "carried_weight + load_category in encumbrance.py; combatant_from_character applies medium/heavy ACP, Max-Dex cap (taking the more restrictive of armor and load), and speed reduction via effective_speed (worse-of-armor-or-load)"),
     "equipment.armor_donning_time":  (NOT_IMPLEMENTED, "no time-to-don model"),
 

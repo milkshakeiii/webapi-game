@@ -218,6 +218,9 @@ def _execute_composite(
     if composite == "fight_defensively":
         _do_fight_defensively(actor, args, encounter, grid, roller, ns, events)
         return
+    if composite == "ready_brace":
+        _do_ready_brace(actor, args, encounter, events)
+        return
     if composite == "cast":
         _do_cast(actor, args, encounter, grid, roller, ns, events)
         return
@@ -743,6 +746,40 @@ def _do_charge(
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "charge: target not adjacent after move"}))
         return
+    # Brace trigger: if the target is bracing AND has a brace-flagged
+    # weapon, they get to attack the charger first with doubled
+    # damage. RAW: brace deals double damage on a successful hit
+    # against a charging foe.
+    if (
+        "bracing" in target.conditions
+        and target.attack_options
+        and encounter is not None
+    ):
+        brace_until = target.resources.get("bracing_until_round")
+        if brace_until is None or encounter.round_number <= brace_until:
+            target_main = target.held_items.get("main_hand")
+            if target_main is not None:
+                from .content import default_registry
+                try:
+                    target_w = default_registry().get_weapon(
+                        target_main.item_id,
+                    )
+                except Exception:
+                    target_w = None
+                if target_w is not None and target_w.has_brace:
+                    _do_attack(
+                        target, actor, grid, roller, events,
+                        label="brace_attack",
+                        encounter=encounter,
+                        script_options={"charge_damage_multiplier": 2},
+                    )
+                    target.remove_condition("bracing")
+                    target.resources.pop("bracing_until_round", None)
+                    if not actor.is_alive() or actor.current_hp <= -10:
+                        events.append(TurnEvent(actor.id, "skip", {
+                            "reason": "killed by brace attack",
+                        }))
+                        return
     # PF1 RAW: a lance wielded one-handed in the same hand as a mount's
     # reins doubles damage on a charge. Spirited Charge feat doubles
     # the multiplier (×3 total with a lance). We mark the charge so
@@ -1244,6 +1281,51 @@ def _do_partial_charge(
     _do_charge(actor, args, encounter, grid, roller, ns, events)
 
 
+def _do_ready_brace(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    events: list[TurnEvent],
+) -> None:
+    """PF1 ready an action: brace a weapon vs a charge.
+
+    Sets the actor's ``bracing`` condition for one round. When a
+    charging foe attacks the bracing wielder, the wielder's first
+    attack against that charger deals double damage (handled in
+    _do_charge — when the charger ends adjacent to a bracing
+    wielder, the bracing wielder gets a free attack with double
+    damage).
+
+    For v1 we just set the condition; the trigger fires on the next
+    incoming charge attack against this actor. The wielder must have
+    a brace-flagged weapon equipped in main_hand.
+    """
+    main = actor.held_items.get("main_hand")
+    if main is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "ready_brace: no weapon in main_hand"}))
+        return
+    from .content import default_registry
+    try:
+        w = default_registry().get_weapon(main.item_id)
+    except Exception:
+        w = None
+    if w is None or not getattr(w, "has_brace", False):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "ready_brace: weapon doesn't brace"}))
+        return
+    cur_round = encounter.round_number if encounter else 1
+    # Mark the actor as bracing. Cleared at start of next round via
+    # a side-channel; for v1 we just expire it heuristically when
+    # _do_charge reads it.
+    actor.add_condition("bracing")
+    actor.resources["bracing_until_round"] = cur_round + 1
+    events.append(TurnEvent(actor.id, "ready_brace", {
+        "weapon_id": main.item_id,
+        "expires_round": cur_round + 1,
+    }))
+
+
 def _do_fight_defensively(
     actor: Combatant,
     args: dict,
@@ -1683,7 +1765,11 @@ def _do_attack(
                     f"({outcome.damage} → {new_damage})",
                 ],
             )
-        target.take_damage(outcome.damage)
+        # Attack damage type is the chosen weapon's damage_type code
+        # (e.g., "S", "P", "B", "P/S"). Used by Combatant.take_damage
+        # to apply the regeneration non-bypass floor.
+        atk_damage_type = str(chosen.get("damage_type", "")) or None
+        target.take_damage(outcome.damage, damage_type=atk_damage_type)
         massive_damage_check = _check_massive_damage(
             target, outcome.damage, roller,
         )
