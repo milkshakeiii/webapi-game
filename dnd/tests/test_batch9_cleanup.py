@@ -105,23 +105,27 @@ class TestMetamagic(unittest.TestCase):
         empowered = out_emp.damage_per_target.get(target.id, 0)
         self.assertEqual(empowered, (baseline * 3) // 2)
 
-    def test_maximize_doubles_damage(self):
+    def test_maximize_uses_max_dice(self):
+        # Magic missile has no save and no SR-blocking-via-monster path
+        # for orcs (SR=0). Damage per missile is 1d4+1, max = 5.
+        # With maximize, every seed should produce the same total.
         caster = combatant_from_monster(REGISTRY.get_monster("orc"),
                                         (0, 0), "x")
-        target = combatant_from_monster(REGISTRY.get_monster("orc"),
-                                        (1, 0), "y")
-        target.bases["ref_save"] = -100
-        target.max_hp = 9999
-        spell = REGISTRY.get_spell("burning_hands")
-        target.current_hp = target.max_hp
-        out_baseline = cast_spell(caster, spell, [target], 1, REGISTRY,
-                                  Roller(seed=1))
-        baseline = out_baseline.damage_per_target.get(target.id, 0)
-        target.current_hp = target.max_hp
-        out_max = cast_spell(caster, spell, [target], 1, REGISTRY,
-                             Roller(seed=1), metamagic=["maximize_spell"])
-        maxed = out_max.damage_per_target.get(target.id, 0)
-        self.assertEqual(maxed, baseline * 2)
+        spell = REGISTRY.get_spell("magic_missile")
+        results: set[int] = set()
+        for seed in range(1, 10):
+            target = combatant_from_monster(REGISTRY.get_monster("orc"),
+                                            (1, 0), "y")
+            target.max_hp = 9999
+            target.current_hp = target.max_hp
+            out_max = cast_spell(caster, spell, [target], 1, REGISTRY,
+                                 Roller(seed=seed),
+                                 metamagic=["maximize_spell"])
+            results.add(out_max.damage_per_target.get(target.id, 0))
+        # All seeds produce the same maximized total (5 per missile).
+        self.assertEqual(len(results), 1, f"expected one value; got {results}")
+        # And the value should equal the deterministic max.
+        self.assertEqual(results.pop(), 5)
 
 
 class TestSpiritedCharge(unittest.TestCase):

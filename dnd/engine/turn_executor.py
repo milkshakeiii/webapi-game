@@ -98,12 +98,27 @@ def execute_turn(
             events.append(TurnEvent(actor.id, "free",
                                     {"action": fa}))
 
-    # Swift action.
+    # Swift action. Currently the only swift action wired is a
+    # quickened spell cast: ``swift = {"type": "cast", "spell": ...,
+    # "metamagic": ["quicken_spell", ...]}``. Quickened-spell metamagic
+    # raises the slot cost +4 and lets the caster also take a standard
+    # action this turn (action-economy enforcement comes from the Turn
+    # validator, which already allows swift alongside standard).
     swift = do.get("swift")
     if swift is not None:
-        events.append(TurnEvent(actor.id, "swift",
-                                {"action": swift,
-                                 "note": "swift not yet implemented"}))
+        stype = swift.get("type")
+        if stype == "cast":
+            mm = list(swift.get("metamagic") or [])
+            if "quicken_spell" not in mm:
+                events.append(TurnEvent(actor.id, "skip", {
+                    "reason": "swift cast requires quicken_spell metamagic",
+                }))
+            else:
+                _do_cast(actor, swift, encounter, grid, roller, ns, events)
+        else:
+            events.append(TurnEvent(actor.id, "swift",
+                                    {"action": swift,
+                                     "note": f"swift {stype!r} not implemented"}))
 
     # Composite or slot form?
     if "composite" in do:
@@ -157,6 +172,9 @@ def _execute_composite(
         return
     if composite == "dismount":
         _do_dismount(actor, args, grid, events)
+        return
+    if composite == "trample":
+        _do_trample(actor, args, encounter, grid, roller, ns, events)
         return
     if composite == "cast":
         _do_cast(actor, args, encounter, grid, roller, ns, events)
@@ -649,6 +667,67 @@ def _do_charge(
                attack_bonus_delta=2, label="charge_attack",
                encounter=encounter,
                script_options=options)
+    # Ride-By Attack: if the actor is mounted and has the feat AND the
+    # caller requested a ride-by, continue moving along the charge line
+    # past the target for the remaining squares of the actor's charge
+    # capacity. The mount moves "through" the target's square — we
+    # skip over it as a single step since ride-by-attack semantically
+    # describes the mount continuing past the foe.
+    if (
+        is_mounted
+        and args.get("ride_by")
+        and _has_feat(actor, "ride_by_attack")
+        and actor.is_alive()
+    ):
+        remaining = charge_squares - moved_squares
+        if remaining > 0:
+            # Direction = same unit vector as the charge line.
+            sx, sy = start_pos
+            tx, ty = target.position
+            ux = (tx > sx) - (tx < sx)
+            uy = (ty > sy) - (ty < sy)
+            cur = actor.position
+            target_pos = target.position
+            for _ in range(remaining):
+                next_cell = (cur[0] + ux, cur[1] + uy)
+                # Skip the target's square — the mount rides through it.
+                # Resolve target-passthrough before any passability/
+                # occupancy checks so the target itself doesn't block.
+                if next_cell == target_pos:
+                    next_cell = (next_cell[0] + ux, next_cell[1] + uy)
+                if not grid.in_bounds(*next_cell):
+                    break
+                # Use the feature check rather than is_passable, since
+                # is_passable also rejects occupied squares (which we
+                # already handle separately below).
+                f = grid.feature_at(*next_cell)
+                if f is not None and f.blocks_movement:
+                    break
+                if grid._occupancy.get(next_cell) is not None:
+                    break
+                # PF1 RAW: Ride-By Attack lets the rider continue
+                # past the target without provoking AoOs from the
+                # target. Other threateners' AoOs still trigger
+                # normally.
+                triggers = [
+                    t for t in aoo_triggers_for_movement(grid, actor, cur)
+                    if t.id != target.id
+                ]
+                for threatener in triggers:
+                    _do_aoo(threatener, actor, grid, events,
+                            encounter=encounter)
+                    if not actor.is_alive() or actor.current_hp <= -10:
+                        events.append(TurnEvent(actor.id, "skip",
+                                                {"reason": "killed by AoO"}))
+                        return
+                try:
+                    grid.move(actor, next_cell)
+                except Exception:
+                    break
+                events.append(TurnEvent(actor.id, "move", {
+                    "kind": "ride_by_step", "from": cur, "to": next_cell,
+                }))
+                cur = next_cell
 
 
 def _straight_line_charge_path(
@@ -969,6 +1048,104 @@ def _do_dismount(
     grid.place(actor)
     events.append(TurnEvent(actor.id, "dismount", {
         "mount_id": mount_id, "position": list(chosen),
+    }))
+
+
+def _do_trample(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """PF1 Trample feat: while mounted, the rider can declare overruns
+    against opponents in the mount's path. Each opponent gets a Reflex
+    save (DC 10 + half mount HD + mount Str mod) for half damage from
+    the mount's hooves; on failure they're knocked prone.
+
+    For v1 we model this as a single targeted overrun: the rider names
+    the target, the mount makes an overrun CMB check (or auto-passes
+    per RAW since trample bypasses the standard overrun avoidance),
+    and the target rolls Reflex; failure → prone + hoof damage.
+    Movement is the rider's responsibility (same as a charge).
+    """
+    if actor.mount_id is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "trample: not mounted"}))
+        return
+    if not _has_feat(actor, "trample"):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "trample: requires Trample feat"}))
+        return
+    target = _resolve_target(args.get("target"), ns)
+    if target is None or not isinstance(target, Combatant):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "trample: no target resolved"}))
+        return
+    mount = grid.combatants.get(actor.mount_id)
+    if mount is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "trample: mount not on grid"}))
+        return
+    if not grid.is_adjacent(mount, target):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "trample: target not adjacent to mount"}))
+        return
+    # Find a hoof attack on the mount.
+    hoof_attack = None
+    for opt in mount.attack_options:
+        name = (opt.get("name") or "").lower()
+        if "hoof" in name or "hooves" in name or opt.get("weapon_id") in (
+            "hoof", "hooves",
+        ):
+            hoof_attack = opt
+            break
+    if hoof_attack is None and mount.attack_options:
+        # Fallback to the mount's primary natural attack.
+        hoof_attack = mount.attack_options[0]
+    if hoof_attack is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "trample: mount has no attacks"}))
+        return
+    # Reflex save vs DC 10 + 1/2 mount HD + mount Str mod.
+    mount_hd = 1
+    if mount.template_kind == "monster" and mount.template is not None:
+        hd_str = getattr(mount.template, "hit_dice", "1") or "1"
+        try:
+            mount_hd = max(1, int(hd_str.split("d")[0]))
+        except (ValueError, IndexError):
+            mount_hd = 1
+    mount_str_mod = 0
+    if mount.template_kind == "monster" and mount.template is not None:
+        scores = getattr(mount.template, "ability_scores", None) or {}
+        mount_str_mod = (int(scores.get("str", 10)) - 10) // 2
+    save_dc = 10 + (mount_hd // 2) + mount_str_mod
+    save_total = target.save("ref")
+    sr = roller.roll("1d20")
+    nat = sr.terms[0].rolls[0]
+    save_passed = (nat == 20) or (nat != 1 and nat + save_total >= save_dc)
+    # Roll hoof damage.
+    dmg_dice = str(hoof_attack.get("damage", "1d4"))
+    dmg_bonus = int(hoof_attack.get("damage_bonus", 0))
+    dr = roller.roll(dmg_dice)
+    raw_damage = dr.total + dmg_bonus
+    final_damage = raw_damage // 2 if save_passed else raw_damage
+    target.take_damage(final_damage)
+    _apply_post_damage_state(target)
+    if not save_passed:
+        target.add_condition("prone")
+    events.append(TurnEvent(actor.id, "trample", {
+        "target_id": target.id,
+        "mount_id": mount.id,
+        "save_dc": save_dc,
+        "save_natural": nat,
+        "save_total": nat + save_total,
+        "save_passed": save_passed,
+        "damage": final_damage,
+        "damage_raw": raw_damage,
+        "knocked_prone": not save_passed,
     }))
 
 

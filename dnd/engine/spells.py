@@ -291,33 +291,28 @@ def cast_spell(
         )
 
     # Metamagic post-processing on the rolled damage / healing numbers.
-    # Empower: ×1.5 (rounded down). Maximize: doubles the rolled total
-    # as a stand-in for "all dice take max" (true max ≈ 1.7× of
-    # average; we use 2× for clarity). When both are applied, Empower
-    # applies first then Maximize.
-    if metamagic:
+    # Empower: ×1.5 (rounded down) of the rolled values. Maximize is
+    # NOT post-processed: handlers roll with take_max=True so each die
+    # already returned its max face. RAW: empower-then-maximize is
+    # additive ("damage + half-damage-empowered + max-damage-maximized")
+    # but we simplify to multiplicative compose — applying empower
+    # after the dice were already maxed gives 1.5× of the maximum,
+    # which slightly overshoots the RAW-stacked total.
+    if "empower_spell" in metamagic:
         target_lookup = {t.id: t for t in targets}
-        for label, multiplier_num, multiplier_den in (
-            ("empower_spell", 3, 2),
-            ("maximize_spell", 2, 1),
-        ):
-            if label not in metamagic:
-                continue
-            for tid, dmg in list(outcome.damage_per_target.items()):
-                new_dmg = (dmg * multiplier_num) // multiplier_den
-                delta = new_dmg - dmg
-                if delta > 0 and tid in target_lookup:
-                    target_lookup[tid].take_damage(delta)
-                outcome.damage_per_target[tid] = new_dmg
-            for tid, heal_amt in list(outcome.healing_per_target.items()):
-                new_heal = (heal_amt * multiplier_num) // multiplier_den
-                delta = new_heal - heal_amt
-                if delta > 0 and tid in target_lookup:
-                    target_lookup[tid].heal(delta)
-                outcome.healing_per_target[tid] = new_heal
-            outcome.log.append(
-                f"  {label}: damage/healing ×{multiplier_num}/{multiplier_den}"
-            )
+        for tid, dmg in list(outcome.damage_per_target.items()):
+            new_dmg = (dmg * 3) // 2
+            delta = new_dmg - dmg
+            if delta > 0 and tid in target_lookup:
+                target_lookup[tid].take_damage(delta)
+            outcome.damage_per_target[tid] = new_dmg
+        for tid, heal_amt in list(outcome.healing_per_target.items()):
+            new_heal = (heal_amt * 3) // 2
+            delta = new_heal - heal_amt
+            if delta > 0 and tid in target_lookup:
+                target_lookup[tid].heal(delta)
+            outcome.healing_per_target[tid] = new_heal
+        outcome.log.append("  empower: rolled values ×1.5")
 
     return outcome
 
@@ -389,7 +384,8 @@ def _handle_heal(
     plus_cl = bool(eff.get("plus_caster_level", True))
     max_plus = int(eff.get("max_plus", 5))
     bonus = min(cl, max_plus) if plus_cl else 0
-    r = roller.roll(dice_str)
+    take_max = "maximize_spell" in out.metamagic
+    r = roller.roll(dice_str, take_max=take_max)
     healed = r.total + bonus
     target.heal(healed)
     if "dying" in target.conditions and target.current_hp >= 0:
@@ -412,9 +408,10 @@ def _handle_magic_missile(
         if cl >= int(level_str):
             count = int(c)
     dmg_dice = str(eff.get("damage_per_missile", "1d4+1"))
+    take_max = "maximize_spell" in out.metamagic
     total_damage = 0
     for i in range(count):
-        r = roller.roll(dmg_dice)
+        r = roller.roll(dmg_dice, take_max=take_max)
         total_damage += r.total
         out.log.append(f"  missile {i+1}: {r.breakdown}")
     target.take_damage(total_damage)
@@ -444,7 +441,8 @@ def _handle_scaling_damage(
     base = dice_per.split("d")
     sides = base[1].split("+")[0]
     expr = f"{n_dice}d{sides}"
-    rolled = roller.roll(expr)
+    take_max = "maximize_spell" in out.metamagic
+    rolled = roller.roll(expr, take_max=take_max)
     raw_damage = rolled.total
 
     # Save halves?

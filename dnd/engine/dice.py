@@ -114,8 +114,13 @@ class Roller:
         else:
             self.rng = random.Random(seed)
 
-    def roll(self, expression: str) -> RollResult:
-        """Parse ``expression`` and roll the dice. Returns a ``RollResult``."""
+    def roll(self, expression: str, *, take_max: bool = False) -> RollResult:
+        """Parse ``expression`` and roll the dice. Returns a ``RollResult``.
+
+        ``take_max``: when True, every die returns its maximum face
+        value instead of rolling. Used by Maximize Spell metamagic to
+        produce the RAW behavior (each die takes its max).
+        """
 
         if not expression or not expression.strip():
             raise DiceError("empty dice expression")
@@ -159,7 +164,10 @@ class Roller:
                 keep_n = int(match.group("keep_n")) if match.group("keep_n") else 0
                 _validate_term(count, sides, keep, keep_n)
 
-                rolls = tuple(self.rng.randint(1, sides) for _ in range(count))
+                if take_max:
+                    rolls = tuple(sides for _ in range(count))
+                else:
+                    rolls = tuple(self.rng.randint(1, sides) for _ in range(count))
                 if keep == "kh":
                     kept = tuple(sorted(rolls, reverse=True)[:keep_n])
                 elif keep == "kl":
