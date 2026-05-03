@@ -128,7 +128,40 @@ def execute_turn(
         slots = do.get("slots") or do
         _execute_slots(actor, slots, encounter, grid, roller, ns, events)
 
+    # PF1 RAW: a disabled creature (HP exactly 0) loses 1 HP whenever
+    # it takes a standard action. We approximate "took a standard
+    # action this turn" by checking for any non-skip event whose kind
+    # corresponds to a standard-action effect.
+    if "disabled" in actor.conditions and actor.current_hp == 0:
+        if _turn_used_standard_action(events):
+            actor.take_damage(1)
+            _apply_post_damage_state(actor)
+            events.append(TurnEvent(actor.id, "disabled_self_damage", {
+                "amount": 1,
+            }))
+
     return TurnResult(actor.id, rule_index, events)
+
+
+_STANDARD_ACTION_EVENT_KINDS: frozenset[str] = frozenset({
+    "attack", "charge_attack", "defensive_attack", "lance_charge",
+    "cast", "cast_failed", "channel_energy", "smite_evil",
+    "stunning_fist", "aid_another", "total_defense",
+    "trample", "coup_de_grace",
+})
+
+
+def _turn_used_standard_action(events: list[TurnEvent]) -> bool:
+    """Heuristic: did any event indicate a standard-action effect?
+
+    Used by the disabled-self-damage hook. A standard action that
+    didn't actually fire (skipped due to invalid target, etc.) doesn't
+    cost the disabled creature their 1 HP.
+    """
+    for e in events:
+        if e.kind in _STANDARD_ACTION_EVENT_KINDS:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -301,8 +334,51 @@ def _do_move_action(
             actor.remove_condition("prone")
             events.append(TurnEvent(actor.id, "stand_up", {}))
     elif mtype == "draw_weapon":
+        # PF1 RAW: drawing a weapon provokes AoOs unless your BAB is
+        # +1 or higher (in which case you can combine the draw with a
+        # regular move action). For BAB 0 actors, AoOs trigger.
+        bab = actor.bases.get("bab", 0)
+        if bab < 1:
+            from .encounter import aoo_triggers_for_provoking_action
+            for threatener in aoo_triggers_for_provoking_action(
+                grid, actor, "draw_weapon",
+            ):
+                _do_aoo(threatener, actor, grid, events,
+                        encounter=encounter)
+                if not actor.is_alive() or actor.current_hp <= -10:
+                    events.append(TurnEvent(actor.id, "skip",
+                                            {"reason": "killed by AoO"}))
+                    return
         events.append(TurnEvent(actor.id, "draw_weapon",
                                 {"weapon": move.get("weapon")}))
+    elif mtype == "drink_potion":
+        # Drinking a potion provokes AoOs from threateners.
+        from .encounter import aoo_triggers_for_provoking_action
+        for threatener in aoo_triggers_for_provoking_action(
+            grid, actor, "drink",
+        ):
+            _do_aoo(threatener, actor, grid, events,
+                    encounter=encounter)
+            if not actor.is_alive() or actor.current_hp <= -10:
+                events.append(TurnEvent(actor.id, "skip",
+                                        {"reason": "killed by AoO"}))
+                return
+        events.append(TurnEvent(actor.id, "drink_potion",
+                                {"potion": move.get("potion")}))
+    elif mtype == "retrieve_stowed_item":
+        # Retrieving a stowed item is a move action that provokes.
+        from .encounter import aoo_triggers_for_provoking_action
+        for threatener in aoo_triggers_for_provoking_action(
+            grid, actor, "use_item",
+        ):
+            _do_aoo(threatener, actor, grid, events,
+                    encounter=encounter)
+            if not actor.is_alive() or actor.current_hp <= -10:
+                events.append(TurnEvent(actor.id, "skip",
+                                        {"reason": "killed by AoO"}))
+                return
+        events.append(TurnEvent(actor.id, "retrieve_stowed_item",
+                                {"item": move.get("item")}))
     else:
         raise NotImplementedError(f"move action {mtype!r} not implemented")
 
@@ -803,16 +879,18 @@ def _charge_path_clear(
     *,
     mover: Combatant,
 ) -> bool:
-    """All cells in ``cells`` must be passable and unoccupied (other
-    than by ``mover``).
+    """All cells in ``cells`` must be passable, unoccupied (other than
+    by ``mover``), and free of difficult terrain.
 
-    Difficult terrain would also disqualify a cell per PF1, but the
-    engine doesn't model terrain types yet — when it does, add the
-    check here.
+    PF1 RAW: a charge cannot pass through any square that hampers
+    movement (difficult terrain, water, etc.).
     """
     for cell in cells:
         if not grid.is_passable(*cell):
             return False
+        f = grid.feature_at(*cell)
+        if f is not None and f.movement_cost_multiplier > 1.0:
+            return False  # difficult terrain blocks a charge
         for c in grid.combatants.values():
             if c.id == mover.id:
                 continue
@@ -1474,6 +1552,7 @@ def _do_attack(
     # via the standard compute.)
     attacker_ctx = _target_creature_context(actor)
     ac_context = {
+        "attacker_id": actor.id,
         "attacker_type": attacker_ctx.get("target_type"),
         "attacker_subtypes": attacker_ctx.get("target_subtypes"),
     }
@@ -2307,8 +2386,20 @@ def _resolve_maneuver(
     ``total - cmd`` (positive on success). The maneuver kind is
     forwarded to ``cmd`` so situational bonuses (dwarven Stability
     vs trip / bullrush) qualify.
+
+    Trip-CMB bonus from the wielded weapon (whip, scythe, flail = +2)
+    is layered on for ``kind == "trip"``.
     """
     cmb = actor.cmb()
+    if kind == "trip" and actor.attack_options:
+        weapon_id = actor.attack_options[0].get("weapon_id")
+        if weapon_id:
+            from .content import default_registry
+            try:
+                w = default_registry().get_weapon(weapon_id)
+                cmb += w.trip_bonus
+            except Exception:
+                pass
     cmd = target.cmd(context={"maneuver": kind})
     r = roller.roll("1d20")
     nat = r.terms[0].rolls[0]
@@ -2567,10 +2658,21 @@ def _do_aid_another(
     if success:
         target_field = "attack" if mode == "attack" else "ac"
         mod_type = "circumstance" if mode == "attack" else "dodge"
-        src = f"aid_another:{actor.id}:{cur_round}"
-        ally.modifiers.add(Modifier(
+        src = f"aid_another:{actor.id}:{cur_round}:{foe.id}"
+        # Qualifier: bonus only applies vs the specific foe we aided
+        # against. ``attack`` mode → match attacker_target_id when
+        # ally attacks; ``ac`` mode → match attacker_id when foe
+        # attacks ally. We use the same qualifier key on both so the
+        # context plumbing is uniform.
+        from .modifiers import Modifier as _Mod
+        if mode == "attack":
+            qualifier = (("target_id", (foe.id,)),)
+        else:
+            qualifier = (("attacker_id", (foe.id,)),)
+        ally.modifiers.add(_Mod(
             value=2, type=mod_type, target=target_field,
             source=src, expires_round=cur_round + 1,
+            qualifier=qualifier,
         ))
     events.append(TurnEvent(actor.id, "aid_another", {
         "ally_id": ally.id,
@@ -2868,7 +2970,7 @@ def _do_cast(
     cur_round = encounter.round_number if encounter is not None else 1
     outcome = cast_spell(
         actor, spell, targets, base_spell_level, registry, roller,
-        current_round=cur_round, metamagic=metamagic,
+        current_round=cur_round, metamagic=metamagic, grid=grid,
     )
     events.append(TurnEvent(actor.id, "cast", outcome.to_dict()))
 
@@ -3259,6 +3361,36 @@ def _cover_ac_bonus(
     return 0
 
 
+def _cover_reflex_bonus(
+    attacker: Combatant,
+    target: Combatant,
+    grid: Grid | None,
+) -> int:
+    """Return the Reflex-save bonus from cover.
+
+    PF1 RAW: hard cover grants +2 Reflex (against effects originating
+    on the far side of the cover); greater cover grants +4. Soft
+    cover (intervening combatants) does NOT grant Reflex bonuses
+    per RAW. We mirror the wall-count logic in _cover_ac_bonus.
+    """
+    if grid is None:
+        return 0
+    from .grid import _bresenham
+    line = _bresenham(attacker.position, target.position)
+    walls = 0
+    for cell in line:
+        if cell == attacker.position or cell == target.position:
+            continue
+        f = grid.features.get(cell)
+        if f is not None and f.blocks_line_of_sight:
+            walls += 1
+    if walls >= 2:
+        return 4
+    if walls == 1:
+        return 2
+    return 0
+
+
 def _total_cover_blocks_line(
     attacker: Combatant,
     target: Combatant,
@@ -3442,19 +3574,25 @@ def _target_creature_context(target: Combatant) -> dict:
     Reads ``target_type`` and ``target_subtypes`` from the underlying
     monster template; characters get a ``humanoid`` type with their
     race id as a subtype (so dwarven hatred recognizes a "goblinoid"
-    PC etc., should one ever exist).
+    PC etc., should one ever exist). Also includes ``target_id`` so
+    qualifier predicates can match a specific combatant — used by the
+    aid-another "vs that foe" restriction.
     """
     if target.template is None:
-        return {"target_type": "", "target_subtypes": []}
+        return {"target_id": target.id, "target_type": "",
+                "target_subtypes": []}
     if target.template_kind == "monster":
         ttype = (getattr(target.template, "type", "") or "").lower()
         subs = [s.lower() for s in
                 (getattr(target.template, "subtypes", None) or [])]
-        return {"target_type": ttype, "target_subtypes": subs}
+        return {"target_id": target.id, "target_type": ttype,
+                "target_subtypes": subs}
     if target.template_kind == "character":
         race_id = (getattr(target.template, "race_id", "") or "").lower()
-        return {"target_type": "humanoid", "target_subtypes": [race_id]}
-    return {"target_type": "", "target_subtypes": []}
+        return {"target_id": target.id, "target_type": "humanoid",
+                "target_subtypes": [race_id]}
+    return {"target_id": target.id, "target_type": "",
+            "target_subtypes": []}
 
 
 def _range_increment_penalty(

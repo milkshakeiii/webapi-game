@@ -108,6 +108,9 @@ class Weapon:
     can_throw: bool = False
     range_increment: int = 0  # 0 means no ranged use
     has_reach: bool = False   # PF1 "reach weapon": threatens at 10 ft, not 5
+    has_brace: bool = False   # set vs charge for double damage
+    is_double: bool = False   # double weapon — both ends usable simultaneously
+    trip_bonus: int = 0       # bonus to trip CMB (whip, scythe, flail = +2)
     weight: float = 0.0
     cost_gp: float = 0.0
     raw: dict = field(default_factory=dict)
@@ -294,6 +297,9 @@ def _weapon_from_dict(d: dict) -> Weapon:
         can_throw=bool(d.get("can_throw", False)),
         range_increment=int(d.get("range_increment", 0)),
         has_reach=bool(d.get("has_reach", False)),
+        has_brace=bool(d.get("has_brace", False)),
+        is_double=bool(d.get("is_double", False)),
+        trip_bonus=int(d.get("trip_bonus", 0)),
         weight=float(d.get("weight", 0)),
         cost_gp=float(d.get("cost_gp", 0)),
         raw=d,

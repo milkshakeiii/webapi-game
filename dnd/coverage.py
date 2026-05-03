@@ -320,7 +320,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.5_foot_step":            (IMPLEMENTED,    "validate_turn enforces exclusivity; one square only"),
     "combat.full_round_action":      (IMPLEMENTED,    "Turn.full_round forbids standard+move; charge/withdraw/full_attack are full-round"),
     "combat.swift_action":           (PARTIAL,        "Turn.swift slot exists but most consumers (smite_evil, etc.) call it composite — minor; immediate-action conversion not modeled"),
-    "combat.free_action":            (PARTIAL,        "validation accepts a fixed allowlist (drop_item, fall_prone, speak, signal, end_concentration, drop_held_charge); not all RAW free actions enumerated"),
+    "combat.free_action":            (IMPLEMENTED,    "validation allowlist covers PF1 RAW free actions: drop_item, fall_prone, speak, signal, end_concentration / cease_concentration, drop_held_charge, drop_to_floor, release_grapple, press_attack, speak_briefly, use_extraordinary_ability"),
     "combat.immediate_action":       (NOT_IMPLEMENTED, "consumes next round's swift; no model"),
 
     # ── Combat: attack rolls & critical hits ────────────────────────────
@@ -343,7 +343,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.nonlethal_damage":       (NOT_IMPLEMENTED, "no separate nonlethal HP track"),
 
     # ── Combat: defenses, cover, concealment, flanking ───────────────────
-    "combat.cover":                  (PARTIAL,        "hard cover (+4 AC) when one wall in line; +2 Reflex bonus is computed but not yet read by save handlers"),
+    "combat.cover":                  (IMPLEMENTED,    "hard cover (+4 AC) when one wall in line; +2 Reflex bonus computed via _cover_reflex_bonus and threaded through cast_spell → roll_save → scaling_damage handler (and any other save site that takes a grid context). Greater cover and total cover handled separately"),
     "combat.greater_cover":          (IMPLEMENTED,    "+8 AC when 2 walls intervene in the Bresenham line. Modeled as 'more than half the line blocked' via wall count"),
     "combat.soft_cover":             (IMPLEMENTED,    "intervening combatant grants +4 AC vs ranged via _cover_ac_bonus"),
     "combat.total_cover":            (IMPLEMENTED,    "_total_cover_blocks_line returns True when 3+ walls intervene; ranged attacks skip with 'total cover blocks line of effect' reason"),
@@ -355,7 +355,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     # ── Combat: AoOs ────────────────────────────────────────────────────
     "combat.aoo":                    (IMPLEMENTED,    "1 AoO/round; aoo_triggers_for_movement + _do_aoo"),
     "combat.aoo_extra_combat_reflexes": (IMPLEMENTED,    "_aoo_limit returns 1 + Dex when feat present; per-round counter on Combatant"),
-    "combat.aoo_provoking_actions":  (PARTIAL,        "leaving threatened square + stand_up + non-defensive cast trigger; drink-potion / draw-weapon / retrieve-stowed-item not wired"),
+    "combat.aoo_provoking_actions":  (IMPLEMENTED,    "leaving threatened square, stand_up, non-defensive cast, draw_weapon (BAB 0), drink_potion, retrieve_stowed_item — all trigger AoO via aoo_triggers_for_provoking_action in _do_move"),
     "combat.threatened_squares":     (IMPLEMENTED,    "grid.threatened_squares uses (min_d, max_d) range — normal weapon threatens 1..reach; reach weapon (has_reach) shifts to (reach+1, reach+1) — adjacent NOT threatened, +5 ft beyond IS"),
     "combat.reach_weapons":          (IMPLEMENTED,    "Weapon.has_reach detected; grid.threatened_squares shifts threat from min/max=0/reach to min/max=reach+1/reach+1 — wielder threatens at +5 ft beyond normal reach but NOT adjacent. Longspear / glaive / lance carry has_reach=true"),
 
@@ -372,12 +372,12 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.trip":                   (IMPLEMENTED,    "composite 'trip' applies prone on success; also fires automatically after a successful melee hit for creatures with the 'trip_attack' racial trait (wolf)"),
     "combat.coup_de_grace":          (IMPLEMENTED,    "_do_coup_de_grace composite: full-round vs adjacent helpless / paralyzed / sleeping / unconscious / pinned target; deals weapon damage at the crit multiplier; target rolls Fort DC 10 + damage or dies. Provoking-AoO not modeled (mostly redundant — actor is already in melee)"),
     "combat.massive_damage":         (IMPLEMENTED,    "_check_massive_damage fires after damage in _do_attack: 50+ damage from one source → Fort DC 15 or die. Bypasses dying-threshold rules"),
-    "combat.aid_another":            (PARTIAL,         "composite 'aid_another' with mode='attack'|'ac'; DC 10 attack roll → +2 (circumstance) attack OR +2 dodge AC for 1 round; 'vs that specific foe' restriction not modeled (bonus is universal)"),
+    "combat.aid_another":            (IMPLEMENTED,    "composite 'aid_another' with mode='attack'|'ac'; DC 10 attack roll → +2 attack vs the named foe (qualifier on target_id) OR +2 dodge AC vs the named foe (qualifier on attacker_id). Bonus only applies when context matches the foe's id"),
     "combat.fight_defensively":      (IMPLEMENTED,    "_do_fight_defensively composite: -4 to attack, +2 dodge AC for one round (expires next round). Single attack against the named target"),
     "combat.total_defense":          (IMPLEMENTED,    "+4 dodge AC for 1 round (expires_round = current_round + 1); via _do_standard"),
 
     # ── Combat: charge & full-round movement ─────────────────────────────
-    "combat.charge":                 (PARTIAL,        "min-distance, straight-line, lane-clear, end-adjacent enforced; difficult terrain not (engine has no terrain types)"),
+    "combat.charge":                 (IMPLEMENTED,    "min-distance, straight-line, lane-clear, end-adjacent enforced; _charge_path_clear rejects difficult-terrain cells in the lane"),
     "combat.partial_charge":         (IMPLEMENTED,    "_do_partial_charge composite: delegates to _do_charge with max_squares_override = 1× speed (regular charge uses 2× speed)"),
     "combat.withdraw":               (IMPLEMENTED,    "full-round, 2× speed in a direction; first square does not provoke AoO (skip_aoo_first_step in _move_along)"),
     "combat.run":                    (IMPLEMENTED,    "composite 'run': 4× speed in a straight line, loses Dex bonus to AC for the round (added as -dex_to_ac modifier expiring next round)"),
@@ -401,9 +401,9 @@ CORE_MECHANICS: dict[str, Entry] = {
     # ── Combat: HP, dying, death ────────────────────────────────────────
     "combat.hp_max":                 (IMPLEMENTED,    "computed from class HD + Con + bonuses"),
     "combat.dying":                  (IMPLEMENTED,    "set when HP < 0; 1 HP/round bleed via tick_round; DC 10 Con stabilization roll fires when a roller is provided to tick_round (Encounter passes its own)"),
-    "combat.disabled":               (PARTIAL,        "set when HP exactly 0; turn validation restricts to 1 standard or 1 move; 1-HP-on-standard not yet modeled"),
+    "combat.disabled":               (IMPLEMENTED,    "set when HP exactly 0; turn validation restricts to 1 standard or 1 move; standard-action self-damage of 1 HP fires from execute_turn via _turn_used_standard_action heuristic (any attack/cast/etc. event triggers the cost). Emits 'disabled_self_damage' event"),
     "combat.stable":                 (IMPLEMENTED,    "suppresses dying-bleed when set; reached via DC 10 Con check in tick_round or via the 'stable' condition being applied externally"),
-    "combat.unconscious":            (PARTIAL,        "is_unconscious checks the condition; turn validation prevents acts"),
+    "combat.unconscious":            (IMPLEMENTED,    "is_unconscious checks the condition; turn validation prevents acts; applying 'unconscious' also adds 'helpless' (tracked under 'implied_by_unconscious' source so removal of unconscious drops the implied helpless without clobbering externally-applied helpless)"),
     "combat.dead_threshold":         (IMPLEMENTED,    "PF1 RAW: HP <= -CON for living; 0 for undead/constructs (no Con score). Cached on Combatant.death_threshold at construction"),
     "combat.helpless_attacker_bonus": (IMPLEMENTED,    "+4 melee attack vs helpless target (not ranged); target is dex-denied via _has_dex_denied (helpless/paralyzed/pinned/stunned/etc.) → flat-footed AC used in resolve_attack"),
 
@@ -427,7 +427,7 @@ CORE_MECHANICS: dict[str, Entry] = {
 
     # ── Magic: spell mechanics ──────────────────────────────────────────
     "magic.spell_slots":             (IMPLEMENTED,    "per-Combatant resources, populated from class table at level-up"),
-    "magic.bonus_spells_high_ability": (PARTIAL,      "ability-based bonus slots not added on top of class table"),
+    "magic.bonus_spells_high_ability": (IMPLEMENTED,  "progression.bonus_spells_per_day applies PF1 Table 1-3 mod-based bonuses to spells_per_day in leveling._aggregate_spells_per_day; bonus is added to the slot count for any spell level the caster's class table grants"),
     "magic.spell_save_dc":           (IMPLEMENTED,    "10 + spell_level + key_ability_mod via spells.save_dc_for"),
     "magic.spell_resistance":        (IMPLEMENTED,    "d20 + caster_level vs target SR via spells.overcomes_sr"),
     "magic.caster_level":            (IMPLEMENTED,    "spells.caster_level returns char.level for v1; multiclass partial"),
@@ -471,14 +471,14 @@ CORE_MECHANICS: dict[str, Entry] = {
     "skills.armor_check_penalty":    (IMPLEMENTED,    "applied to ACP-affected skills via combatant_from_character"),
     "skills.opposed_checks":         (IMPLEMENTED,    "skills.opposed_skill_check rolls both, ties go to defender (initiator must beat opponent's total)"),
     "skills.aid_another_skill":      (IMPLEMENTED,    "skills.aid_another_skill: DC 10 check returns +2 bonus on success; caller passes via skill_check(extra_bonus=2)"),
-    "skills.take_10":                (PARTIAL,        "skills.skill_check supports take_10=True (substitutes 10 for d20); caller is responsible for the 'no immediate danger' restriction"),
+    "skills.take_10":                (IMPLEMENTED,    "skill_check honors take_10 only when can_take_10(actor) returns True — disallowed when distracted (stunned / dazed / frightened / etc.) or damaged (current_hp < max_hp). Otherwise silently falls back to a d20 roll"),
     "skills.take_20":                (OUT_OF_SCOPE,   "20× time; no time-pressure model in v1"),
     "skills.class_skill_bonus":      (IMPLEMENTED,    "+3 to skill_total when 1+ ranks invested in class skill"),
     "skills.skill_synergy":          (OUT_OF_SCOPE,   "3.5e holdover; PF1 doesn't have skill synergies"),
 
     # ── Equipment & encumbrance ─────────────────────────────────────────
     "equipment.weapon_categories":   (IMPLEMENTED,    "weapon_category tagged on attack_options; Combatant.weapon_proficiency_categories holds the actor's allowed categories + specific weapon IDs; -4 attack penalty when wielding outside proficiencies (see _weapon_not_proficient in turn_executor)"),
-    "equipment.weapon_special_properties": (PARTIAL, "JSONs carry properties (reach, double, brace, trip-bonus); rarely consulted at attack time"),
+    "equipment.weapon_special_properties": (PARTIAL, "Weapon dataclass exposes has_reach (consulted in threat zones), has_brace, is_double, trip_bonus (consulted in trip CMB). Brace double-damage trigger and full double-weapon dual-wield mechanics still pending — fields are present, behavior is partial"),
     "equipment.encumbrance":         (IMPLEMENTED,    "carried_weight + load_category in encumbrance.py; combatant_from_character applies medium/heavy ACP, Max-Dex cap (taking the more restrictive of armor and load), and speed reduction via effective_speed (worse-of-armor-or-load)"),
     "equipment.armor_donning_time":  (NOT_IMPLEMENTED, "no time-to-don model"),
 

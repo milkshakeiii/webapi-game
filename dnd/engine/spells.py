@@ -45,6 +45,11 @@ class SpellOutcome:
     # Metamagic feats applied to this cast. Read by handlers that
     # care (e.g., duration-computing handlers check for "extend_spell").
     metamagic: list[str] = field(default_factory=list)
+    # Optional grid passed by cast_spell. Used by handlers that need
+    # to compute positional bonuses like cover-vs-Reflex. None when
+    # there is no spatial context (e.g., scenario-tests casting
+    # without a grid).
+    grid: object | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -137,14 +142,20 @@ def roll_save(
     dc: int,
     roller: Roller,
     context: dict | None = None,
+    cover_bonus: int = 0,
 ) -> tuple[bool, int, int]:
     """Roll a saving throw. Returns (passed, natural, total).
 
     ``context`` is forwarded to ``target.save`` so situational save
     bonuses (hardy, illusion_resistance, etc.) qualify. Default
     behavior (no context) ignores qualified mods.
+
+    ``cover_bonus`` is a flat bonus from PF1 cover (+2 for hard
+    cover, +4 for greater cover). Currently only Reflex saves benefit
+    per RAW; we apply it unconditionally and let the caller pass 0 for
+    non-Reflex contexts.
     """
-    save_total = target.save(save_kind, context=context)
+    save_total = target.save(save_kind, context=context) + cover_bonus
     r = roller.roll("1d20")
     nat = r.terms[0].rolls[0]
     total = nat + save_total
@@ -279,6 +290,7 @@ def cast_spell(
     roller: Roller,
     current_round: int = 1,
     metamagic: list[str] | None = None,
+    grid: object | None = None,
 ) -> SpellOutcome:
     """Resolve a spell cast.
 
@@ -308,6 +320,7 @@ def cast_spell(
         modifiers_applied={},
         save_dc=dc,
         metamagic=list(metamagic),
+        grid=grid,
     )
     metamagic_note = (
         f" [metamagic: {', '.join(metamagic)}]" if metamagic else ""
@@ -523,11 +536,22 @@ def _handle_scaling_damage(
     save_kind, semantic = parse_saving_throw(spell.saving_throw)
     final = raw_damage
     if save_kind:
+        # Cover Reflex bonus: +2 (hard) or +4 (greater) when there are
+        # walls between the caster and the target. Computed only when
+        # the cast received a grid context.
+        cover_bonus = 0
+        if save_kind == "ref" and out.grid is not None:
+            from .turn_executor import _cover_reflex_bonus
+            cover_bonus = _cover_reflex_bonus(caster, target, out.grid)
         passed, nat, total = roll_save(
-            target, save_kind, dc, roller, context=_spell_save_context(spell),
+            target, save_kind, dc, roller,
+            context=_spell_save_context(spell),
+            cover_bonus=cover_bonus,
         )
+        cover_note = f" + {cover_bonus} cover" if cover_bonus else ""
         out.log.append(
-            f"  {target.name} {save_kind} save: d20={nat}+{target.save(save_kind)}={total} vs DC {dc} → "
+            f"  {target.name} {save_kind} save: d20={nat}+"
+            f"{target.save(save_kind)}{cover_note}={total} vs DC {dc} → "
             f"{'PASS' if passed else 'FAIL'}"
         )
         if passed and semantic == "half":

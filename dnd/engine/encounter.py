@@ -46,6 +46,13 @@ LEGAL_FREE_ACTIONS = frozenset({
     "signal",
     "end_concentration",
     "drop_held_charge",
+    # PF1 also lists these as free per RAW:
+    "cease_concentration",
+    "drop_to_floor",
+    "release_grapple",
+    "press_attack",
+    "speak_briefly",
+    "use_extraordinary_ability",
 })
 
 

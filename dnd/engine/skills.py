@@ -60,6 +60,28 @@ def cumulative_skill_ranks(actor: Combatant, skill_id: str) -> int:
     return ranks
 
 
+def can_take_10(actor: Combatant) -> bool:
+    """True when the actor is in a state where PF1 RAW allows take 10.
+
+    Disallowed when distracted or threatened: actor has any condition
+    that prevents focus (dazed, stunned, fatigued/exhausted in some
+    contexts, frightened, panicked, sickened, nauseated, paralyzed,
+    helpless, cowering, confused), or has taken damage recently
+    (current_hp < max_hp). The caller may still call skill_check with
+    take_10=True, but it'll be rejected if this returns False.
+    """
+    distract_conds = {
+        "stunned", "dazed", "frightened", "panicked", "sickened",
+        "nauseated", "paralyzed", "helpless", "cowering", "confused",
+        "fascinated", "shaken",
+    }
+    if actor.conditions & distract_conds:
+        return False
+    if actor.current_hp < actor.max_hp:
+        return False
+    return True
+
+
 def skill_check(
     actor: Combatant,
     skill_id: str,
@@ -77,7 +99,9 @@ def skill_check(
     (opposed checks).
 
     ``take_10`` substitutes 10 for the d20 roll. PF1 RAW forbids take 10
-    in stressful situations / combat — enforcement is the caller's job.
+    when distracted or threatened — we use ``can_take_10`` to detect
+    that, and silently fall back to a d20 roll if take_10 is requested
+    in an illegal state.
 
     ``extra_bonus`` is a one-off bonus to add (e.g., +2 from a
     successful aid-another check).
@@ -95,7 +119,8 @@ def skill_check(
             blocked_trained_only=True,
             log=[f"trained-only skill {skill_id!r} blocked: 0 ranks"],
         )
-    if take_10:
+    took_10 = take_10 and can_take_10(actor)
+    if took_10:
         natural = 10
     else:
         result = roller.roll("1d20")
@@ -105,7 +130,7 @@ def skill_check(
     return SkillCheckResult(
         skill_id=skill_id, actor_id=actor.id,
         natural=natural, bonus=bonus, total=total,
-        dc=dc, success=success, took_10=take_10,
+        dc=dc, success=success, took_10=took_10,
     )
 
 

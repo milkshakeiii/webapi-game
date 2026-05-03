@@ -412,6 +412,15 @@ class Combatant:
             self.modifiers.add(Modifier(value=-4, type="untyped",
                                         target="ability:dex",
                                         source="grappled"))
+        elif condition_id == "unconscious":
+            # PF1 RAW: an unconscious creature is also helpless. We
+            # mark this as a tracked side-effect so removal of
+            # 'unconscious' also drops the implied helpless.
+            if "helpless" not in self.conditions:
+                self.conditions.add("helpless")
+                self.sourced_conditions.setdefault(
+                    "implied_by_unconscious", set(),
+                ).add("helpless")
 
     def _on_condition_removed(self, condition_id: str) -> None:
         """Undo the side effects of a condition that's leaving."""
@@ -422,6 +431,15 @@ class Combatant:
             self.speed = self.speed * 2
         elif condition_id == "grappled":
             self.modifiers.remove_by_source("grappled")
+        elif condition_id == "unconscious":
+            # Drop the unconscious-implied helpless if we added it
+            # ourselves (i.e., the creature wasn't helpless from some
+            # other source). External helpless persists.
+            implied = self.sourced_conditions.pop(
+                "implied_by_unconscious", None,
+            )
+            if implied and "helpless" in implied:
+                self.conditions.discard("helpless")
 
     def add_modifier(self, modifier: Modifier) -> None:
         self.modifiers.add(modifier)
@@ -1148,7 +1166,10 @@ def combatant_from_character(
         for level_key, ids in character.spells_prepared.items():
             lvl = int(level_key)
             prepared_spells[lvl] = list(ids)
-    # Slot resources keyed by spell level.
+    # Slot resources keyed by spell level. ``cumulative.spells_per_day``
+    # is computed by the leveling pipeline and already includes bonus
+    # slots from a high key ability score (Int for wizard, Wis for
+    # cleric, Cha for sorcerer / bard / paladin).
     spell_slot_resources: dict[str, int] = {}
     if cumulative.spells_per_day:
         for slvl, count in cumulative.spells_per_day.items():

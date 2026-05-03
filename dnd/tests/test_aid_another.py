@@ -9,7 +9,7 @@ from dnd.engine.content import default_registry
 from dnd.engine.dice import Roller
 from dnd.engine.encounter import Encounter
 from dnd.engine.grid import Grid
-from dnd.engine.modifiers import compute as _compute
+from dnd.engine.modifiers import compute as _compute, compute_with_context as _compute_ctx
 from dnd.engine.turn_executor import _do_aid_another
 
 
@@ -52,8 +52,19 @@ class TestAidAnotherSuccess(unittest.TestCase):
             helper, ally, foe, events = self._do("attack", seed=seed)
             ev = events[0]
             if ev.detail["passed"]:
-                bonus = _compute(0, ally.modifiers.for_target("attack"))
-                self.assertEqual(bonus, 2)
+                # The aid-another bonus is qualified to "vs that foe".
+                # Without target_id matching the foe, it doesn't apply.
+                bonus_vs_foe = _compute_ctx(
+                    0, ally.modifiers.for_target("attack"),
+                    {"target_id": foe.id},
+                )
+                self.assertEqual(bonus_vs_foe, 2)
+                # Against a different target, the bonus should NOT apply.
+                bonus_vs_other = _compute_ctx(
+                    0, ally.modifiers.for_target("attack"),
+                    {"target_id": "some_other_id"},
+                )
+                self.assertEqual(bonus_vs_other, 0)
                 return
         self.skipTest("no successful aid roll across 30 seeds")
 
@@ -139,14 +150,16 @@ class TestAidAnotherExpires(unittest.TestCase):
             ev = events[0]
             if not ev.detail["passed"]:
                 continue
-            # Bonus is present this round.
+            # Bonus is present this round (vs the named foe).
             self.assertEqual(
-                _compute(0, ally.modifiers.for_target("attack")), 2,
+                _compute_ctx(0, ally.modifiers.for_target("attack"),
+                             {"target_id": foe.id}), 2,
             )
             # Tick to current_round + 1 — bonus expires.
             ally.tick_round(enc.round_number + 1)
             self.assertEqual(
-                _compute(0, ally.modifiers.for_target("attack")), 0,
+                _compute_ctx(0, ally.modifiers.for_target("attack"),
+                             {"target_id": foe.id}), 0,
             )
             return
         self.skipTest("no successful aid roll across 30 seeds")
