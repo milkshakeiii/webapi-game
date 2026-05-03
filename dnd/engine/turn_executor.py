@@ -630,17 +630,21 @@ def _do_charge(
                                 {"reason": "charge: target not adjacent after move"}))
         return
     # PF1 RAW: a lance wielded one-handed in the same hand as a mount's
-    # reins doubles damage on a charge (3× with Spirited Charge feat —
-    # not modeled here). We mark the charge so _do_attack can apply
-    # the multiplier.
+    # reins doubles damage on a charge. Spirited Charge feat doubles
+    # the multiplier (×3 total with a lance). We mark the charge so
+    # _do_attack can apply the appropriate multiplier.
     chosen = actor.attack_options[0] if actor.attack_options else {}
-    is_mounted_lance = (
-        actor.mount_id is not None
-        and chosen.get("weapon_id") == "lance"
-    )
+    is_mounted = actor.mount_id is not None
+    is_lance = chosen.get("weapon_id") == "lance"
     options = dict(args.get("options") or {})
-    if is_mounted_lance:
-        options["charge_lance_double_damage"] = True
+    if is_mounted and is_lance:
+        if _has_feat(actor, "spirited_charge"):
+            options["charge_damage_multiplier"] = 3
+        else:
+            options["charge_damage_multiplier"] = 2
+    elif is_mounted and _has_feat(actor, "spirited_charge"):
+        # Spirited Charge: ×2 on any charge weapon while mounted.
+        options["charge_damage_multiplier"] = 2
     _do_attack(actor, target, grid, roller, events,
                attack_bonus_delta=2, label="charge_attack",
                encounter=encounter,
@@ -1174,6 +1178,39 @@ def _do_attack(
     outcome: AttackOutcome = resolve_attack(
         profile, defense, roller, situation=ac_situation,
     )
+    # Mounted Combat feat: if the target is a mount with a rider, the
+    # rider can attempt a Ride check (DC = the attack roll) to negate
+    # the hit. Limited to once per round (Combat Reflexes-style
+    # throttling), tracked via target.mount_id (which is set on the
+    # rider, not the mount; the mount has rider_id). We use the
+    # rider's per-round AoO marker as a stand-in for the once-per-round
+    # restriction since the engine doesn't yet track Ride uses.
+    if (
+        outcome.hit
+        and target.rider_id is not None
+        and grid is not None
+    ):
+        rider = grid.combatants.get(target.rider_id)
+        if rider is not None and _has_feat(rider, "mounted_combat"):
+            from .skills import skill_check
+            from .content import default_registry
+            ride_dc = outcome.attack_total
+            ride = skill_check(
+                rider, "ride", dc=ride_dc, roller=roller,
+                registry=default_registry(),
+            )
+            if ride.success:
+                from dataclasses import replace as _replace
+                outcome = _replace(
+                    outcome,
+                    hit=False, crit=False,
+                    damage=0, damage_dealt_pre_dr=0, dr_absorbed=0,
+                    log=outcome.log + [
+                        f"mounted combat: rider {rider.name} negates hit "
+                        f"(Ride d20={ride.natural}+{ride.bonus}={ride.total} "
+                        f"vs DC {ride_dc})",
+                    ],
+                )
     # Blinded attacker: 50% miss chance against any target (PF1 RAW
     # "the creature has total concealment" applies to attacks made by
     # the blinded character).
@@ -1190,17 +1227,19 @@ def _do_attack(
                 ],
             )
     if outcome.hit and outcome.damage > 0:
-        # Lance double damage on a mounted charge.
-        if (script_options or {}).get("charge_lance_double_damage"):
+        # Mounted charge damage multiplier (lance: ×2; lance + Spirited
+        # Charge: ×3; non-lance + Spirited Charge: ×2).
+        mult = (script_options or {}).get("charge_damage_multiplier", 1)
+        if mult > 1:
             from dataclasses import replace as _replace
-            doubled = outcome.damage * 2
+            new_damage = outcome.damage * mult
             outcome = _replace(
                 outcome,
-                damage=doubled,
-                damage_dealt_pre_dr=outcome.damage_dealt_pre_dr * 2,
+                damage=new_damage,
+                damage_dealt_pre_dr=outcome.damage_dealt_pre_dr * mult,
                 log=outcome.log + [
-                    f"mounted lance charge: damage doubled "
-                    f"({outcome.damage} → {doubled})",
+                    f"mounted charge: damage ×{mult} "
+                    f"({outcome.damage} → {new_damage})",
                 ],
             )
         target.take_damage(outcome.damage)
@@ -2207,19 +2246,43 @@ def _do_cast(
         }))
         return
 
-    spell_level = int(args.get("spell_level", 1))
+    base_spell_level = int(args.get("spell_level", 1))
+    # Metamagic level adjustment: each applied feat raises the slot
+    # cost by a fixed amount (PF1 RAW). The save-DC stays at the base
+    # level — we don't pass the bumped level into save_dc_for.
+    metamagic = list(args.get("metamagic") or [])
+    metamagic_bump = 0
+    metamagic_bumps = {
+        "empower_spell": 2,
+        "maximize_spell": 3,
+        "quicken_spell": 4,
+        "still_spell": 1,
+        "silent_spell": 1,
+        "extend_spell": 1,
+        "heighten_spell": 0,  # variable; caller specifies effective_spell_level
+    }
+    for mm in metamagic:
+        metamagic_bump += metamagic_bumps.get(mm, 0)
+        # Validate the caster has the feat.
+        if not _has_feat(actor, mm):
+            events.append(TurnEvent(actor.id, "skip", {
+                "reason": f"metamagic {mm!r} requires the feat",
+            }))
+            return
+    spell_level = base_spell_level + metamagic_bump
     slot_key = f"spell_slot_{spell_level}"
     remaining = actor.resources.get(slot_key, 0)
     if remaining <= 0:
         events.append(TurnEvent(actor.id, "skip", {
-            "reason": f"no spell slots remaining at level {spell_level}",
+            "reason": f"no spell slots remaining at level {spell_level}"
+                      f" (base {base_spell_level} + {metamagic_bump} metamagic)",
         }))
         return
 
     # ── Spell components check ──────────────────────────────────────
     components = list(spell.components or [])
-    has_v = "V" in components
-    has_s = "S" in components
+    has_v = "V" in components and "silent_spell" not in metamagic
+    has_s = "S" in components and "still_spell" not in metamagic
     if has_v and "silenced" in actor.conditions:
         events.append(TurnEvent(actor.id, "cast_failed", {
             "spell_id": spell_id,
@@ -2368,8 +2431,8 @@ def _do_cast(
     from .spells import cast_spell
     cur_round = encounter.round_number if encounter is not None else 1
     outcome = cast_spell(
-        actor, spell, targets, spell_level, registry, roller,
-        current_round=cur_round,
+        actor, spell, targets, base_spell_level, registry, roller,
+        current_round=cur_round, metamagic=metamagic,
     )
     events.append(TurnEvent(actor.id, "cast", outcome.to_dict()))
 

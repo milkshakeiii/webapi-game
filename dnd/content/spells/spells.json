@@ -218,5 +218,22 @@
       "creature_type": "humanoid"
     },
     "summary": "One humanoid becomes friendly; Will negates."
+  },
+  {
+    "id": "dispel_magic",
+    "name": "Dispel Magic",
+    "school": "abjuration",
+    "subschool": "",
+    "descriptors": [],
+    "level_by_class": {"bard": 3, "cleric": 3, "sorcerer": 3, "wizard": 3, "paladin": 3},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "medium",
+    "target": "one_creature",
+    "duration": "instantaneous",
+    "saving_throw": "none",
+    "spell_resistance": "no",
+    "effect": {"kind": "dispel_magic"},
+    "summary": "Caster level check (1d20 + CL) vs DC 11 + target effect's CL to remove one ongoing spell effect."
   }
 ]

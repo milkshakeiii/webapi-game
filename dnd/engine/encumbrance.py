@@ -97,3 +97,51 @@ LOAD_MAX_DEX: dict[str, int | None] = {
     "heavy":      1,
     "overloaded": 0,
 }
+
+
+# PF1 RAW: medium / heavy load reduces speed exactly the same way
+# medium / heavy armor does — a fixed table from base speed to reduced
+# speed.
+_REDUCED_SPEED_TABLE: dict[int, int] = {
+    5:  5,
+    10: 5,
+    15: 10,
+    20: 15,
+    25: 15,
+    30: 20,
+    35: 25,
+    40: 30,
+    45: 30,
+    50: 35,
+    60: 40,
+    70: 45,
+    80: 50,
+    90: 60,
+}
+
+
+def reduced_speed(base: int) -> int:
+    """Return PF1 medium-/heavy-armor (== medium/heavy load) reduced speed."""
+    if base <= 0:
+        return 0
+    return _REDUCED_SPEED_TABLE.get(base, max(5, (base // 15) * 10))
+
+
+def effective_speed(base: int, armor_data, load: str) -> int:
+    """Combine race speed with armor speed and encumbrance speed.
+
+    Per PF1 RAW: ``your speed decreases according to your armor or
+    load, whichever is worse``. We apply the reduction once if either
+    medium/heavy armor OR medium/heavy load is present (taking the
+    minimum of the two reductions).
+    """
+    speed = base
+    armor_reduces = False
+    if armor_data is not None:
+        cat = (getattr(armor_data, "category", "") or "").lower()
+        if cat in ("medium", "heavy"):
+            armor_reduces = True
+    load_reduces = load in ("medium", "heavy", "overloaded")
+    if armor_reduces or load_reduces:
+        speed = reduced_speed(speed)
+    return speed

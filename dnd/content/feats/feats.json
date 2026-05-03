@@ -56,6 +56,41 @@
     "summary": "All variable, numeric effects of an empowered spell are increased by half. Empowered spell uses a slot 2 levels higher than the spell's actual level."
   },
   {
+    "id": "maximize_spell",
+    "name": "Maximize Spell",
+    "type": "metamagic",
+    "prerequisites": {},
+    "summary": "All variable, numeric effects of a maximized spell are maximized. Maximized spell uses a slot 3 levels higher than the spell's actual level."
+  },
+  {
+    "id": "still_spell",
+    "name": "Still Spell",
+    "type": "metamagic",
+    "prerequisites": {},
+    "summary": "Cast spell without somatic component. Stilled spell uses a slot 1 level higher than the spell's actual level."
+  },
+  {
+    "id": "silent_spell",
+    "name": "Silent Spell",
+    "type": "metamagic",
+    "prerequisites": {},
+    "summary": "Cast spell without verbal component. Silent spell uses a slot 1 level higher than the spell's actual level."
+  },
+  {
+    "id": "quicken_spell",
+    "name": "Quicken Spell",
+    "type": "metamagic",
+    "prerequisites": {},
+    "summary": "Cast spell as a swift action. Quickened spell uses a slot 4 levels higher than the spell's actual level."
+  },
+  {
+    "id": "extend_spell",
+    "name": "Extend Spell",
+    "type": "metamagic",
+    "prerequisites": {},
+    "summary": "Spell duration is doubled. Extended spell uses a slot 1 level higher than the spell's actual level."
+  },
+  {
     "id": "endurance",
     "name": "Endurance",
     "type": "general",
@@ -211,5 +246,33 @@
     "prerequisites": {"bab": 1},
     "subtype": "weapon",
     "summary": "+1 attack with the chosen weapon (must be proficient)."
+  },
+  {
+    "id": "mounted_combat",
+    "name": "Mounted Combat",
+    "type": "combat",
+    "prerequisites": {"skills": {"ride": 1}},
+    "summary": "Once per round when your mount is hit, attempt a Ride check (DC = the attack roll) to negate the hit."
+  },
+  {
+    "id": "spirited_charge",
+    "name": "Spirited Charge",
+    "type": "combat",
+    "prerequisites": {"feats": ["mounted_combat", "ride_by_attack"]},
+    "summary": "When mounted and using a charge, deal double damage on the charge attack (×3 with a lance)."
+  },
+  {
+    "id": "ride_by_attack",
+    "name": "Ride-By Attack",
+    "type": "combat",
+    "prerequisites": {"feats": ["mounted_combat"]},
+    "summary": "When mounted and using a charge, move and attack as a single action and continue movement past the target without provoking AoOs."
+  },
+  {
+    "id": "trample",
+    "name": "Trample",
+    "type": "combat",
+    "prerequisites": {"feats": ["mounted_combat"]},
+    "summary": "While mounted, may attempt overruns; opponents knocked prone are dealt mount's hoof damage."
   }
 ]

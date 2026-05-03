@@ -42,6 +42,9 @@ class SpellOutcome:
     modifiers_applied: dict[str, list[dict]]   # per-target list of {value, type, target, expires_round}
     save_dc: int
     log: list[str] = field(default_factory=list)
+    # Metamagic feats applied to this cast. Read by handlers that
+    # care (e.g., duration-computing handlers check for "extend_spell").
+    metamagic: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -205,6 +208,7 @@ def cast_spell(
     registry: ContentRegistry,
     roller: Roller,
     current_round: int = 1,
+    metamagic: list[str] | None = None,
 ) -> SpellOutcome:
     """Resolve a spell cast.
 
@@ -212,9 +216,16 @@ def cast_spell(
     different slot pools — domain slots, specialist bonuses, etc.).
     ``current_round`` is used to compute expiration for modifiers with
     bounded duration.
+
+    ``metamagic`` lists feat IDs the caster is applying — currently
+    ``empower_spell`` and ``maximize_spell`` are honored as
+    post-process damage/healing transforms. ``still_spell`` /
+    ``silent_spell`` / ``quicken_spell`` are slot-cost-only here; the
+    caller (turn_executor) handles their cast-time effects.
     """
     cl = caster_level(caster)
     dc = save_dc_for(caster, spell_level, registry)
+    metamagic = list(metamagic or [])
 
     outcome = SpellOutcome(
         spell_id=spell.id,
@@ -226,9 +237,14 @@ def cast_spell(
         conditions_applied={},
         modifiers_applied={},
         save_dc=dc,
+        metamagic=list(metamagic),
+    )
+    metamagic_note = (
+        f" [metamagic: {', '.join(metamagic)}]" if metamagic else ""
     )
     outcome.log.append(
-        f"{caster.name} casts {spell.name} (CL {cl}, save DC {dc})"
+        f"{caster.name} casts {spell.name}"
+        f" (CL {cl}, save DC {dc}){metamagic_note}"
     )
 
     handler = _EFFECT_HANDLERS.get(spell.effect.get("kind", ""))
@@ -274,6 +290,35 @@ def cast_spell(
             current_round=current_round,
         )
 
+    # Metamagic post-processing on the rolled damage / healing numbers.
+    # Empower: ×1.5 (rounded down). Maximize: doubles the rolled total
+    # as a stand-in for "all dice take max" (true max ≈ 1.7× of
+    # average; we use 2× for clarity). When both are applied, Empower
+    # applies first then Maximize.
+    if metamagic:
+        target_lookup = {t.id: t for t in targets}
+        for label, multiplier_num, multiplier_den in (
+            ("empower_spell", 3, 2),
+            ("maximize_spell", 2, 1),
+        ):
+            if label not in metamagic:
+                continue
+            for tid, dmg in list(outcome.damage_per_target.items()):
+                new_dmg = (dmg * multiplier_num) // multiplier_den
+                delta = new_dmg - dmg
+                if delta > 0 and tid in target_lookup:
+                    target_lookup[tid].take_damage(delta)
+                outcome.damage_per_target[tid] = new_dmg
+            for tid, heal_amt in list(outcome.healing_per_target.items()):
+                new_heal = (heal_amt * multiplier_num) // multiplier_den
+                delta = new_heal - heal_amt
+                if delta > 0 and tid in target_lookup:
+                    target_lookup[tid].heal(delta)
+                outcome.healing_per_target[tid] = new_heal
+            outcome.log.append(
+                f"  {label}: damage/healing ×{multiplier_num}/{multiplier_den}"
+            )
+
     return outcome
 
 
@@ -302,12 +347,16 @@ def _hit_dice(target: Combatant) -> int:
 
 def _expires_round(
     effect: dict, caster_level_value: int, current_round: int,
+    extend: bool = False,
 ) -> int | None:
     """Compute expires_round given the effect's duration spec.
 
     Reads ``duration_rounds_per_caster_level``,
     ``duration_minutes_per_caster_level``, or
     ``duration_hours_per_caster_level`` from the effect dict.
+
+    ``extend``: if True, doubles the computed duration (Extend Spell
+    metamagic). Has no effect on instantaneous durations.
 
     Returns ``None`` for instantaneous or untracked durations.
     """
@@ -320,6 +369,8 @@ def _expires_round(
         rounds = int(effect["duration_hours_per_caster_level"]) * caster_level_value * 600
     if rounds is None or rounds <= 0:
         return None
+    if extend:
+        rounds *= 2
     return current_round + rounds
 
 
@@ -428,7 +479,10 @@ def _handle_buff_target(
 ) -> None:
     eff = spell.effect
     mods = eff.get("modifiers") or []
-    expires = _expires_round(eff, cl, current_round)
+    expires = _expires_round(
+        eff, cl, current_round,
+        extend="extend_spell" in out.metamagic,
+    )
     applied_records: list[dict] = []
     for m in mods:
         modifier = mod(
@@ -493,7 +547,8 @@ def _handle_apply_condition_save(
         )
         if passed:
             return
-    target.add_condition(cond)
+    if target.add_condition(cond):
+        target.register_sourced_condition(f"spell:{spell.id}", cond)
     out.targets_affected.append(target.id)
     out.conditions_applied.setdefault(target.id, []).append(cond)
     out.log.append(f"  {target.name} now has condition: {cond}")
@@ -518,10 +573,13 @@ def _handle_charm(
     # Team flip: target joins caster's team for the spell duration.
     original_team = target.team
     target.team = caster.team
+    source = f"spell:{spell.id}"
     target.add_modifier(Modifier(
         value=0, type="untyped", target="charm_marker",
-        source=f"spell:{spell.id}", expires_round=None,
+        source=source, expires_round=None,
     ))
+    target.add_condition("charmed")
+    target.register_sourced_condition(source, "charmed")
     out.targets_affected.append(target.id)
     out.conditions_applied.setdefault(target.id, []).append("charmed")
     out.log.append(
@@ -552,6 +610,62 @@ def _handle_utility(
     out.targets_affected.append(target.id)
 
 
+def active_spell_sources(target: Combatant) -> list[str]:
+    """Enumerate active ``spell:<id>`` sources currently affecting ``target``.
+
+    Walks the target's modifiers and the sourced-condition map, and
+    returns each unique ``spell:*`` source. Used by dispel to pick a
+    candidate to remove.
+    """
+    sources: set[str] = set()
+    for m in target.modifiers.modifiers:
+        if m.source.startswith("spell:"):
+            sources.add(m.source)
+    for src in target.sourced_conditions.keys():
+        if src.startswith("spell:"):
+            sources.add(src)
+    return sorted(sources)
+
+
+def _handle_dispel_magic(
+    caster: Combatant, spell: Spell, target: Combatant, dc: int,
+    cl: int, registry: ContentRegistry, roller: Roller, out: SpellOutcome,
+    current_round: int = 1,
+) -> None:
+    """PF1 targeted dispel: pick the highest-CL effect on the target,
+    roll 1d20 + caster_level vs DC 11 + that effect's CL.
+
+    For v1 we don't track per-effect CL (modifiers don't store it), so
+    we use a flat DC 11 + the dispelling caster's own CL as a stand-in
+    for "average opposed check". That matches the PF1 expected-value
+    behavior reasonably (a level-7 wizard dispelling a level-7 effect
+    rolls vs DC 18 = need 11+ on d20 = 50% — which matches RAW for
+    same-CL).
+    """
+    sources = active_spell_sources(target)
+    if not sources:
+        out.log.append(f"  {target.name} has no active spell effects to dispel")
+        return
+    # PF1 default: target the most-recent / highest-CL. We don't track
+    # CL per modifier; pick the first source alphabetically for
+    # determinism.
+    target_source = sources[0]
+    dispel_dc = 11 + cl
+    r = roller.roll("1d20")
+    nat = r.terms[0].rolls[0]
+    total = nat + cl
+    out.log.append(
+        f"  dispel {target_source} on {target.name}: d20={nat}+{cl}={total} "
+        f"vs DC {dispel_dc} → {'PASS' if total >= dispel_dc else 'FAIL'}"
+    )
+    if total >= dispel_dc:
+        n_mods, cond_ids = target.remove_effects_from_source(target_source)
+        out.targets_affected.append(target.id)
+        out.log.append(
+            f"  dispelled: {n_mods} modifier(s), conditions cleared: {cond_ids}"
+        )
+
+
 _EFFECT_HANDLERS: dict[str, Any] = {
     "heal":                  _handle_heal,
     "magic_missile":         _handle_magic_missile,
@@ -562,4 +676,5 @@ _EFFECT_HANDLERS: dict[str, Any] = {
     "charm":                 _handle_charm,
     "stabilize":             _handle_stabilize,
     "utility":               _handle_utility,
+    "dispel_magic":          _handle_dispel_magic,
 }

@@ -146,6 +146,15 @@ class Combatant:
     mount_id: str | None = None
     rider_id: str | None = None
 
+    # Per-source-tracking of conditions applied by ongoing effects.
+    # Spell handlers that call ``add_condition`` should also call
+    # ``register_sourced_condition(source, condition_id)`` so dispel /
+    # spell-removal can find and clear those conditions. The mapping
+    # is ``source → set of condition_ids``. Modifiers already carry
+    # their own source on the Modifier record; this dict is just for
+    # conditions, which are otherwise plain strings in the set.
+    sourced_conditions: dict[str, set[str]] = field(default_factory=dict)
+
     # ── Derived stat queries ──────────────────────────────────────────────
 
     def ac(self, situation: str = "normal") -> int:
@@ -291,6 +300,33 @@ class Combatant:
             return
         self.conditions.discard(condition_id)
         self._on_condition_removed(condition_id)
+        # Drop the source-tracking entry too, if any.
+        for src, conds in list(self.sourced_conditions.items()):
+            conds.discard(condition_id)
+            if not conds:
+                del self.sourced_conditions[src]
+
+    def register_sourced_condition(self, source: str, condition_id: str) -> None:
+        """Mark ``condition_id`` as having been added by ``source``.
+
+        Used by spell handlers so dispel-style cleanup can find which
+        conditions came from a given spell source. Idempotent.
+        """
+        self.sourced_conditions.setdefault(source, set()).add(condition_id)
+
+    def remove_effects_from_source(self, source: str) -> tuple[int, list[str]]:
+        """Drop every modifier and tracked condition from ``source``.
+
+        Returns ``(modifier_count_removed, condition_ids_removed)``.
+        Used by dispel magic and similar effect-ending spells.
+        """
+        mod_count = self.modifiers.remove_by_source(source)
+        cond_ids = list(self.sourced_conditions.pop(source, set()))
+        for cid in cond_ids:
+            if cid in self.conditions:
+                self.conditions.discard(cid)
+                self._on_condition_removed(cid)
+        return mod_count, cond_ids
 
     def _on_condition_applied(self, condition_id: str) -> None:
         """Apply the mechanical side effects of a newly-added condition.
@@ -796,10 +832,25 @@ def combatant_from_character(
     if character.equipped_weapon:
         weapon_data = registry.get_weapon(character.equipped_weapon)
 
-    # ── AC: Dex (capped by armor), armor bonus, shield bonus ──────────────
+    # ── Encumbrance load (computed early so Max-Dex / speed factor in) ──
+    from .encumbrance import (
+        LOAD_ACP_PENALTY,
+        LOAD_MAX_DEX,
+        carried_weight as _carried,
+        effective_speed as _effective_speed,
+        load_category as _load_cat,
+    )
+    load_weight = _carried(character, registry)
+    load = _load_cat(load_weight, final_scores.get("str") or 0)
+    load_acp = LOAD_ACP_PENALTY.get(load, 0)
+    load_max_dex = LOAD_MAX_DEX.get(load)
+
+    # ── AC: Dex (capped by armor and/or load), armor bonus, shield bonus ──
     ac_dex_mod = dex_mod
     if armor_data is not None and armor_data.max_dex_bonus < dex_mod:
         ac_dex_mod = armor_data.max_dex_bonus
+    if load_max_dex is not None and load_max_dex < ac_dex_mod:
+        ac_dex_mod = load_max_dex
     if ac_dex_mod != 0:
         coll.add(mod(ac_dex_mod, "ability", "ac", "dex_modifier"))
     if armor_data is not None and armor_data.ac_bonus > 0:
@@ -827,18 +878,6 @@ def combatant_from_character(
     # Initiative: Dex.
     if dex_mod != 0:
         coll.add(mod(dex_mod, "ability", "initiative", "dex_modifier"))
-
-    # Encumbrance: medium / heavy load adds an extra ACP layer on top
-    # of armor's. Speed reduction and Max-Dex caps from load are not
-    # yet wired (see dnd/engine/encumbrance.py docstring).
-    from .encumbrance import (
-        LOAD_ACP_PENALTY,
-        carried_weight as _carried,
-        load_category as _load_cat,
-    )
-    load_weight = _carried(character, registry)
-    load = _load_cat(load_weight, final_scores.get("str") or 0)
-    load_acp = LOAD_ACP_PENALTY.get(load, 0)
 
     # Skills: cumulative ranks + class skill bonus + ability modifier + ACP.
     class_skills = set(class_.level_1.class_skills)
@@ -1022,7 +1061,7 @@ def combatant_from_character(
         name=character.name,
         team=team,
         size=race.size,
-        speed=race.speed,
+        speed=_effective_speed(race.speed, armor_data, load),
         reach_class="tall",
         bases={
             "ac":        10,

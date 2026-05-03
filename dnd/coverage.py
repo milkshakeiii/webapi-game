@@ -243,7 +243,16 @@ FEATS: dict[str, Entry] = {
     "combat_reflexes":       (IMPLEMENTED,     "AoO limit = 1 + Dex (min 1) when feat present; throttled per-round in _do_aoo via Combatant.aoos_used_this_round"),
     "diehard":               (NOT_IMPLEMENTED, "act normally while dying"),
     "dodge":                 (IMPLEMENTED,     "+1 dodge AC"),
-    "empower_spell":         (NOT_IMPLEMENTED, "metamagic: +50% damage/heal at +2 spell level"),
+    "empower_spell":         (IMPLEMENTED,    "metamagic: ×1.5 to rolled damage/healing at +2 spell-slot level. Caster declares via cast args.metamagic"),
+    "maximize_spell":        (PARTIAL,        "metamagic: +3 spell-slot level. Damage/healing post-multiplied ×2 as a stand-in for 'all dice take max' (true max ≈ 1.7×)"),
+    "still_spell":           (IMPLEMENTED,    "metamagic: +1 spell-slot level. Skips somatic-component checks (no S → no grappled/two-handed restriction)"),
+    "silent_spell":          (IMPLEMENTED,    "metamagic: +1 spell-slot level. Skips verbal-component checks (no V → no silenced/deafened restriction)"),
+    "quicken_spell":         (PARTIAL,        "metamagic: +4 spell-slot level. Slot cost honored; cast-as-swift-action is not yet enforced (Turn.swift slot is stubbed)"),
+    "extend_spell":          (IMPLEMENTED,    "metamagic: +1 spell-slot level. Doubles computed duration via _expires_round(extend=True) when 'extend_spell' is in outcome.metamagic"),
+    "mounted_combat":        (IMPLEMENTED,    "Once a target with rider_id is hit, the rider rolls a Ride check (DC = attack_total). On success, hit is converted to miss in _do_attack"),
+    "spirited_charge":       (IMPLEMENTED,    "Doubles charge damage multiplier when mounted: ×3 with lance, ×2 otherwise. Set in _do_charge via charge_damage_multiplier in script_options"),
+    "ride_by_attack":        (PARTIAL,        "Feat declared and registered; the 'continue past target after charge' movement isn't yet wired into _do_charge (charge stops adjacent today)"),
+    "trample":               (PARTIAL,        "Feat declared and registered; mount-overrun-into-prone-deals-hooves not yet wired (overrun is a generic combat maneuver, lacks mount-feat hook)"),
     "endurance":             (NOT_IMPLEMENTED, "+4 to various endurance-related checks"),
     "eschew_materials":      (NOT_IMPLEMENTED, "skip cheap material components"),
     "great_fortitude":       (IMPLEMENTED,     "+2 fort save"),
@@ -280,6 +289,7 @@ SPELL_EFFECT_KINDS: dict[str, Entry] = {
     "buff_party":            (IMPLEMENTED, "AoE party buff"),
     "buff_target":           (IMPLEMENTED, "single-target buff with duration"),
     "charm":                 (IMPLEMENTED, "shift attitude/control via Will save"),
+    "dispel_magic":          (IMPLEMENTED, "1d20 + CL vs DC 11 + caster's CL; removes one ongoing spell-source's modifiers + tracked conditions"),
     "heal":                  (IMPLEMENTED, "restore HP"),
     "magic_missile":         (IMPLEMENTED, "auto-hit force damage with multi-missile"),
     "scaling_damage":        (IMPLEMENTED, "AoE damage scaling with caster level (e.g., fireball)"),
@@ -411,7 +421,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.movement_swim":          (OUT_OF_SCOPE,   "no aquatic subgame in v1"),
     "combat.movement_climb":         (OUT_OF_SCOPE,   "no 3D terrain in v1"),
     "combat.movement_burrow":        (OUT_OF_SCOPE,   "no 3D terrain in v1"),
-    "combat.mounted_combat":         (PARTIAL,        "Combatant.mount_id/rider_id link rider and mount; mount/dismount composite actions; rider position follows mount during _move_along; mounted-lance charge doubles damage. Not modeled: Ride skill checks for staying mounted, mount AI, mount must be larger than rider, Mounted Combat feat (negate hit on mount), Spirited Charge (3× lance), Trample, Ride-By Attack"),
+    "combat.mounted_combat":         (IMPLEMENTED,    "mount_id/rider_id link; mount/dismount composite actions; rider position follows mount in _move_along; mounted-lance charge ×2 damage (×3 with Spirited Charge feat); Mounted Combat feat lets rider negate hit-on-mount via Ride check (DC = attack roll). Trample / Ride-By Attack feats are PARTIAL (declared, partial wiring); mount AI on rider's turn deferred"),
     "combat.underwater_combat":      (OUT_OF_SCOPE,   "no aquatic subgame in v1"),
     "combat.squeezing":              (OUT_OF_SCOPE,   "v1 doesn't model tight-quarters movement"),
 
@@ -435,9 +445,9 @@ CORE_MECHANICS: dict[str, Entry] = {
     "magic.casting_defensively":     (IMPLEMENTED,    "DC 15 + spell level concentration; nat 1 fails"),
     "magic.concentration_on_damage": (IMPLEMENTED,    "DC 10 + damage + spell level concentration roll fired in _do_cast when AoO during a non-defensive cast deals damage; failure consumes slot and emits cast_failed"),
     "magic.concentration_grappled":  (IMPLEMENTED,    "DC 10 + 4 + spell level concentration roll on S-component cast while grappled; failure consumes slot. Uses flat +4 stand-in instead of looking up the actual grappler's CMB"),
-    "magic.dispel_magic":            (NOT_IMPLEMENTED, "caster level check vs target's CL"),
-    "magic.counterspell":            (NOT_IMPLEMENTED, "ready action with same/dispel + CL check"),
-    "magic.metamagic":               (NOT_IMPLEMENTED, "Empower/Maximize/Quicken/Still/Silent — none wired"),
+    "magic.dispel_magic":            (IMPLEMENTED,    "dispel_magic spell + _handle_dispel_magic: enumerates spell:* sources on target via active_spell_sources, rolls 1d20+CL vs DC 11+CL, on success calls remove_effects_from_source which clears both modifiers and tracked conditions"),
+    "magic.counterspell":            (NOT_IMPLEMENTED, "ready action with same/dispel + CL check — needs readied/triggered-action queue (deferred)"),
+    "magic.metamagic":               (PARTIAL,        "Empower (×1.5), Maximize (×2 stand-in for max-dice), Still, Silent, Extend, Quicken — slot-cost bumps applied; Empower/Maximize do post-process damage; Still/Silent skip component checks; Extend doubles duration; Quicken slot cost honored but cast-as-swift not enforced"),
 
     # ── Magic: spell areas & targeting ──────────────────────────────────
     "magic.target_personal":         (IMPLEMENTED,    "self-only spells (e.g., cat's grace)"),
@@ -469,7 +479,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     # ── Equipment & encumbrance ─────────────────────────────────────────
     "equipment.weapon_categories":   (IMPLEMENTED,    "weapon_category tagged on attack_options; Combatant.weapon_proficiency_categories holds the actor's allowed categories + specific weapon IDs; -4 attack penalty when wielding outside proficiencies (see _weapon_not_proficient in turn_executor)"),
     "equipment.weapon_special_properties": (PARTIAL, "JSONs carry properties (reach, double, brace, trip-bonus); rarely consulted at attack time"),
-    "equipment.encumbrance":         (PARTIAL,        "carried_weight + load_category in encumbrance.py; load (light/medium/heavy/overloaded) computed in combatant_from_character; medium adds -3 ACP, heavy adds -6 ACP to ACP-affected skills. Speed reduction and Max-Dex caps from encumbrance are NOT yet wired"),
+    "equipment.encumbrance":         (IMPLEMENTED,    "carried_weight + load_category in encumbrance.py; combatant_from_character applies medium/heavy ACP, Max-Dex cap (taking the more restrictive of armor and load), and speed reduction via effective_speed (worse-of-armor-or-load)"),
     "equipment.armor_donning_time":  (NOT_IMPLEMENTED, "no time-to-don model"),
 
     # ── Adventuring: vision, environment ────────────────────────────────

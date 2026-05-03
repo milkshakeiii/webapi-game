@@ -146,7 +146,7 @@ class TestLanceCharge(unittest.TestCase):
         target_hp_before = target.current_hp
         _do_attack(attacker, target, grid, Roller(seed=1), events_flagged,
                    label="lance_charge", encounter=enc,
-                   script_options={"charge_lance_double_damage": True})
+                   script_options={"charge_damage_multiplier": 2})
         flagged_damage = target_hp_before - target.current_hp
         # Same RNG seed → same hit roll, same damage roll → doubling
         # is visible cleanly.
@@ -156,8 +156,8 @@ class TestLanceCharge(unittest.TestCase):
                          if e.kind == "lance_charge")
         trace = atk_event.detail.get("trace") or []
         self.assertTrue(
-            any("doubled" in line for line in trace),
-            f"expected lance-doubled trace line; got {trace}",
+            any("×2" in line for line in trace),
+            f"expected mounted charge ×2 trace line; got {trace}",
         )
 
 
