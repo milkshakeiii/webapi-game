@@ -158,11 +158,11 @@ MONSTER_RACIAL_TRAITS: dict[str, Entry] = {
 
 CLASS_FEATURES_L1: dict[str, Entry] = {
     # Barbarian
-    "fast_movement":         (NOT_IMPLEMENTED, "+10 ft speed (light/no armor); engine doesn't customize speed per class"),
+    "fast_movement":         (IMPLEMENTED,    "+10 ft speed (light/no armor); applied as a 'speed'-target modifier in combatant_from_character, factored into _effective_speed"),
     "rage":                  (IMPLEMENTED,     "rage_start/rage_end composite actions; resource tracked"),
 
     # Bard
-    "bardic_knowledge":      (NOT_IMPLEMENTED, "+1/2 level on Knowledge checks"),
+    "bardic_knowledge":      (IMPLEMENTED,    "+1/2 level (min 1) untyped on every Knowledge skill; applied at combatant_from_character"),
     "bardic_performance":    (PARTIAL,         "Inspire Courage implemented; Countersong, Distraction, Fascinate not"),
     "cantrips_bard":         (NOT_IMPLEMENTED, "0-level spell list"),
 
@@ -175,15 +175,15 @@ CLASS_FEATURES_L1: dict[str, Entry] = {
 
     # Druid
     "nature_bond":            (NOT_IMPLEMENTED, "animal companion or domain choice"),
-    "nature_sense":           (NOT_IMPLEMENTED, "+2 Knowledge (nature) and Survival"),
-    "wild_empathy_druid":     (NOT_IMPLEMENTED, "diplomacy-style check vs animals"),
+    "nature_sense":           (IMPLEMENTED,    "+2 Knowledge (nature) and +2 Survival; applied at combatant_from_character"),
+    "wild_empathy_druid":     (PARTIAL,        "Diplomacy +druid_level applied (used vs animals; the 'vs animals' qualifier isn't enforced in v1)"),
     "orisons_druid":          (NOT_IMPLEMENTED, "0-level spell list"),
 
     # Fighter
     "fighter_bonus_combat_feat_1": (IMPLEMENTED, "extra combat feat slot at L1; selected via class_choices"),
 
     # Monk
-    "ac_bonus_monk":          (NOT_IMPLEMENTED, "+Wis to AC + class-level bonus, conditional on no armor"),
+    "ac_bonus_monk":          (IMPLEMENTED,    "+Wis to AC + monk_level/4; gated on armor.category != 'medium'/'heavy'. Wired in combatant_from_character"),
     "flurry_of_blows":        (NOT_IMPLEMENTED, "extra unarmed attacks at -2/-2"),
     "stunning_fist_1day":     (IMPLEMENTED,     "stunning_fist composite: declares + attacks; on hit target rolls Fort vs DC 10 + 1/2 level + Wis or stunned 1 round; use consumed regardless of hit"),
     "unarmed_strike":         (NOT_IMPLEMENTED, "improved unarmed strike auto-feat + scaling damage"),

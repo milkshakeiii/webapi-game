@@ -1250,6 +1250,74 @@ def combatant_from_character(
         # Stunning Fist: monk level + 1 (other classes can have it via feat).
         spell_slot_resources["stunning_fist_uses"] = monk_levels
 
+    # ── Class-feature passive modifiers ─────────────────────────────
+    druid_levels = cumulative.class_levels.get("druid", 0)
+    ranger_levels = cumulative.class_levels.get("ranger", 0)
+    rogue_levels = cumulative.class_levels.get("rogue", 0)
+
+    # Barbarian: Fast Movement (+10 ft) when not in heavy armor.
+    if barbarian_levels > 0:
+        wearing_heavy = (
+            armor_data is not None and armor_data.category == "heavy"
+        )
+        if not wearing_heavy:
+            coll.add(mod(10, "untyped", "speed", "fast_movement"))
+
+    # Bard: Bardic Knowledge (+1/2 level, min 1) to all Knowledge skills.
+    if bard_levels > 0:
+        bk = max(1, bard_levels // 2)
+        for k in ("knowledge_arcana", "knowledge_dungeoneering",
+                  "knowledge_engineering", "knowledge_geography",
+                  "knowledge_history", "knowledge_local",
+                  "knowledge_nature", "knowledge_nobility",
+                  "knowledge_planes", "knowledge_religion"):
+            coll.add(mod(bk, "untyped", f"skill:{k}", "bardic_knowledge"))
+
+    # Druid: Nature Sense (+2 Knowledge nature, +2 Survival).
+    if druid_levels > 0:
+        coll.add(mod(2, "untyped", "skill:knowledge_nature",
+                     "nature_sense"))
+        coll.add(mod(2, "untyped", "skill:survival", "nature_sense"))
+
+    # Ranger: Track (+1/2 level Survival when tracking).
+    # Modeled as a flat +1/2 level on Survival; the "when tracking"
+    # qualifier isn't enforced (most Survival uses in v1 are tracking).
+    if ranger_levels > 0:
+        track_bonus = max(1, ranger_levels // 2)
+        coll.add(mod(track_bonus, "untyped", "skill:survival", "track"))
+        # Wild Empathy: also folded into Diplomacy (used vs animals;
+        # qualifier not enforced).
+        coll.add(mod(ranger_levels, "untyped", "skill:diplomacy",
+                     "wild_empathy_ranger"))
+
+    # Druid: Wild Empathy (same idea).
+    if druid_levels > 0:
+        coll.add(mod(druid_levels, "untyped", "skill:diplomacy",
+                     "wild_empathy_druid"))
+
+    # Rogue: Trapfinding (+1/2 level Perception and Disable Device,
+    # 'for traps'; we apply unconditionally to those skills).
+    if rogue_levels > 0:
+        tf = max(1, rogue_levels // 2)
+        coll.add(mod(tf, "untyped", "skill:perception", "trapfinding"))
+        coll.add(mod(tf, "untyped", "skill:disable_device",
+                     "trapfinding"))
+
+    # Monk: AC Bonus (+Wis modifier to AC + class-level scaling at
+    # 4/8/etc.) when wearing no armor and not flat-footed.
+    # We approximate by adding the Wis bonus only when armor is "none".
+    if monk_levels > 0:
+        if armor_data is None or armor_data.category == "none":
+            wis_mod_ac = final_scores.modifier("wis")
+            if wis_mod_ac > 0:
+                coll.add(mod(wis_mod_ac, "untyped", "ac",
+                             "monk_ac_bonus"))
+            # Class-level AC bonus: +1 per 4 levels.
+            class_ac = monk_levels // 4
+            if class_ac > 0:
+                coll.add(mod(class_ac, "untyped", "ac",
+                             "monk_ac_class_bonus"))
+
     # Weapon proficiencies from class + multiclass + race. The set holds
     # category names ("simple", "martial") and/or specific weapon IDs.
     weapon_profs: set[str] = _parse_class_weapon_proficiencies(
@@ -1315,7 +1383,10 @@ def combatant_from_character(
         name=character.name,
         team=team,
         size=race.size,
-        speed=_effective_speed(race.speed, armor_data, load),
+        speed=_effective_speed(
+            race.speed + _compute(0, coll.for_target("speed")),
+            armor_data, load,
+        ),
         reach_class="tall",
         bases={
             "ac":        10,

@@ -204,8 +204,9 @@ class TestCombatantWithRacialTraits(unittest.TestCase):
         })
         char = create_character(req, REGISTRY)
         c = combatant_from_character(char, REGISTRY, (0, 0), "x")
-        # 1 rank + Wis +1 + class skill +3 + halfling keen +2 = 7
-        self.assertEqual(c.skill_total("perception"), 7)
+        # 1 rank + Wis +1 + class skill +3 + halfling keen +2 +
+        # rogue trapfinding +1 = 8
+        self.assertEqual(c.skill_total("perception"), 8)
 
     def test_halfling_save_bonus(self):
         req = CharacterRequest.from_dict({
