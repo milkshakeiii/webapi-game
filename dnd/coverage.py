@@ -339,7 +339,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.energy_damage":          (IMPLEMENTED,    "fire / cold / electricity / acid / sonic recognized in spells.apply_typed_damage; spell handlers (scaling_damage, magic_missile) read effect.damage_type and route through it. Spells: burning_hands, fireball, lightning_bolt, shocking_grasp, scorching_ray, cone_of_cold, acid_arrow, acid_splash"),
     "combat.energy_resistance":      (IMPLEMENTED,    "Combatant.energy_resistance: dict[damage_type, points-per-hit]; apply_typed_damage subtracts points before damage applies. Resistance caps at the damage amount (no negative damage)"),
     "combat.energy_immunity":        (IMPLEMENTED,    "Combatant.energy_immunity: set[damage_type]; apply_typed_damage drops damage to 0 with note='immune'"),
-    "combat.bleed_damage":           (PARTIAL,        "ferocity-bleed implemented in tick_round; no generic bleed-condition system"),
+    "combat.bleed_damage":           (IMPLEMENTED,    "Combatant.bleed (HP/round) applies in tick_round; immune for undead/constructs (is_immune_to_bleed); any healing stops it"),
     "combat.nonlethal_damage":       (NOT_IMPLEMENTED, "no separate nonlethal HP track"),
 
     # ── Combat: defenses, cover, concealment, flanking ───────────────────
@@ -370,26 +370,26 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.steal":                  (PARTIAL,        "composite 'steal' marks target with 'stolen_from' proxy; engine doesn't yet model carried-item slots"),
     "combat.sunder":                 (PARTIAL,        "composite 'sunder' marks target with 'weapon_broken' condition; weapon HP/hardness not modeled"),
     "combat.trip":                   (IMPLEMENTED,    "composite 'trip' applies prone on success; also fires automatically after a successful melee hit for creatures with the 'trip_attack' racial trait (wolf)"),
-    "combat.coup_de_grace":          (NOT_IMPLEMENTED, "auto-crit on helpless + Fort save vs death"),
-    "combat.massive_damage":         (NOT_IMPLEMENTED, "Fort save vs die at 50+ damage from one source"),
+    "combat.coup_de_grace":          (IMPLEMENTED,    "_do_coup_de_grace composite: full-round vs adjacent helpless / paralyzed / sleeping / unconscious / pinned target; deals weapon damage at the crit multiplier; target rolls Fort DC 10 + damage or dies. Provoking-AoO not modeled (mostly redundant — actor is already in melee)"),
+    "combat.massive_damage":         (IMPLEMENTED,    "_check_massive_damage fires after damage in _do_attack: 50+ damage from one source → Fort DC 15 or die. Bypasses dying-threshold rules"),
     "combat.aid_another":            (PARTIAL,         "composite 'aid_another' with mode='attack'|'ac'; DC 10 attack roll → +2 (circumstance) attack OR +2 dodge AC for 1 round; 'vs that specific foe' restriction not modeled (bonus is universal)"),
-    "combat.fight_defensively":      (NOT_IMPLEMENTED, "-4 attack for +2 dodge AC"),
+    "combat.fight_defensively":      (IMPLEMENTED,    "_do_fight_defensively composite: -4 to attack, +2 dodge AC for one round (expires next round). Single attack against the named target"),
     "combat.total_defense":          (IMPLEMENTED,    "+4 dodge AC for 1 round (expires_round = current_round + 1); via _do_standard"),
 
     # ── Combat: charge & full-round movement ─────────────────────────────
     "combat.charge":                 (PARTIAL,        "min-distance, straight-line, lane-clear, end-adjacent enforced; difficult terrain not (engine has no terrain types)"),
-    "combat.partial_charge":         (NOT_IMPLEMENTED, "charge as standard action when full-round unavailable"),
+    "combat.partial_charge":         (IMPLEMENTED,    "_do_partial_charge composite: delegates to _do_charge with max_squares_override = 1× speed (regular charge uses 2× speed)"),
     "combat.withdraw":               (IMPLEMENTED,    "full-round, 2× speed in a direction; first square does not provoke AoO (skip_aoo_first_step in _move_along)"),
     "combat.run":                    (IMPLEMENTED,    "composite 'run': 4× speed in a straight line, loses Dex bonus to AC for the round (added as -dex_to_ac modifier expiring next round)"),
 
     # ── Combat: ranged attacks ──────────────────────────────────────────
-    "combat.range_increments":       (PARTIAL,         "-2 attack per increment via _range_increment_penalty in _do_attack; max-range cap (5/10 increments) not yet enforced — long shots are punished but not forbidden"),
+    "combat.range_increments":       (IMPLEMENTED,    "-2 attack per increment via _range_increment_penalty; max-range cap enforced via _out_of_max_range — thrown weapons (can_throw=true) cap at 5 increments, projectiles at 10. Out-of-range attacks skip with reason='target beyond maximum range'"),
     "combat.firing_into_melee":      (IMPLEMENTED,    "-4 attack via _firing_into_melee_penalty in _do_attack; negated by Precise Shot feat. Detection: any other combatant adjacent to target."),
     "combat.point_blank_shot":       (IMPLEMENTED,    "feat applies +1 attack/damage to ranged via attack:ranged modifier"),
 
     # ── Combat: weapon use & wielding ───────────────────────────────────
     "combat.weapon_proficiency_penalty": (IMPLEMENTED,    "-4 attack via _weapon_not_proficient in _do_attack; classes' weapon_proficiencies parsed into Combatant.weapon_proficiency_categories at construction (categories or specific weapon IDs); racial weapon familiarity (orc/elf/halfling) folded in"),
-    "combat.armor_proficiency_penalty": (NOT_IMPLEMENTED, "ACP applies to attack rolls without armor proficiency"),
+    "combat.armor_proficiency_penalty": (IMPLEMENTED,    "Combatant.armor_proficiency_categories populated by parsing class data; _armor_not_proficient_penalty layers ACP onto attack rolls when wearing armor / shield outside proficiencies (stacks, e.g., chainmail -5 + heavy shield -2 = -7)"),
     "combat.armor_check_penalty":    (IMPLEMENTED,    "ACP applied to relevant skill checks via combatant_from_character"),
     "combat.armor_max_dex":          (IMPLEMENTED,    "Dex bonus to AC capped by armor's max_dex_bonus"),
     "combat.two_handed_str_bonus":   (IMPLEMENTED,    "1.5×Str damage when wield='two_handed'"),

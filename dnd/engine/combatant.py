@@ -123,6 +123,24 @@ class Combatant:
     # -4 attack penalty when wielding a non-proficient weapon.
     weapon_proficiency_categories: set[str] = field(default_factory=set)
 
+    # Armor proficiency: which armor categories the actor can wear
+    # without penalty. Categories: "light", "medium", "heavy",
+    # "shields_normal", "shield_tower". Empty set = "not modeled here"
+    # (monsters / natural-armor creatures). Read by
+    # ``turn_executor._armor_not_proficient`` to apply the armor-check
+    # penalty as a flat attack penalty.
+    armor_proficiency_categories: set[str] = field(default_factory=set)
+
+    # Generic bleed damage: HP lost per round (top of the actor's
+    # turn) until healed. Stops when the combatant receives any
+    # healing or successful Heal-skill DC 15 stabilization. Set
+    # externally by spell handlers / weapon special properties.
+    # ``ferocity`` and ``dying`` bleed are tracked separately in
+    # tick_round (those are PF1 RAW, this is the generic
+    # condition-based bleed for things like wounding weapons,
+    # bleeding critical, etc.).
+    bleed: int = 0
+
     # Fast healing: HP automatically restored each round (capped by
     # max_hp). Applied in ``tick_round``.
     fast_healing: int = 0
@@ -456,11 +474,27 @@ class Combatant:
             if self.current_hp <= self.death_threshold:
                 self.add_condition("dead")
                 self.remove_condition("dying")
+        # Generic bleed damage. PF1 RAW: stops when the creature
+        # receives any healing — but tick_round runs healing at the
+        # end of the turn, so bleed applies first this round (it
+        # stops next round once the heal lands).
+        if (
+            self.bleed > 0
+            and "dead" not in self.conditions
+            and not bleed_immune
+        ):
+            self.current_hp -= self.bleed
+            if self.current_hp <= self.death_threshold:
+                self.add_condition("dead")
+                self.bleed = 0
         # Per-round healing.
         if "dead" not in self.conditions and self.current_hp < self.max_hp:
             heal = self.fast_healing + self.regeneration
             if heal > 0:
                 self.current_hp = min(self.max_hp, self.current_hp + heal)
+                # Any healing stops bleed.
+                if self.bleed > 0:
+                    self.bleed = 0
         return expired
 
     def _read_con_score(self) -> int:
@@ -643,6 +677,49 @@ def _parse_class_weapon_proficiencies(
             if idx == -1:
                 break
             remaining = remaining[idx + 1:]
+    return out
+
+
+def _parse_class_armor_proficiencies(prof_string: str) -> set[str]:
+    """Translate a class-data ``armor_proficiencies`` string into a set
+    of armor-category tokens.
+
+    Tokens:
+      - ``"light"``, ``"medium"``, ``"heavy"`` for armor
+      - ``"shields_normal"`` for non-tower shields
+      - ``"shield_tower"`` for tower shields
+      - ``"_modeled_"`` sentinel — included whenever a class string is
+        provided (even if it expanded to nothing). Distinguishes
+        "modeled with no proficiencies" (wizard, ``"none"``) from
+        "not modeled" (monster / empty string).
+    """
+    out: set[str] = set()
+    if not prof_string:
+        return out  # not modeled
+    s = prof_string.strip()
+    out.add("_modeled_")
+    if s == "none":
+        return out
+    if s == "all_armor_shields_including_tower":
+        out.update({"light", "medium", "heavy", "shields_normal",
+                    "shield_tower"})
+        return out
+    if s == "light_no_shields":
+        out.add("light")
+        return out
+    if s == "light_shields_no_tower":
+        out.update({"light", "shields_normal"})
+        return out
+    if s == "light_medium_shields_no_tower":
+        out.update({"light", "medium", "shields_normal"})
+        return out
+    if s == "light_medium_no_metal_shields_no_metal_no_tower":
+        # Druid: light & medium (non-metal) + shields (non-metal,
+        # non-tower). We don't track metal/non-metal yet — approximate
+        # as light + medium + non-tower shields.
+        out.update({"light", "medium", "shields_normal"})
+        return out
+    # Fallback: leave empty (caller treats as "not modeled" → no penalty).
     return out
 
 
@@ -1071,6 +1148,21 @@ def combatant_from_character(
         )
     weapon_profs |= _parse_racial_weapon_familiarity(race)
 
+    # Armor proficiencies from class + multiclass.
+    armor_profs: set[str] = _parse_class_armor_proficiencies(
+        class_.level_1.armor_proficiencies,
+    )
+    for cid in cumulative.class_levels:
+        if cid == class_.id:
+            continue
+        try:
+            other = registry.get_class(cid)
+        except Exception:
+            continue
+        armor_profs |= _parse_class_armor_proficiencies(
+            other.level_1.armor_proficiencies,
+        )
+
     return Combatant(
         id=_new_id(),
         name=character.name,
@@ -1100,4 +1192,5 @@ def combatant_from_character(
         castable_spells=castable,
         death_threshold=-int(final_scores.get("con") or 10),
         weapon_proficiency_categories=weapon_profs,
+        armor_proficiency_categories=armor_profs,
     )

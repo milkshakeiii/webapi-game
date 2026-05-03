@@ -176,6 +176,15 @@ def _execute_composite(
     if composite == "trample":
         _do_trample(actor, args, encounter, grid, roller, ns, events)
         return
+    if composite == "coup_de_grace":
+        _do_coup_de_grace(actor, args, encounter, grid, roller, ns, events)
+        return
+    if composite == "partial_charge":
+        _do_partial_charge(actor, args, encounter, grid, roller, ns, events)
+        return
+    if composite == "fight_defensively":
+        _do_fight_defensively(actor, args, encounter, grid, roller, ns, events)
+        return
     if composite == "cast":
         _do_cast(actor, args, encounter, grid, roller, ns, events)
         return
@@ -595,7 +604,11 @@ def _do_charge(
         return
 
     speed_squares = actor.speed // 5
-    charge_squares = speed_squares * 2  # charge = up to 2x speed
+    # Partial charge uses 1× speed; regular charge uses 2× speed.
+    if "max_squares_override" in args:
+        charge_squares = int(args["max_squares_override"])
+    else:
+        charge_squares = speed_squares * 2  # charge = up to 2x speed
 
     line = _straight_line_charge_path(
         actor.position, target.position, charge_squares, grid,
@@ -1058,6 +1071,140 @@ def _do_dismount(
     }))
 
 
+def _do_coup_de_grace(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """PF1 coup de grace: full-round action against a helpless target.
+
+    The attack auto-hits, is automatically a critical, and the target
+    must make a Fortitude save (DC 10 + damage dealt) or die outright.
+
+    Provokes AoOs from threateners (handled implicitly — the actor's
+    full-round action shouldn't be triggering a movement step here, so
+    we just resolve the attack).
+    """
+    target = _resolve_target(args.get("target"), ns)
+    if target is None or not isinstance(target, Combatant):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "coup_de_grace: no target"}))
+        return
+    if not grid.is_adjacent(actor, target):
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "coup_de_grace: target not adjacent",
+        }))
+        return
+    is_helpless = bool(target.conditions & {
+        "helpless", "paralyzed", "sleeping", "unconscious", "pinned",
+    })
+    if not is_helpless:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "coup_de_grace: target not helpless",
+        }))
+        return
+    if not actor.attack_options:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "coup_de_grace: no attack options"}))
+        return
+    chosen = actor.attack_options[0]
+    # Roll damage as if a critical hit (apply crit multiplier).
+    crit_mult = int(chosen.get("crit_multiplier", 2))
+    dmg_dice = str(chosen["damage"])
+    dmg_bonus = int(chosen.get("damage_bonus", 0))
+    total_damage = 0
+    for _ in range(crit_mult):
+        r = roller.roll(dmg_dice)
+        total_damage += r.total
+    total_damage += dmg_bonus * crit_mult
+    target.take_damage(max(0, total_damage))
+    _apply_post_damage_state(target)
+    # Fortitude save vs DC 10 + damage.
+    save_dc = 10 + total_damage
+    save_total = target.save("fort")
+    sr = roller.roll("1d20")
+    nat = sr.terms[0].rolls[0]
+    save_passed = (nat == 20) or (nat != 1 and nat + save_total >= save_dc)
+    killed_by_save = False
+    if not save_passed:
+        target.add_condition("dead")
+        killed_by_save = True
+    events.append(TurnEvent(actor.id, "coup_de_grace", {
+        "target_id": target.id,
+        "damage": total_damage,
+        "save_dc": save_dc,
+        "save_natural": nat,
+        "save_total": nat + save_total,
+        "save_passed": save_passed,
+        "killed_by_save": killed_by_save,
+    }))
+
+
+def _do_partial_charge(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """PF1 partial charge: a charge limited to the actor's normal speed
+    (instead of 2× speed). Used as a standard action when a full-round
+    isn't available (disabled, staggered, etc.).
+
+    Otherwise identical to a regular charge — same target / line / lane
+    rules. We delegate to ``_do_charge`` with a ``max_squares_override``
+    arg.
+    """
+    args = dict(args)
+    args["max_squares_override"] = actor.speed // 5  # 1× speed
+    _do_charge(actor, args, encounter, grid, roller, ns, events)
+
+
+def _do_fight_defensively(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """PF1 fight defensively: -4 attack for +2 dodge AC for one round.
+
+    Differs from total_defense: with fight_defensively you still get
+    to attack (with the -4 penalty); total_defense forfeits attacks.
+
+    For v1: makes a single attack with -4 to-hit and grants a +2 dodge
+    AC modifier expiring at the start of the actor's next turn.
+    """
+    target = _resolve_target(args.get("target"), ns)
+    if target is None or not isinstance(target, Combatant):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "fight_defensively: no target"}))
+        return
+    cur_round = encounter.round_number if encounter else 1
+    src = "fight_defensively"
+    actor.modifiers.remove_by_source(src)
+    actor.modifiers.add(Modifier(
+        value=2, type="dodge", target="ac",
+        source=src, expires_round=cur_round + 1,
+    ))
+    events.append(TurnEvent(actor.id, "fight_defensively", {
+        "ac_bonus": 2, "expires_round": cur_round + 1,
+    }))
+    # Single attack with -4 to-hit.
+    _do_attack(actor, target, grid, roller, events,
+               attack_bonus_delta=-4, label="defensive_attack",
+               encounter=encounter,
+               script_options=args.get("options") or {})
+
+
 def _do_trample(
     actor: Combatant,
     args: dict,
@@ -1234,6 +1381,11 @@ def _do_attack(
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "total cover blocks line of effect"}))
         return
+    # Beyond max range: 5 increments for thrown, 10 for projectile.
+    if _out_of_max_range(chosen, actor, target, grid, is_ranged):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "target beyond maximum range"}))
+        return
 
     # Sneak attack precision damage if attacker qualifies.
     precision_dice = _sneak_attack_dice(actor, target, grid, encounter)
@@ -1310,6 +1462,9 @@ def _do_attack(
     # the cached proficient categories on the combatant against the
     # chosen weapon's category (when known).
     nonprof_penalty = -4 if _weapon_not_proficient(actor, chosen) else 0
+    # Armor / shield proficiency: ACP applies to attack rolls when the
+    # wearer lacks proficiency with the armor or shield equipped.
+    armor_nonprof_penalty = _armor_not_proficient_penalty(actor)
 
     # Situational AC bonuses (e.g., +4 dodge AC vs giants from
     # dwarven defensive_training): include qualifier-matched modifiers
@@ -1348,6 +1503,7 @@ def _do_attack(
             + prone_target_modifier
             + helpless_bonus
             + nonprof_penalty
+            + armor_nonprof_penalty
             - ac_situational_bonus  # subtracted because it makes the target harder to hit
             - cover_bonus
         ),
@@ -1449,7 +1605,12 @@ def _do_attack(
                 ],
             )
         target.take_damage(outcome.damage)
+        massive_damage_check = _check_massive_damage(
+            target, outcome.damage, roller,
+        )
         _apply_post_damage_state(target)
+    else:
+        massive_damage_check = None
     # Stunning Fist rider: if the attacker has declared a stunning_fist
     # this turn and the attack hit, the target rolls a Fort save vs the
     # cached DC; on failure, target is stunned 1 round.
@@ -1488,6 +1649,9 @@ def _do_attack(
                                 stunning_fist_event))
     if trip_event is not None:
         events.append(TurnEvent(actor.id, "trip_on_hit", trip_event))
+    if massive_damage_check is not None:
+        events.append(TurnEvent(actor.id, "massive_damage",
+                                massive_damage_check[1]))
 
 
 # ---------------------------------------------------------------------------
@@ -2922,6 +3086,47 @@ def _has_dex_denied(target: Combatant) -> bool:
     return bool(target.conditions & _DEX_DENIED_CONDITIONS)
 
 
+def _armor_not_proficient_penalty(actor: Combatant) -> int:
+    """Return the attack-roll penalty from wearing armor / shield the
+    actor isn't proficient with.
+
+    PF1 RAW: a non-proficient wearer takes the armor-check penalty
+    (ACP) on attack rolls and on Strength/Dex-based skill checks.
+    Skill ACP is already applied via combatant_from_character; this
+    helper layers the same penalty onto attack rolls.
+    """
+    if actor.template_kind != "character" or actor.template is None:
+        return 0
+    profs = actor.armor_proficiency_categories
+    if not profs:
+        return 0  # not modeled — no penalty
+    from .content import default_registry
+    registry = default_registry()
+    penalty = 0
+    armor_id = getattr(actor.template, "equipped_armor", None)
+    if armor_id and armor_id != "none":
+        try:
+            armor = registry.get_armor(armor_id)
+        except Exception:
+            armor = None
+        if armor is not None and armor.category not in ("none",) and \
+                armor.category not in profs:
+            penalty += int(armor.armor_check_penalty)  # negative or zero
+    shield_id = getattr(actor.template, "equipped_shield", None)
+    if shield_id:
+        try:
+            shield = registry.get_shield(shield_id)
+        except Exception:
+            shield = None
+        if shield is not None:
+            shield_token = (
+                "shield_tower" if shield.is_tower else "shields_normal"
+            )
+            if shield_token not in profs:
+                penalty += int(shield.armor_check_penalty)
+    return penalty
+
+
 def _weapon_not_proficient(actor: Combatant, chosen: dict) -> bool:
     """True if the actor lacks proficiency with the weapon being used.
 
@@ -2999,6 +3204,39 @@ def _range_increment_penalty(
     return -2 * max(0, increments - 1)
 
 
+def _out_of_max_range(
+    chosen: dict,
+    actor: Combatant,
+    target: Combatant,
+    grid: Grid | None,
+    is_ranged: bool,
+) -> bool:
+    """True when the target is beyond the weapon's maximum range.
+
+    PF1 RAW: thrown weapons cap at 5 range increments; projectile
+    weapons (bows, crossbows, slings) at 10 increments. We
+    distinguish via ``can_throw`` on the underlying Weapon (default to
+    10 for projectiles, 5 for thrown).
+    """
+    if not is_ranged or grid is None:
+        return False
+    rinc_ft = int(chosen.get("range_increment") or 0)
+    if rinc_ft <= 0:
+        return False
+    distance_ft = grid.distance_between(actor, target) * 5
+    weapon_id = chosen.get("weapon_id")
+    max_increments = 10  # default to projectile cap
+    if weapon_id:
+        from .content import default_registry
+        try:
+            w = default_registry().get_weapon(weapon_id)
+            if w.can_throw:
+                max_increments = 5
+        except Exception:
+            pass
+    return distance_ft > rinc_ft * max_increments
+
+
 def _flanking_attack_bonus(
     actor: Combatant,
     target: Combatant,
@@ -3059,6 +3297,35 @@ def _has_racial_trait(target: Combatant, trait_id: str) -> bool:
     return any(
         isinstance(t, dict) and t.get("id") == trait_id for t in traits
     )
+
+
+def _check_massive_damage(
+    target: Combatant, damage: int, roller: Roller,
+) -> tuple[bool, dict] | None:
+    """PF1 massive damage rule: 50+ damage from a single source forces
+    a Fortitude save (DC 15). Failure = death; the dying-threshold
+    rules are bypassed.
+
+    Returns ``None`` if the threshold isn't met. Otherwise returns
+    ``(saved, detail)`` where ``saved`` is True/False and ``detail``
+    is a trace dict.
+    """
+    if damage < 50:
+        return None
+    if "dead" in target.conditions:
+        return None  # already dead — skip
+    save_total = target.save("fort")
+    r = roller.roll("1d20")
+    nat = r.terms[0].rolls[0]
+    save_passed = (nat == 20) or (nat != 1 and nat + save_total >= 15)
+    detail = {
+        "damage": damage, "save_dc": 15,
+        "save_natural": nat, "save_total": nat + save_total,
+        "save_passed": save_passed,
+    }
+    if not save_passed:
+        target.add_condition("dead")
+    return save_passed, detail
 
 
 def _apply_post_damage_state(target: Combatant) -> None:
