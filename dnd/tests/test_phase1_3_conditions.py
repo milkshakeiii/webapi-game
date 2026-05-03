@@ -78,7 +78,7 @@ class TestInvisible(unittest.TestCase):
 
 
 class TestIncorporeal(unittest.TestCase):
-    def test_monster_with_incorporeal_subtype_gets_concealment_50(self):
+    def test_monster_with_incorporeal_subtype_gets_incorporeal_flag(self):
         # We don't have a CRB ghost yet, so synthesize a Monster
         # with the incorporeal subtype manually.
         from dnd.engine.content import Monster
@@ -103,7 +103,10 @@ class TestIncorporeal(unittest.TestCase):
             permanent_conditions=[],
         )
         c = combatant_from_monster(ghost, (0, 0), "x")
-        self.assertEqual(c.concealment, 50)
+        self.assertTrue(c.incorporeal)
+        # Concealment is no longer auto-set for incorporeal — the
+        # tag-aware miss check in _do_attack handles the 50% directly.
+        self.assertEqual(c.concealment, 0)
 
 
 # ---------------------------------------------------------------------------

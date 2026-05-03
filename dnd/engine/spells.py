@@ -171,20 +171,49 @@ _ENERGY_DAMAGE_TYPES: frozenset[str] = frozenset({
 })
 
 
+def _spell_attack_tags(spell, damage_type: str | None) -> frozenset[str]:
+    """Build the attack-tag set for a spell-driven damage instance.
+
+    Spells are inherently magical, so the result always contains
+    ``"magic"``. The damage type is added as a tag verbatim
+    (``"force"``, ``"fire"``, etc.) and any spell descriptors
+    (``"force"``, ``"holy"``, ``"good"``, ``"evil"``, ``"law"``,
+    ``"chaos"``) are added too — descriptors map directly onto the
+    DR-bypass and incorporeal-resolution tag namespace.
+    """
+    tags: set[str] = {"magic"}
+    if damage_type:
+        tags.add(damage_type.lower())
+    for d in getattr(spell, "descriptors", None) or []:
+        tags.add(str(d).lower())
+    return frozenset(tags)
+
+
 def apply_typed_damage(
     target: Combatant, amount: int, damage_type: str | None,
+    *, attack_tags: frozenset[str] | None = None, roller=None,
 ) -> tuple[int, str | None]:
     """Apply ``amount`` damage to ``target``, honoring energy
-    immunity / resistance when ``damage_type`` is an energy type.
+    immunity / resistance when ``damage_type`` is an energy type and
+    incorporeal-target rules when applicable.
 
     Returns ``(applied, note)`` — applied is the amount that actually
     reduced HP; note is a human-readable trace ("immune", "resisted N",
-    or None for normal damage).
+    "incorporeal_immune", "incorporeal_50pct_miss", or None for normal
+    damage).
 
-    Non-energy damage_types and ``None`` are passed through unchanged.
+    Spells should pass ``attack_tags`` containing at least ``"magic"``
+    (since spells are magical by RAW) plus any descriptor tags
+    (``"force"``, ``"holy"``, etc.). For incorporeal targets:
+    non-magical attacks miss outright; force / ghost-touch attacks
+    apply normally; other magical attacks roll a 50% miss check.
+
+    Non-energy damage_types and ``None`` are passed through unchanged
+    (energy/incorporeal checks excepted).
     """
     if amount <= 0:
         return 0, None
+    tags = attack_tags or frozenset()
     note: str | None = None
     if damage_type and damage_type in _ENERGY_DAMAGE_TYPES:
         if damage_type in target.energy_immunity:
@@ -194,6 +223,22 @@ def apply_typed_damage(
             absorbed = min(resist, amount)
             amount = max(0, amount - resist)
             note = f"resisted {absorbed}"
+    # Incorporeal target rules.
+    if amount > 0 and getattr(target, "incorporeal", False):
+        is_force = (
+            "force" in tags
+            or (damage_type is not None and damage_type.lower() == "force")
+        )
+        is_ghost_touch = "ghost_touch" in tags
+        if is_force or is_ghost_touch:
+            pass  # passes through
+        elif "magic" not in tags:
+            return 0, "incorporeal_immune"
+        elif roller is not None:
+            r = roller.roll("1d100")
+            val = r.terms[0].rolls[0] if r.terms else int(r.total)
+            if val <= 50:
+                return 0, "incorporeal_50pct_miss"
     if amount > 0:
         target.take_damage(amount, damage_type=damage_type)
     return amount, note
@@ -498,7 +543,11 @@ def _handle_magic_missile(
         total_damage += r.total
         out.log.append(f"  missile {i+1}: {r.breakdown}")
     damage_type = str(eff.get("damage_type", "force")) or None
-    applied, energy_note = apply_typed_damage(target, total_damage, damage_type)
+    spell_tags = _spell_attack_tags(spell, damage_type)
+    applied, energy_note = apply_typed_damage(
+        target, total_damage, damage_type,
+        attack_tags=spell_tags, roller=roller,
+    )
     if target.current_hp <= 0:
         target.add_condition("dying")
     if target.current_hp <= -10:
@@ -559,7 +608,11 @@ def _handle_scaling_damage(
         elif passed and semantic in ("negates", "harmless_negates"):
             final = 0
     damage_type = str(eff.get("damage_type", "")) or None
-    applied, energy_note = apply_typed_damage(target, final, damage_type)
+    spell_tags = _spell_attack_tags(spell, damage_type)
+    applied, energy_note = apply_typed_damage(
+        target, final, damage_type,
+        attack_tags=spell_tags, roller=roller,
+    )
     if target.current_hp <= 0:
         target.add_condition("dying")
     if target.current_hp <= -10:

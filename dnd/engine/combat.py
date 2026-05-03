@@ -33,6 +33,13 @@ class AttackProfile:
     ``precision_damage_dice`` (e.g. ``"3d6"``) is added on hit but does
     NOT multiply on a crit (PF1 RAW). Used for Sneak Attack and similar
     precision sources. Empty string means no precision damage.
+
+    ``attack_tags`` carry properties that mediate special-defense
+    interactions: ``magic``, ``force``, ``ghost_touch``, ``silver``,
+    ``cold_iron``, ``adamantine``, ``holy`` / ``unholy`` /
+    ``lawful`` / ``chaotic``. They drive DR bypass (alongside
+    ``damage_type``) and incorporeal-target resolution (immunity vs
+    non-magic, free passage for force / ghost-touch).
     """
 
     attack_bonus: int
@@ -43,6 +50,7 @@ class AttackProfile:
     damage_type: str = ""     # e.g., "S", "P", "B", "P/S", "B/P/S"
     name: str = ""            # display label, e.g., "longsword"
     precision_damage_dice: str = ""
+    attack_tags: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass(frozen=True)
@@ -100,24 +108,26 @@ def _ac_for_situation(defense: DefenseProfile, situation: str) -> int:
     raise ValueError(f"unknown ac situation {situation!r}; expected normal/touch/flat_footed")
 
 
-def _bypass_dr(damage_type: str, bypass) -> bool:
-    """Does ``damage_type`` bypass the listed DR keywords?
+def _bypass_dr(damage_type: str, bypass, attack_tags: frozenset[str] = frozenset()) -> bool:
+    """Does ``damage_type`` (plus optional attack tags) bypass DR?
 
     DR-bypass keywords use full words ("slashing", "piercing",
     "bludgeoning", "magic", "silver", "cold_iron", "adamantine",
     "good", "lawful", "epic", etc). Damage-type strings use
     abbreviations ("S", "P", "B") and may include multiple options
-    separated by '/'.
+    separated by '/'. ``attack_tags`` carry properties that aren't
+    physical damage types — magic enhancement, alignment, material —
+    and the bypass check unions both sources before matching.
 
     Two shapes are accepted for backwards compatibility:
 
     - **flat OR-set** (legacy): a single ``frozenset`` / iterable of
-      keywords. Bypass succeeds if ANY damage-type matches ANY keyword.
+      keywords. Bypass succeeds if ANY damage-type/tag matches ANY keyword.
       Used for simple DR like "DR 10/silver" or "DR 10/silver or magic".
 
     - **AND of OR-groups**: a tuple/list of frozensets, each an
       OR-group. Bypass succeeds only when EVERY group is matched by
-      some damage-type. Used for "DR 10/silver and magic" → the
+      some damage-type/tag. Used for "DR 10/silver and magic" → the
       attack must be silver AND magic to bypass.
 
     Detection: if ``bypass`` is empty, treat as flat. Otherwise, look
@@ -126,6 +136,7 @@ def _bypass_dr(damage_type: str, bypass) -> bool:
     """
     type_map = {"S": "slashing", "P": "piercing", "B": "bludgeoning"}
     types = {type_map.get(t.strip(), t.strip().lower()) for t in damage_type.split("/")}
+    types |= {t.lower() for t in attack_tags}
     if not bypass:
         return False
     # Detect shape.
@@ -141,12 +152,15 @@ def _bypass_dr(damage_type: str, bypass) -> bool:
     return True
 
 
-def _apply_dr(damage: int, defense: DefenseProfile, damage_type: str) -> tuple[int, int]:
+def _apply_dr(
+    damage: int, defense: DefenseProfile, damage_type: str,
+    attack_tags: frozenset[str] = frozenset(),
+) -> tuple[int, int]:
     """Return ``(final_damage, absorbed)`` after applying any DR."""
     if damage <= 0 or defense.dr is None:
         return max(0, damage), 0
     amount, bypass = defense.dr
-    if _bypass_dr(damage_type, bypass):
+    if _bypass_dr(damage_type, bypass, attack_tags):
         return damage, 0
     absorbed = min(amount, damage)
     return damage - absorbed, absorbed
@@ -288,7 +302,9 @@ def resolve_attack(
         )
         raw_damage += pdmg
 
-    final_damage, absorbed = _apply_dr(raw_damage, defense, attack.damage_type)
+    final_damage, absorbed = _apply_dr(
+        raw_damage, defense, attack.damage_type, attack.attack_tags,
+    )
     if absorbed:
         log.append(f"DR absorbed {absorbed}")
 

@@ -1957,6 +1957,8 @@ def _do_attack(
     # ranged only).
     cover_bonus = _cover_ac_bonus(actor, target, grid, is_ranged)
 
+    weapon_tags = _weapon_attack_tags(actor, chosen)
+
     profile = AttackProfile(
         attack_bonus=(
             int(chosen["attack_bonus"])
@@ -1989,6 +1991,7 @@ def _do_attack(
         damage_type=str(chosen.get("damage_type", "")),
         name=str(chosen.get("name", "weapon")),
         precision_damage_dice=precision_dice,
+        attack_tags=weapon_tags,
     )
     defense = target.defense_profile()
     outcome: AttackOutcome = resolve_attack(
@@ -2059,6 +2062,41 @@ def _do_attack(
                     f"{target.concealment} — miss",
                 ],
             )
+    # Incorporeal target resolution: non-magical attacks miss outright
+    # (immune); force / ghost-touch attacks pass through; any other
+    # magical attack rolls a 50% miss (RAW: "50% chance to ignore
+    # damage from a corporeal source"). Force damage is identified by
+    # damage_type == "force" OR an explicit "force" attack tag.
+    if outcome.hit and getattr(target, "incorporeal", False):
+        from dataclasses import replace as _replace
+        is_force = (
+            "force" in weapon_tags
+            or str(chosen.get("damage_type", "")).lower() == "force"
+        )
+        is_ghost_touch = "ghost_touch" in weapon_tags
+        if is_force or is_ghost_touch:
+            pass  # incorporeal lets force/ghost-touch through unchanged
+        elif "magic" not in weapon_tags:
+            outcome = _replace(
+                outcome,
+                hit=False, crit=False,
+                damage=0, damage_dealt_pre_dr=0, dr_absorbed=0,
+                log=outcome.log + [
+                    "incorporeal: non-magical attack — full immunity",
+                ],
+            )
+        else:
+            inc_roll = roller.roll("1d100")
+            if inc_roll.total <= 50:
+                outcome = _replace(
+                    outcome,
+                    hit=False, crit=False,
+                    damage=0, damage_dealt_pre_dr=0, dr_absorbed=0,
+                    log=outcome.log + [
+                        f"incorporeal: rolled {inc_roll.total}/100 ≤ 50 "
+                        f"— magical attack ignored",
+                    ],
+                )
     if outcome.hit and outcome.damage > 0:
         # Mounted charge damage multiplier (lance: ×2; lance + Spirited
         # Charge: ×3; non-lance + Spirited Charge: ×2).
@@ -4041,6 +4079,35 @@ _DEX_DENIED_CONDITIONS = frozenset({
     "flat_footed", "helpless", "paralyzed", "stunned", "pinned",
     "cowering", "blinded", "prone", "sleeping", "petrified",
 })
+
+
+def _weapon_attack_tags(actor: Combatant, chosen: dict) -> frozenset[str]:
+    """Compute PF1 attack tags for a weapon attack.
+
+    Tags drive DR bypass and incorporeal/special-defense interactions.
+    Sources, in order:
+      1. ``chosen.get("attack_tags")`` — explicit tag list on the
+         attack option (used by natural attacks that are inherently
+         magical, e.g., outsider claws).
+      2. Held-item ``properties``: ``enhancement_bonus`` > 0 implies
+         "magic"; ``special_abilities`` (e.g. ghost_touch, holy,
+         flaming) each become tags AND imply "magic"; ``material``
+         (silver / cold_iron / adamantine) becomes a tag.
+    """
+    tags: set[str] = set(t.lower() for t in (chosen.get("attack_tags") or []))
+    weapon = actor.held_items.get("main_hand")
+    if weapon is not None:
+        props = getattr(weapon, "properties", None) or {}
+        if int(props.get("enhancement_bonus", 0) or 0) > 0:
+            tags.add("magic")
+        for sa in props.get("special_abilities") or []:
+            sa_str = str(sa).lower()
+            tags.add(sa_str)
+            tags.add("magic")  # any special ability is by definition a magical weapon
+        material = props.get("material")
+        if material:
+            tags.add(str(material).lower())
+    return frozenset(tags)
 
 
 def _has_dex_denied(target: Combatant) -> bool:

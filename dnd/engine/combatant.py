@@ -216,6 +216,14 @@ class Combatant:
     # (invisibility, dim light, etc. when those subsystems wire in).
     concealment: int = 0
 
+    # Incorporeal subtype flag (ghost / shadow / wraith). Triggers a
+    # tag-aware miss/immunity check in _do_attack and apply_typed_damage:
+    # - non-magical attacks fully miss (immune)
+    # - force or ghost_touch attacks ignore the 50% miss
+    # - any other magical attack rolls 50% miss
+    # Set at construction from ``monster.subtypes``.
+    incorporeal: bool = False
+
     # PF1 energy drain (negative levels). Each negative level applies
     # -1 to attack rolls, all saves, skill/ability checks, plus -5 max
     # HP. Restoration removes them one at a time. ``apply_negative_levels``
@@ -1070,16 +1078,8 @@ def combatant_from_monster(
             coll.add(mod(int(total), "untyped", f"skill:{skill_id}",
                          f"{source_prefix}:skill_block"))
 
-    # PF1: incorporeal subtype creatures (ghost, shadow, wraith) take
-    # half-or-no damage from corporeal sources and impose 50% miss
-    # from non-force, non-ghost-touch attacks. We approximate via the
-    # generic concealment field (50%).
-    # TODO(incorporeal): the engine doesn't yet distinguish force /
-    # ghost-touch attacks, and corporeal-source damage is NOT halved.
-    # Both gaps need an attack-tag system before they can be wired —
-    # tracked in conditions coverage as PARTIAL.
     subtypes = [s.lower() for s in (monster.subtypes or [])]
-    base_concealment = 50 if "incorporeal" in subtypes else 0
+    is_incorporeal = "incorporeal" in subtypes
 
     return Combatant(
         id=_new_id(),
@@ -1110,7 +1110,7 @@ def combatant_from_monster(
         damage_reduction=_monster_damage_reduction(monster),
         death_threshold=_monster_death_threshold(monster),
         condition_immunities=_monster_condition_immunities(monster),
-        concealment=base_concealment,
+        incorporeal=is_incorporeal,
     )
 
 
