@@ -1,0 +1,34 @@
+{
+  "id": "harpy",
+  "name": "Harpy",
+  "summary": "Winged predator with a captivating song.",
+  "cr": "4",
+  "xp": 1200,
+  "race": "harpy",
+  "alignment": "chaotic_evil",
+  "size": "medium",
+  "type": "monstrous_humanoid",
+  "subtypes": [],
+  "ability_scores": {"str": 12, "dex": 17, "con": 12, "int": 7, "wis": 12, "cha": 17},
+  "hit_dice": "7d10+7",
+  "hp": 45,
+  "init": 3,
+  "senses": [],
+  "speed": 20,
+  "ac": {"total": 16, "touch": 13, "flat_footed": 13, "natural": 3, "dex": 3},
+  "saves": {"fort": 3, "ref": 8, "will": 6},
+  "bab": 7,
+  "cmb": 8,
+  "cmd": 21,
+  "attacks": [
+    {"type": "melee", "name": "club", "attack_bonus": 8, "damage": "1d6+1", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "talon", "attack_bonus": 8, "damage": "1d6+1", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["dodge", "flyby_attack", "great_fortitude", "improved_initiative"],
+  "skills": {"bluff": 7, "fly": 6, "intimidate": 5, "perception": 11, "perform_sing": 5},
+  "languages": ["common"],
+  "racial_traits": [
+    {"id": "captivating_song", "name": "Captivating Song", "summary": "Will DC 16 (Cha) or fascinated; subjects walk toward harpy."}
+  ],
+  "equipment": ["club"]
+}

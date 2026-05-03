@@ -1,0 +1,35 @@
+{
+  "id": "minotaur",
+  "name": "Minotaur",
+  "summary": "Bull-headed labyrinth-dweller; gore charge and natural sense of direction.",
+  "cr": "4",
+  "xp": 1200,
+  "race": "minotaur",
+  "alignment": "chaotic_evil",
+  "size": "large",
+  "type": "monstrous_humanoid",
+  "subtypes": [],
+  "ability_scores": {"str": 19, "dex": 10, "con": 17, "int": 7, "wis": 10, "cha": 8},
+  "hit_dice": "6d10+12",
+  "hp": 45,
+  "init": 0,
+  "senses": ["darkvision_60"],
+  "speed": 30,
+  "ac": {"total": 14, "touch": 9, "flat_footed": 14, "natural": 5, "size": -1},
+  "saves": {"fort": 5, "ref": 5, "will": 5},
+  "bab": 6,
+  "cmb": 11,
+  "cmd": 21,
+  "attacks": [
+    {"type": "melee", "name": "greataxe", "attack_bonus": 11, "damage": "3d6+6", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 3},
+    {"type": "melee", "name": "gore", "attack_bonus": 6, "damage": "1d6+2", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["great_fortitude", "improved_bull_rush", "power_attack"],
+  "skills": {"intimidate": 6, "perception": 11, "survival": 9},
+  "languages": ["giant"],
+  "racial_traits": [
+    {"id": "natural_cunning", "name": "Natural Cunning", "summary": "Immune to maze spells and never gets lost."},
+    {"id": "powerful_charge", "name": "Powerful Charge (gore, 4d6+6)", "summary": "Gore on a charge deals doubled damage."}
+  ],
+  "equipment": ["greataxe"]
+}

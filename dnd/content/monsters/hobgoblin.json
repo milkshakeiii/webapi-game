@@ -1,0 +1,32 @@
+{
+  "id": "hobgoblin",
+  "name": "Hobgoblin",
+  "summary": "Disciplined warrior; trained military mind.",
+  "cr": "1/2",
+  "xp": 200,
+  "race": "hobgoblin",
+  "alignment": "lawful_evil",
+  "size": "medium",
+  "type": "humanoid",
+  "subtypes": ["goblinoid"],
+  "ability_scores": {"str": 13, "dex": 13, "con": 14, "int": 10, "wis": 9, "cha": 8},
+  "hit_dice": "1d10+2",
+  "hp": 7,
+  "init": 1,
+  "senses": ["darkvision_60"],
+  "speed": 30,
+  "ac": {"total": 15, "touch": 11, "flat_footed": 14, "armor": 3, "shield": 1, "dex": 1},
+  "saves": {"fort": 4, "ref": 1, "will": -1},
+  "bab": 1,
+  "cmb": 2,
+  "cmd": 13,
+  "attacks": [
+    {"type": "melee", "name": "longsword", "attack_bonus": 2, "damage": "1d8+1", "damage_type": "S", "crit_range": [19, 20], "crit_multiplier": 2},
+    {"type": "ranged", "name": "javelin", "attack_bonus": 2, "damage": "1d6+1", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2, "range_increment": 30}
+  ],
+  "feats": ["weapon_focus_longsword"],
+  "skills": {"stealth": 5, "perception": 2},
+  "languages": ["common", "goblin"],
+  "racial_traits": [],
+  "equipment": ["studded leather", "light shield", "longsword", "4 javelins"]
+}

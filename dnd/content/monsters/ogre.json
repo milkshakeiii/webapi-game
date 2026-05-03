@@ -1,0 +1,32 @@
+{
+  "id": "ogre",
+  "name": "Ogre",
+  "summary": "Huge dim-witted giant; smashes with greatclub.",
+  "cr": "3",
+  "xp": 800,
+  "race": "ogre",
+  "alignment": "chaotic_evil",
+  "size": "large",
+  "type": "humanoid",
+  "subtypes": ["giant"],
+  "ability_scores": {"str": 21, "dex": 8, "con": 15, "int": 6, "wis": 10, "cha": 7},
+  "hit_dice": "4d8+11",
+  "hp": 30,
+  "init": -1,
+  "senses": ["darkvision_60", "low_light_vision"],
+  "speed": 30,
+  "ac": {"total": 17, "touch": 8, "flat_footed": 17, "armor": 4, "natural": 5, "dex": -1, "size": -1},
+  "saves": {"fort": 6, "ref": 0, "will": 3},
+  "bab": 3,
+  "cmb": 9,
+  "cmd": 18,
+  "attacks": [
+    {"type": "melee", "name": "greatclub", "attack_bonus": 8, "damage": "2d8+7", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "ranged", "name": "javelin", "attack_bonus": 1, "damage": "1d8+5", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2, "range_increment": 30}
+  ],
+  "feats": ["toughness", "weapon_focus_greatclub"],
+  "skills": {"climb": 6, "perception": 5},
+  "languages": ["giant"],
+  "racial_traits": [],
+  "equipment": ["hide armor", "greatclub", "4 javelins"]
+}

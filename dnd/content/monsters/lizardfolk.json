@@ -1,0 +1,35 @@
+{
+  "id": "lizardfolk",
+  "name": "Lizardfolk",
+  "summary": "Reptilian humanoid. Tough hide and amphibious.",
+  "cr": "1",
+  "xp": 400,
+  "race": "lizardfolk",
+  "alignment": "neutral",
+  "size": "medium",
+  "type": "humanoid",
+  "subtypes": ["reptilian"],
+  "ability_scores": {"str": 13, "dex": 10, "con": 13, "int": 9, "wis": 10, "cha": 10},
+  "hit_dice": "2d8+2",
+  "hp": 11,
+  "init": 0,
+  "senses": [],
+  "speed": 30,
+  "ac": {"total": 15, "touch": 10, "flat_footed": 15, "natural": 5},
+  "saves": {"fort": 4, "ref": 0, "will": 0},
+  "bab": 1,
+  "cmb": 2,
+  "cmd": 12,
+  "attacks": [
+    {"type": "melee", "name": "club", "attack_bonus": 2, "damage": "1d6+1", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "claw", "attack_bonus": 1, "damage": "1d4", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "bite", "attack_bonus": 1, "damage": "1d4", "damage_type": "P/S", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["multiattack"],
+  "skills": {"acrobatics": 4, "swim": 9},
+  "languages": ["draconic"],
+  "racial_traits": [
+    {"id": "hold_breath", "name": "Hold Breath", "summary": "Can hold breath 4× Constitution rounds."}
+  ],
+  "equipment": ["club", "heavy wooden shield", "3 javelins"]
+}

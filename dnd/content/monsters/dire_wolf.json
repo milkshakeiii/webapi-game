@@ -1,0 +1,33 @@
+{
+  "id": "dire_wolf",
+  "name": "Dire Wolf",
+  "summary": "Massive prehistoric wolf; trip-on-bite pack hunter.",
+  "cr": "3",
+  "xp": 800,
+  "race": "wolf",
+  "alignment": "neutral",
+  "size": "large",
+  "type": "animal",
+  "subtypes": [],
+  "ability_scores": {"str": 19, "dex": 15, "con": 17, "int": 2, "wis": 12, "cha": 10},
+  "hit_dice": "5d8+15",
+  "hp": 37,
+  "init": 2,
+  "senses": ["low_light_vision", "scent"],
+  "speed": 50,
+  "ac": {"total": 14, "touch": 11, "flat_footed": 12, "natural": 3, "dex": 2, "size": -1},
+  "saves": {"fort": 7, "ref": 6, "will": 2},
+  "bab": 3,
+  "cmb": 8,
+  "cmd": 20,
+  "attacks": [
+    {"type": "melee", "name": "bite", "attack_bonus": 7, "damage": "1d8+6", "damage_type": "P/S", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["run", "skill_focus_perception", "weapon_focus_bite"],
+  "skills": {"perception": 10, "stealth": 6, "survival": 1},
+  "languages": [],
+  "racial_traits": [
+    {"id": "trip_attack", "name": "Trip", "summary": "On a successful bite, may attempt a free trip CMB without provoking AoO."}
+  ],
+  "equipment": []
+}

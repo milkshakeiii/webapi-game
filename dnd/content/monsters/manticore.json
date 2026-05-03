@@ -1,0 +1,35 @@
+{
+  "id": "manticore",
+  "name": "Manticore",
+  "summary": "Lion-bodied flying horror that fires spikes from its tail.",
+  "cr": "5",
+  "xp": 1600,
+  "race": "manticore",
+  "alignment": "lawful_evil",
+  "size": "large",
+  "type": "magical_beast",
+  "subtypes": [],
+  "ability_scores": {"str": 20, "dex": 15, "con": 17, "int": 7, "wis": 12, "cha": 9},
+  "hit_dice": "6d10+18",
+  "hp": 51,
+  "init": 2,
+  "senses": ["darkvision_60", "low_light_vision", "scent"],
+  "speed": 30,
+  "ac": {"total": 17, "touch": 11, "flat_footed": 15, "natural": 6, "dex": 2, "size": -1},
+  "saves": {"fort": 8, "ref": 7, "will": 3},
+  "bab": 6,
+  "cmb": 12,
+  "cmd": 24,
+  "attacks": [
+    {"type": "melee", "name": "bite", "attack_bonus": 11, "damage": "1d8+5", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "claw", "attack_bonus": 11, "damage": "1d6+5", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "ranged", "name": "spikes", "attack_bonus": 7, "damage": "1d8+5", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2, "range_increment": 180}
+  ],
+  "feats": ["flyby_attack", "hover", "weapon_focus_spikes"],
+  "skills": {"fly": 7, "perception": 14, "survival": 6},
+  "languages": ["common"],
+  "racial_traits": [
+    {"id": "tail_spikes", "name": "Tail Spikes", "summary": "May fire 6 spikes per round as a standard action; 24/day total."}
+  ],
+  "equipment": []
+}

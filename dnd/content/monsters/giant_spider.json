@@ -1,0 +1,34 @@
+{
+  "id": "giant_spider",
+  "name": "Giant Spider",
+  "summary": "Medium-sized arachnid that webs prey and bites with venom.",
+  "cr": "1",
+  "xp": 400,
+  "race": "spider",
+  "alignment": "neutral",
+  "size": "medium",
+  "type": "vermin",
+  "subtypes": [],
+  "ability_scores": {"str": 11, "dex": 17, "con": 12, "int": 0, "wis": 10, "cha": 2},
+  "hit_dice": "2d8+2",
+  "hp": 11,
+  "init": 3,
+  "senses": ["darkvision_60", "tremorsense"],
+  "speed": 30,
+  "ac": {"total": 14, "touch": 13, "flat_footed": 11, "natural": 1, "dex": 3},
+  "saves": {"fort": 4, "ref": 3, "will": 0},
+  "bab": 1,
+  "cmb": 1,
+  "cmd": 14,
+  "attacks": [
+    {"type": "melee", "name": "bite", "attack_bonus": 4, "damage": "1d6", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["weapon_finesse"],
+  "skills": {"climb": 12, "perception": 4, "stealth": 11},
+  "languages": [],
+  "racial_traits": [
+    {"id": "poison_giant_spider", "name": "Poison (bite)", "summary": "Fort DC 14 (Con) or 1d2 Str damage; 1 round/6 saves."},
+    {"id": "web_giant_spider", "name": "Web (8/day)", "summary": "Reflex DC 12 vs entanglement; can also create webs."}
+  ],
+  "equipment": []
+}

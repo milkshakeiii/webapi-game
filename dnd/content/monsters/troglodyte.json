@@ -1,0 +1,35 @@
+{
+  "id": "troglodyte",
+  "name": "Troglodyte",
+  "summary": "Stinky cave-dwelling reptilian. Stench can sicken.",
+  "cr": "1",
+  "xp": 400,
+  "race": "troglodyte",
+  "alignment": "chaotic_evil",
+  "size": "medium",
+  "type": "humanoid",
+  "subtypes": ["reptilian"],
+  "ability_scores": {"str": 14, "dex": 9, "con": 12, "int": 8, "wis": 10, "cha": 8},
+  "hit_dice": "2d8+4",
+  "hp": 13,
+  "init": -1,
+  "senses": ["darkvision_90"],
+  "speed": 30,
+  "ac": {"total": 15, "touch": 9, "flat_footed": 15, "natural": 6, "dex": -1},
+  "saves": {"fort": 5, "ref": 0, "will": 0},
+  "bab": 1,
+  "cmb": 3,
+  "cmd": 12,
+  "attacks": [
+    {"type": "melee", "name": "claw", "attack_bonus": 3, "damage": "1d4+2", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "claw_off", "attack_bonus": 3, "damage": "1d4+2", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "bite", "attack_bonus": 1, "damage": "1d4+1", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["multiattack"],
+  "skills": {"stealth": 9},
+  "languages": ["draconic"],
+  "racial_traits": [
+    {"id": "stench", "name": "Stench", "summary": "30-ft aura; Fort DC 13 or sickened (1d6 rounds, then immune)."}
+  ],
+  "equipment": []
+}

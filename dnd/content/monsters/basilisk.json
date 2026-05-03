@@ -1,0 +1,33 @@
+{
+  "id": "basilisk",
+  "name": "Basilisk",
+  "summary": "Eight-legged reptile with a petrifying gaze.",
+  "cr": "5",
+  "xp": 1600,
+  "race": "basilisk",
+  "alignment": "neutral",
+  "size": "medium",
+  "type": "magical_beast",
+  "subtypes": [],
+  "ability_scores": {"str": 15, "dex": 8, "con": 13, "int": 2, "wis": 12, "cha": 11},
+  "hit_dice": "6d10+12",
+  "hp": 45,
+  "init": -1,
+  "senses": ["darkvision_60", "low_light_vision"],
+  "speed": 20,
+  "ac": {"total": 16, "touch": 9, "flat_footed": 16, "natural": 7, "dex": -1},
+  "saves": {"fort": 7, "ref": 4, "will": 3},
+  "bab": 6,
+  "cmb": 8,
+  "cmd": 17,
+  "attacks": [
+    {"type": "melee", "name": "bite", "attack_bonus": 9, "damage": "1d8+3", "damage_type": "P/S", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["great_fortitude", "skill_focus_perception"],
+  "skills": {"perception": 10, "stealth": 7},
+  "languages": [],
+  "racial_traits": [
+    {"id": "petrifying_gaze", "name": "Petrifying Gaze", "summary": "30 ft, Fort DC 15 (Cha-based) or be turned to stone permanently."}
+  ],
+  "equipment": []
+}

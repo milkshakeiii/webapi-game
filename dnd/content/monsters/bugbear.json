@@ -1,0 +1,34 @@
+{
+  "id": "bugbear",
+  "name": "Bugbear",
+  "summary": "Hairy goblinoid bully. Loves to ambush.",
+  "cr": "2",
+  "xp": 600,
+  "race": "bugbear",
+  "alignment": "chaotic_evil",
+  "size": "medium",
+  "type": "humanoid",
+  "subtypes": ["goblinoid"],
+  "ability_scores": {"str": 15, "dex": 14, "con": 13, "int": 10, "wis": 12, "cha": 9},
+  "hit_dice": "3d10+3",
+  "hp": 16,
+  "init": 5,
+  "senses": ["darkvision_60", "scent"],
+  "speed": 30,
+  "ac": {"total": 17, "touch": 12, "flat_footed": 15, "armor": 2, "shield": 1, "natural": 2, "dex": 2},
+  "saves": {"fort": 2, "ref": 4, "will": 2},
+  "bab": 2,
+  "cmb": 4,
+  "cmd": 16,
+  "attacks": [
+    {"type": "melee", "name": "morningstar", "attack_bonus": 5, "damage": "1d8+3", "damage_type": "B/P", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "ranged", "name": "javelin", "attack_bonus": 4, "damage": "1d6+2", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2, "range_increment": 30}
+  ],
+  "feats": ["intimidating_prowess", "improved_initiative"],
+  "skills": {"climb": 6, "intimidate": 5, "perception": 5, "stealth": 8, "survival": 1},
+  "languages": ["common", "goblin"],
+  "racial_traits": [
+    {"id": "stalker_bugbear", "name": "Stalker", "summary": "Perception and Stealth are class skills."}
+  ],
+  "equipment": ["leather armor", "light shield", "morningstar", "3 javelins"]
+}

@@ -1,0 +1,36 @@
+{
+  "id": "ghoul",
+  "name": "Ghoul",
+  "summary": "Undead scavenger. Bite paralyzes living non-elf humanoids.",
+  "cr": "1",
+  "xp": 400,
+  "race": "ghoul",
+  "alignment": "chaotic_evil",
+  "size": "medium",
+  "type": "undead",
+  "subtypes": [],
+  "ability_scores": {"str": 13, "dex": 15, "con": 0, "int": 13, "wis": 14, "cha": 14},
+  "hit_dice": "2d8",
+  "hp": 12,
+  "init": 2,
+  "senses": ["darkvision_60"],
+  "speed": 30,
+  "ac": {"total": 14, "touch": 12, "flat_footed": 12, "natural": 2, "dex": 2},
+  "saves": {"fort": 0, "ref": 2, "will": 5},
+  "bab": 1,
+  "cmb": 2,
+  "cmd": 14,
+  "attacks": [
+    {"type": "melee", "name": "bite", "attack_bonus": 3, "damage": "1d6+1", "damage_type": "P/S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "claw", "attack_bonus": 3, "damage": "1d3+1", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["weapon_finesse"],
+  "skills": {"acrobatics": 2, "perception": 7, "stealth": 7},
+  "languages": ["common"],
+  "racial_traits": [
+    {"id": "paralysis_ghoul", "name": "Paralysis", "summary": "Bite causes target to be paralyzed 1d4+1 rounds (Fort negates DC 13). Elves are immune."},
+    {"id": "channel_resistance_2", "name": "Channel Resistance +2", "summary": "+2 vs channel energy."},
+    {"id": "diseased_bite", "name": "Disease (Ghoul Fever)", "summary": "Bite carries ghoul fever (Fort negates)."}
+  ],
+  "equipment": []
+}

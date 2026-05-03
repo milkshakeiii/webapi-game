@@ -1,0 +1,36 @@
+{
+  "id": "lion",
+  "name": "Lion",
+  "summary": "Big-cat predator. Powerful charge and rake on grapple.",
+  "cr": "3",
+  "xp": 800,
+  "race": "lion",
+  "alignment": "neutral",
+  "size": "large",
+  "type": "animal",
+  "subtypes": [],
+  "ability_scores": {"str": 17, "dex": 19, "con": 15, "int": 2, "wis": 12, "cha": 6},
+  "hit_dice": "5d8+15",
+  "hp": 32,
+  "init": 4,
+  "senses": ["low_light_vision", "scent"],
+  "speed": 40,
+  "ac": {"total": 14, "touch": 13, "flat_footed": 10, "natural": 1, "dex": 4, "size": -1},
+  "saves": {"fort": 7, "ref": 8, "will": 2},
+  "bab": 3,
+  "cmb": 7,
+  "cmd": 21,
+  "attacks": [
+    {"type": "melee", "name": "bite", "attack_bonus": 7, "damage": "1d8+4", "damage_type": "P/S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "claw", "attack_bonus": 7, "damage": "1d4+4", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "claw_off", "attack_bonus": 7, "damage": "1d4+4", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["improved_initiative", "run", "skill_focus_perception", "weapon_focus_claw"],
+  "skills": {"acrobatics": 8, "perception": 8, "stealth": 8, "survival": 1},
+  "languages": [],
+  "racial_traits": [
+    {"id": "rake_lion", "name": "Rake (2 claws +7, 1d4+4)", "summary": "When grappling, may make two claw attacks against grappled foe."},
+    {"id": "pounce", "name": "Pounce", "summary": "On a charge, may make a full attack."}
+  ],
+  "equipment": []
+}

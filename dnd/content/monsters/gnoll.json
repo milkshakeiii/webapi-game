@@ -1,0 +1,32 @@
+{
+  "id": "gnoll",
+  "name": "Gnoll",
+  "summary": "Hyena-headed marauder; pack hunter.",
+  "cr": "1",
+  "xp": 400,
+  "race": "gnoll",
+  "alignment": "chaotic_evil",
+  "size": "medium",
+  "type": "humanoid",
+  "subtypes": ["gnoll"],
+  "ability_scores": {"str": 15, "dex": 10, "con": 13, "int": 8, "wis": 11, "cha": 6},
+  "hit_dice": "2d8+2",
+  "hp": 11,
+  "init": 0,
+  "senses": ["darkvision_60"],
+  "speed": 30,
+  "ac": {"total": 15, "touch": 10, "flat_footed": 15, "armor": 4, "shield": 1},
+  "saves": {"fort": 4, "ref": 0, "will": 0},
+  "bab": 1,
+  "cmb": 3,
+  "cmd": 13,
+  "attacks": [
+    {"type": "melee", "name": "battleaxe", "attack_bonus": 3, "damage": "1d8+2", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 3},
+    {"type": "ranged", "name": "shortbow", "attack_bonus": 1, "damage": "1d6", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 3, "range_increment": 60}
+  ],
+  "feats": ["power_attack"],
+  "skills": {"perception": 3},
+  "languages": ["gnoll"],
+  "racial_traits": [],
+  "equipment": ["chain shirt", "light shield", "battleaxe", "shortbow", "20 arrows"]
+}

@@ -1,0 +1,36 @@
+{
+  "id": "gargoyle",
+  "name": "Gargoyle",
+  "summary": "Stone-skinned ambusher; freezes still to look like a statue.",
+  "cr": "4",
+  "xp": 1200,
+  "race": "gargoyle",
+  "alignment": "chaotic_evil",
+  "size": "medium",
+  "type": "monstrous_humanoid",
+  "subtypes": ["earth"],
+  "ability_scores": {"str": 15, "dex": 14, "con": 18, "int": 6, "wis": 11, "cha": 7},
+  "hit_dice": "5d10+22",
+  "hp": 49,
+  "init": 2,
+  "senses": ["darkvision_60", "low_light_vision"],
+  "speed": 40,
+  "ac": {"total": 16, "touch": 12, "flat_footed": 14, "natural": 4, "dex": 2},
+  "saves": {"fort": 5, "ref": 6, "will": 4},
+  "bab": 5,
+  "cmb": 7,
+  "cmd": 19,
+  "attacks": [
+    {"type": "melee", "name": "bite", "attack_bonus": 7, "damage": "1d6+2", "damage_type": "P/S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "claw", "attack_bonus": 7, "damage": "1d6+2", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "gore", "attack_bonus": 7, "damage": "1d4+2", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["hover", "skill_focus_stealth", "toughness"],
+  "skills": {"fly": 6, "stealth": 9},
+  "languages": ["common", "terran"],
+  "racial_traits": [
+    {"id": "freeze_gargoyle", "name": "Freeze", "summary": "Can hold still and appear inanimate (Stealth +20 vs being noticed)."},
+    {"id": "dr_10_magic", "name": "DR 10/magic", "summary": "Damage reduction 10 bypassed by magic weapons."}
+  ],
+  "equipment": []
+}

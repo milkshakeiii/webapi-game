@@ -1,0 +1,35 @@
+{
+  "id": "choker",
+  "name": "Choker",
+  "summary": "Small underdark ambusher with rubbery elongated arms.",
+  "cr": "2",
+  "xp": 600,
+  "race": "choker",
+  "alignment": "chaotic_evil",
+  "size": "small",
+  "type": "aberration",
+  "subtypes": [],
+  "ability_scores": {"str": 16, "dex": 17, "con": 13, "int": 4, "wis": 13, "cha": 7},
+  "hit_dice": "3d8+6",
+  "hp": 19,
+  "init": 7,
+  "senses": ["darkvision_60"],
+  "speed": 20,
+  "ac": {"total": 17, "touch": 14, "flat_footed": 14, "natural": 3, "dex": 3, "size": 1},
+  "saves": {"fort": 3, "ref": 4, "will": 4},
+  "bab": 2,
+  "cmb": 4,
+  "cmd": 17,
+  "attacks": [
+    {"type": "melee", "name": "tentacle", "attack_bonus": 6, "damage": "1d4+3", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "tentacle_off", "attack_bonus": 6, "damage": "1d4+3", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["improved_initiative", "lightning_reflexes"],
+  "skills": {"climb": 12, "stealth": 11},
+  "languages": ["undercommon"],
+  "racial_traits": [
+    {"id": "constrict_strangle", "name": "Constrict / Strangle", "summary": "On a successful tentacle hit, can grapple and choke (target can't speak / cast V spells)."},
+    {"id": "quickness", "name": "Quickness", "summary": "+1 enhancement to initiative; +10 ft to first move action each round."}
+  ],
+  "equipment": []
+}

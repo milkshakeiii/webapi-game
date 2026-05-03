@@ -1,0 +1,35 @@
+{
+  "id": "hill_giant",
+  "name": "Hill Giant",
+  "summary": "Massive bully who throws rocks. The most basic kind of giant.",
+  "cr": "7",
+  "xp": 3200,
+  "race": "hill_giant",
+  "alignment": "chaotic_evil",
+  "size": "large",
+  "type": "humanoid",
+  "subtypes": ["giant"],
+  "ability_scores": {"str": 25, "dex": 8, "con": 19, "int": 6, "wis": 10, "cha": 7},
+  "hit_dice": "10d8+30",
+  "hp": 75,
+  "init": -1,
+  "senses": ["low_light_vision"],
+  "speed": 40,
+  "ac": {"total": 21, "touch": 8, "flat_footed": 21, "armor": 4, "natural": 9, "dex": -1, "size": -1},
+  "saves": {"fort": 10, "ref": 2, "will": 5},
+  "bab": 7,
+  "cmb": 15,
+  "cmd": 24,
+  "attacks": [
+    {"type": "melee", "name": "greatclub", "attack_bonus": 13, "damage": "2d8+10", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "ranged", "name": "rock", "attack_bonus": 6, "damage": "1d8+10", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2, "range_increment": 120}
+  ],
+  "feats": ["intimidating_prowess", "iron_will", "power_attack", "weapon_focus_greatclub"],
+  "skills": {"climb": 10, "intimidate": 7, "perception": 8},
+  "languages": ["giant"],
+  "racial_traits": [
+    {"id": "rock_throwing_120", "name": "Rock Throwing (120 ft)", "summary": "May throw rocks 1d8+Str at 120-ft range increment."},
+    {"id": "rock_catching", "name": "Rock Catching", "summary": "May make a Reflex save (DC = 15, 20, or 25) to catch a thrown rock."}
+  ],
+  "equipment": ["hide armor", "greatclub", "rocks"]
+}

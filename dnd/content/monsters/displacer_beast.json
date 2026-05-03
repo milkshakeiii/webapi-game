@@ -1,0 +1,35 @@
+{
+  "id": "displacer_beast",
+  "name": "Displacer Beast",
+  "summary": "Six-legged tentacled cat; appears displaced from its actual position.",
+  "cr": "4",
+  "xp": 1200,
+  "race": "displacer_beast",
+  "alignment": "lawful_evil",
+  "size": "large",
+  "type": "magical_beast",
+  "subtypes": [],
+  "ability_scores": {"str": 18, "dex": 15, "con": 16, "int": 5, "wis": 12, "cha": 8},
+  "hit_dice": "6d10+18",
+  "hp": 51,
+  "init": 2,
+  "senses": ["darkvision_60", "low_light_vision"],
+  "speed": 40,
+  "ac": {"total": 16, "touch": 11, "flat_footed": 14, "natural": 5, "dex": 2, "size": -1},
+  "saves": {"fort": 8, "ref": 7, "will": 3},
+  "bab": 6,
+  "cmb": 11,
+  "cmd": 23,
+  "attacks": [
+    {"type": "melee", "name": "tentacle", "attack_bonus": 10, "damage": "1d8+4", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "tentacle_off", "attack_bonus": 10, "damage": "1d8+4", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["alertness", "dodge", "stealthy"],
+  "skills": {"acrobatics": 5, "perception": 11, "stealth": 7},
+  "languages": [],
+  "racial_traits": [
+    {"id": "displacement", "name": "Displacement", "summary": "Attacks against the beast have 50% miss chance (concealment)."},
+    {"id": "resistance_save", "name": "Resistance to Targeting", "summary": "+2 racial bonus to saves vs targeted spells."}
+  ],
+  "equipment": []
+}

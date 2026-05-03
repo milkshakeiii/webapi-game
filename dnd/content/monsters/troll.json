@@ -1,0 +1,36 @@
+{
+  "id": "troll",
+  "name": "Troll",
+  "summary": "Hulking regenerating brute; only fire or acid stops the regen.",
+  "cr": "5",
+  "xp": 1600,
+  "race": "troll",
+  "alignment": "chaotic_evil",
+  "size": "large",
+  "type": "humanoid",
+  "subtypes": ["giant"],
+  "ability_scores": {"str": 23, "dex": 14, "con": 23, "int": 6, "wis": 9, "cha": 6},
+  "hit_dice": "6d8+36",
+  "hp": 63,
+  "init": 2,
+  "senses": ["darkvision_60", "low_light_vision", "scent"],
+  "speed": 30,
+  "ac": {"total": 16, "touch": 11, "flat_footed": 14, "natural": 5, "dex": 2, "size": -1},
+  "saves": {"fort": 11, "ref": 4, "will": 3},
+  "bab": 4,
+  "cmb": 11,
+  "cmd": 23,
+  "attacks": [
+    {"type": "melee", "name": "bite", "attack_bonus": 11, "damage": "1d8+6", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "claw", "attack_bonus": 11, "damage": "1d6+6", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "claw_off", "attack_bonus": 11, "damage": "1d6+6", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["intimidating_prowess", "iron_will", "skill_focus_perception"],
+  "skills": {"perception": 9},
+  "languages": ["giant"],
+  "racial_traits": [
+    {"id": "regeneration_5_fire_acid", "name": "Regeneration 5 (fire, acid)", "summary": "Regenerates 5 HP/round; non-fire / non-acid damage cannot kill (floors at -1)."},
+    {"id": "rend", "name": "Rend", "summary": "If both claws hit, additional 1d6+9 damage."}
+  ],
+  "equipment": []
+}

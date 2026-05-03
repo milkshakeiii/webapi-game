@@ -117,6 +117,38 @@ MONSTER_RACIAL_TRAITS: dict[str, Entry] = {
     # Zombie
     "undead_traits_zombie":  (PARTIAL,         "same as undead_traits — same immunity set wired"),
     "dr_5_slashing":         (IMPLEMENTED,     "wired via _parse_dr_trait; resolve_attack honors it"),
+
+    # Bestiary 1 additions
+    "paralysis_ghoul":       (NOT_IMPLEMENTED, "ghoul bite paralyzes (Fort negates); needs bite-rider hook"),
+    "channel_resistance_2":  (NOT_IMPLEMENTED, "+2 vs channel energy; channel-energy targeting infra needed"),
+    "diseased_bite":         (NOT_IMPLEMENTED, "ghoul fever Fort save; disease tracking system needed"),
+    "stalker_bugbear":       (NOT_IMPLEMENTED, "Perception/Stealth as class skills; cosmetic"),
+    "hold_breath":           (NOT_IMPLEMENTED, "lizardfolk Con × 4 rounds; underwater system needed"),
+    "stench":                (NOT_IMPLEMENTED, "30-ft sickening aura; aura targeting + sickened condition wiring"),
+    "regeneration_5_fire_acid": (IMPLEMENTED,  "regeneration field + bypass set populated; floors at -1 vs non-bypass via take_damage"),
+    "rend":                  (NOT_IMPLEMENTED, "extra damage if both claws hit; needs full-attack rider"),
+    "freeze_gargoyle":       (NOT_IMPLEMENTED, "stealth-as-statue special; cosmetic"),
+    "dr_10_magic":           (PARTIAL,         "wired via _parse_dr_trait but engine doesn't yet flag weapons as 'magic'; default melee weapons fail bypass"),
+    "grab":                  (PARTIAL,         "owlbear free grapple on hit; full grapple action set is wired but the auto-grab rider on a normal attack isn't"),
+    "petrifying_gaze":       (NOT_IMPLEMENTED, "30-ft Fort-vs-petrified aura; needs gaze-attack subsystem"),
+    "rock_throwing_120":     (NOT_IMPLEMENTED, "data declared; same as any thrown ranged attack"),
+    "rock_catching":         (NOT_IMPLEMENTED, "Reflex to catch a thrown rock; needs incoming-projectile hook"),
+    "natural_cunning":       (NOT_IMPLEMENTED, "minotaur immunity to maze; no maze spells yet"),
+    "powerful_charge":       (NOT_IMPLEMENTED, "doubled charge damage on gore; needs natural-attack-on-charge rider"),
+    "tail_spikes":           (NOT_IMPLEMENTED, "manticore 6 spikes/round, 24/day; usable as ranged_touch"),
+    "displacement":          (NOT_IMPLEMENTED, "50% miss chance — needs displacement flag (concealment value works at runtime)"),
+    "resistance_save":       (NOT_IMPLEMENTED, "+2 vs targeted spells; partial qualifier infra"),
+    "poison_giant_spider":   (NOT_IMPLEMENTED, "Fort or 1d2 Str dmg; ability damage tracking + poison framework"),
+    "web_giant_spider":      (NOT_IMPLEMENTED, "spider's web racial; conjuration trap mechanics"),
+    "constrict_strangle":    (NOT_IMPLEMENTED, "choker grapple-into-strangle (suppresses V casting and breath)"),
+    "quickness":             (NOT_IMPLEMENTED, "+1 init enhancement, +10 ft to first round move; speed-burst mechanic"),
+    "rake_lion":             (NOT_IMPLEMENTED, "while grappling, two extra claws; needs grapple-attack rider"),
+    "pounce":                (NOT_IMPLEMENTED, "full attack on a charge; needs charge-rider hook"),
+    "engulf":                (NOT_IMPLEMENTED, "ooze move-into-square + paralysis + acid drain; needs movement-trigger paralysis"),
+    "transparent":           (NOT_IMPLEMENTED, "DC 15 Perception to spot ooze; needs perception-vs-stealth in encounters"),
+    "ooze_traits":           (PARTIAL,         "ooze type partially honored: condition immunities can be wired by setting Combatant.condition_immunities; full immunity set not yet declared"),
+    "captivating_song":      (NOT_IMPLEMENTED, "harpy song fascinates; sonic mind-affecting aura"),
+    "blood_drain":           (NOT_IMPLEMENTED, "stirge attaches and drains 1d4 Con/round; needs ability-damage tracking"),
 }
 
 

@@ -1,0 +1,35 @@
+{
+  "id": "owlbear",
+  "name": "Owlbear",
+  "summary": "Bear with an owl's head and beak. Charges into a frenzy.",
+  "cr": "4",
+  "xp": 1200,
+  "race": "owlbear",
+  "alignment": "neutral",
+  "size": "large",
+  "type": "magical_beast",
+  "subtypes": [],
+  "ability_scores": {"str": 21, "dex": 12, "con": 19, "int": 2, "wis": 12, "cha": 10},
+  "hit_dice": "5d10+25",
+  "hp": 47,
+  "init": 1,
+  "senses": ["darkvision_60", "low_light_vision", "scent"],
+  "speed": 30,
+  "ac": {"total": 15, "touch": 10, "flat_footed": 14, "natural": 5, "dex": 1, "size": -1},
+  "saves": {"fort": 9, "ref": 5, "will": 2},
+  "bab": 5,
+  "cmb": 11,
+  "cmd": 22,
+  "attacks": [
+    {"type": "melee", "name": "claw", "attack_bonus": 10, "damage": "1d6+5", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "claw_off", "attack_bonus": 10, "damage": "1d6+5", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 2},
+    {"type": "melee", "name": "bite", "attack_bonus": 10, "damage": "1d6+5", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": ["improved_initiative", "skill_focus_perception", "weapon_focus_claw"],
+  "skills": {"perception": 11},
+  "languages": [],
+  "racial_traits": [
+    {"id": "grab", "name": "Grab", "summary": "On a successful claw hit, may start grapple as free action without provoking AoO."}
+  ],
+  "equipment": []
+}

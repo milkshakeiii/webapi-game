@@ -1,0 +1,35 @@
+{
+  "id": "gelatinous_cube",
+  "name": "Gelatinous Cube",
+  "summary": "Transparent ooze that fills 10x10 dungeon corridors. Engulfs and dissolves.",
+  "cr": "3",
+  "xp": 800,
+  "race": "ooze",
+  "alignment": "neutral",
+  "size": "large",
+  "type": "ooze",
+  "subtypes": [],
+  "ability_scores": {"str": 14, "dex": 1, "con": 26, "int": 0, "wis": 1, "cha": 1},
+  "hit_dice": "4d8+32",
+  "hp": 50,
+  "init": -5,
+  "senses": ["blindsight_60"],
+  "speed": 15,
+  "ac": {"total": 4, "touch": 4, "flat_footed": 4, "dex": -5, "size": -1},
+  "saves": {"fort": 9, "ref": -4, "will": -4},
+  "bab": 3,
+  "cmb": 6,
+  "cmd": 11,
+  "attacks": [
+    {"type": "melee", "name": "slam", "attack_bonus": 5, "damage": "1d6+3", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2}
+  ],
+  "feats": [],
+  "skills": {},
+  "languages": [],
+  "racial_traits": [
+    {"id": "engulf", "name": "Engulf", "summary": "Move into target's square; Reflex DC 12 to avoid being engulfed (paralyzed + acid damage 1d6/round)."},
+    {"id": "transparent", "name": "Transparent", "summary": "DC 15 Perception to notice; passive observers usually walk into one."},
+    {"id": "ooze_traits", "name": "Ooze Traits", "summary": "Mind-affecting, sleep, paralysis immunity; no Int / no flanking; not subject to crits or precision damage."}
+  ],
+  "equipment": []
+}
