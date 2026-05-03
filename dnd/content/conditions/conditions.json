@@ -33,5 +33,8 @@
   {"id": "stable", "name": "Stable", "summary": "Below 0 HP but no longer dying. Naturally regains HP at slow rate."},
   {"id": "staggered", "name": "Staggered", "summary": "Can take only a single move or standard action per turn (not both). No full-round actions."},
   {"id": "stunned", "name": "Stunned", "summary": "Drops everything held; cannot take actions; -2 AC; loses Dex bonus to AC."},
-  {"id": "unconscious", "name": "Unconscious", "summary": "Helpless and unaware."}
+  {"id": "unconscious", "name": "Unconscious", "summary": "Helpless and unaware."},
+  {"id": "silenced", "name": "Silenced", "summary": "Cannot cast V-component spells, command words, or speak."},
+  {"id": "bracing", "name": "Bracing", "summary": "Weapon set vs charge; deals double damage on first hit against a charging foe before it acts."},
+  {"id": "pinned", "name": "Pinned", "summary": "Helpless; immobilized in a grapple. Pin is broken when grappler stops maintaining it."}
 ]

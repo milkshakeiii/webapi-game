@@ -427,5 +427,71 @@
       "no_save": true
     },
     "summary": "2d4 acid on ranged touch. Lingering damage per round (not modeled)."
+  },
+  {
+    "id": "silence",
+    "name": "Silence",
+    "school": "illusion",
+    "subschool": "glamer",
+    "descriptors": [],
+    "level_by_class": {"bard": 2, "cleric": 2},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "long",
+    "target": "one_creature_or_object",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "silenced",
+      "save": "will",
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "Target creature is silenced (no V-component spells, can't speak) for 1 min/level. Will negates."
+  },
+  {
+    "id": "color_spray",
+    "name": "Color Spray",
+    "school": "illusion",
+    "subschool": "pattern",
+    "descriptors": ["mind_affecting"],
+    "level_by_class": {"sorcerer": 1, "wizard": 1},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "15 ft cone",
+    "target": "cone_shaped_burst",
+    "duration": "instantaneous",
+    "saving_throw": "will_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "color_spray",
+      "area": {"shape": "cone", "size_ft": 15}
+    },
+    "summary": "Cone of vivid color. Will negates. Failed save: ≤2 HD = unconscious + blind + stunned; 3-5 HD = blind + stunned; 6+ HD = stunned."
+  },
+  {
+    "id": "cause_fear",
+    "name": "Cause Fear",
+    "school": "necromancy",
+    "subschool": "fear",
+    "descriptors": ["mind_affecting", "fear"],
+    "level_by_class": {"bard": 1, "cleric": 1, "sorcerer": 1, "wizard": 1, "witch": 1},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_living_creature_5_hd_or_less",
+    "duration": "1d4_rounds_or_1_round_save",
+    "saving_throw": "will_partial",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "frightened",
+      "condition_on_save_success": "shaken",
+      "save": "will",
+      "duration_rounds_per_caster_level": 0,
+      "max_target_hd": 5
+    },
+    "summary": "Target with ≤5 HD must Will save. Failed save: frightened 1d4 rounds. Successful save: shaken 1 round."
   }
 ]

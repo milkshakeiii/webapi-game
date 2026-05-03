@@ -635,8 +635,19 @@ def _handle_apply_condition_save(
     cl: int, registry: ContentRegistry, roller: Roller, out: SpellOutcome,
     current_round: int = 1,
 ) -> None:
+    """Apply a condition gated by a saving throw.
+
+    PF1 ``save negates`` semantic: save fail → condition applied;
+    save success → no effect.
+
+    PF1 ``save partial`` semantic: save fail → primary condition
+    applied; save success → lesser condition applied (declared on the
+    spell as ``effect.condition_on_save_success``). Cause Fear is
+    the canonical example: fail → frightened, success → shaken.
+    """
     eff = spell.effect
     cond = str(eff["condition"])
+    cond_on_save = eff.get("condition_on_save_success")
     save_kind, _ = parse_saving_throw(spell.saving_throw)
     if save_kind:
         passed, nat, total = roll_save(
@@ -647,6 +658,19 @@ def _handle_apply_condition_save(
             f"{'PASS' if passed else 'FAIL'}"
         )
         if passed:
+            if cond_on_save:
+                # Save partial: apply the lesser condition.
+                if target.add_condition(str(cond_on_save)):
+                    target.register_sourced_condition(
+                        f"spell:{spell.id}", str(cond_on_save),
+                    )
+                out.targets_affected.append(target.id)
+                out.conditions_applied.setdefault(
+                    target.id, [],
+                ).append(str(cond_on_save))
+                out.log.append(
+                    f"  {target.name} (save partial): {cond_on_save}"
+                )
             return
     if target.add_condition(cond):
         target.register_sourced_condition(f"spell:{spell.id}", cond)
@@ -767,6 +791,60 @@ def _handle_dispel_magic(
         )
 
 
+def _handle_color_spray(
+    caster: Combatant, spell: Spell, target: Combatant, dc: int,
+    cl: int, registry: ContentRegistry, roller: Roller, out: SpellOutcome,
+    current_round: int = 1,
+) -> None:
+    """PF1 Color Spray: HD-tiered effect on failed Will save.
+
+    - 2 HD or less: unconscious + blind + stunned
+    - 3-5 HD: blind + stunned
+    - 6+ HD: stunned
+    Successful Will save negates entirely. We approximate the
+    multi-step duration (RAW: unconscious 2d4 → blind 1d4 → stunned
+    1) by applying the conditions; the engine ticks them down or
+    leaves them indefinite — for v1 we don't track per-condition
+    durations on these stack-applied conditions.
+    """
+    save_kind, _ = parse_saving_throw(spell.saving_throw)
+    if save_kind:
+        passed, nat, total = roll_save(
+            target, save_kind, dc, roller,
+            context=_spell_save_context(spell),
+        )
+        out.log.append(
+            f"  {target.name} {save_kind} save: d20={nat}+"
+            f"{target.save(save_kind)}={total} vs DC {dc} → "
+            f"{'PASS' if passed else 'FAIL'}"
+        )
+        if passed:
+            return
+    hd = _hit_dice(target)
+    source = f"spell:{spell.id}"
+    applied: list[str] = []
+    if hd <= 2:
+        for c in ("unconscious", "blinded", "stunned"):
+            if target.add_condition(c):
+                target.register_sourced_condition(source, c)
+                applied.append(c)
+    elif hd <= 5:
+        for c in ("blinded", "stunned"):
+            if target.add_condition(c):
+                target.register_sourced_condition(source, c)
+                applied.append(c)
+    else:
+        if target.add_condition("stunned"):
+            target.register_sourced_condition(source, "stunned")
+            applied.append("stunned")
+    if applied:
+        out.targets_affected.append(target.id)
+        out.conditions_applied.setdefault(target.id, []).extend(applied)
+        out.log.append(
+            f"  {target.name} ({hd} HD) now: {', '.join(applied)}"
+        )
+
+
 _EFFECT_HANDLERS: dict[str, Any] = {
     "heal":                  _handle_heal,
     "magic_missile":         _handle_magic_missile,
@@ -778,4 +856,5 @@ _EFFECT_HANDLERS: dict[str, Any] = {
     "stabilize":             _handle_stabilize,
     "utility":               _handle_utility,
     "dispel_magic":          _handle_dispel_magic,
+    "color_spray":           _handle_color_spray,
 }

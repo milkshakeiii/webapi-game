@@ -216,7 +216,7 @@ CONDITIONS: dict[str, Entry] = {
     "panicked":        (NOT_IMPLEMENTED, "drop items, flee"),
     "paralyzed":       (PARTIAL,         "denies Dex (sneak attack qualifies); turn validation prevents acts; helpless follow-on not modeled"),
     "petrified":       (PARTIAL,         "turn validation prevents physical acts; helpless follow-on not modeled"),
-    "pinned":          (PARTIAL,         "denies Dex (sneak attack qualifies); pinned action set not modeled"),
+    "pinned":          (IMPLEMENTED,    "denies Dex (sneak attack qualifies); set by grapple_pin composite (CMB-5 vs CMD); also applies 'helpless'. Cleared on grapple_break_free or remove_condition('grappled')"),
     "prone":           (IMPLEMENTED,     "fall_prone free action applies the condition; stand_up move action provokes AoO from threateners; -4 melee attacker, +4 melee-attacker-vs-target, -4 ranged-attacker-vs-target wired in _do_attack"),
     "shaken":          (NOT_IMPLEMENTED, "-2 attack/save/skill"),
     "sickened":        (NOT_IMPLEMENTED, "-2 attack/damage/save/skill"),
@@ -225,7 +225,9 @@ CONDITIONS: dict[str, Entry] = {
     "stable":          (IMPLEMENTED,     "set by DC 10 Con check in tick_round when a roller is provided to the encounter; suppresses dying-bleed"),
     "staggered":       (PARTIAL,         "encounter validation prevents combining move + standard; ferocity sets it"),
     "stunned":         (PARTIAL,         "denies Dex (sneak attack qualifies); drops held items, no actions for 1 round"),
-    "unconscious":     (PARTIAL,         "is_unconscious checks the condition; turn validation prevents acts"),
+    "unconscious":     (IMPLEMENTED,    "is_unconscious checks the condition; turn validation prevents acts; applying 'unconscious' adds 'helpless' (tracked under 'implied_by_unconscious' source)"),
+    "silenced":        (IMPLEMENTED,    "applied by the Silence spell. Read by _do_cast: V-component spells from a silenced caster fail with reason='verbal_component_blocked'"),
+    "bracing":         (IMPLEMENTED,    "set by ready_brace composite for one round; consumed by the brace-attack trigger in _do_charge (×2 damage on the bracing wielder's first hit against the charger)"),
 }
 
 
@@ -289,6 +291,7 @@ SPELL_EFFECT_KINDS: dict[str, Entry] = {
     "buff_party":            (IMPLEMENTED, "AoE party buff"),
     "buff_target":           (IMPLEMENTED, "single-target buff with duration"),
     "charm":                 (IMPLEMENTED, "shift attitude/control via Will save"),
+    "color_spray":           (IMPLEMENTED, "HD-tiered effect on failed Will save: ≤2 HD = unconscious + blind + stunned; 3-5 HD = blind + stunned; 6+ HD = stunned"),
     "dispel_magic":          (IMPLEMENTED, "1d20 + CL vs DC 11 + caster's CL; removes one ongoing spell-source's modifiers + tracked conditions"),
     "heal":                  (IMPLEMENTED, "restore HP"),
     "magic_missile":         (IMPLEMENTED, "auto-hit force damage with multi-missile"),
@@ -435,7 +438,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "magic.spell_known_vs_prepared": (IMPLEMENTED,    "Combatant.casting_type ('prepared' / 'spontaneous' / '') read from class.spell_progression.type. Prepared casters consume from Combatant.prepared_spells (populated from Character.spells_prepared at dispatch); spontaneous use Combatant.castable_spells (from Character.spells_known when set, else class-wide list). Empty prep is a permissive fallback so default-dispatched heroes still cast"),
 
     # ── Magic: components & casting ─────────────────────────────────────
-    "magic.casting_components_v":    (PARTIAL,        "V-component spells fail outright when caster is silenced; deafened caster has 20% spell-failure roll. The 'silenced' condition exists but isn't applied by any current effect — applies when externally set"),
+    "magic.casting_components_v":    (IMPLEMENTED,    "V-component spells fail outright when caster is silenced; deafened caster has 20% spell-failure roll. The Silence spell applies the silenced condition (Will negates)"),
     "magic.casting_components_s":    (IMPLEMENTED,    "Grappled S-component cast requires DC 10 + 4 + spell level concentration; failure consumes slot. Two-handed-weapon-blocks-S enforced when BOTH hands are filled (main_hand=two-handed weapon AND off_hand=anything) — pragmatic exception for wizards with a single quarterstaff in main_hand and no off-hand allows them to re-grip for casting"),
     "magic.casting_components_m":    (NOT_IMPLEMENTED, "material — no component-tracking yet; assumed always available"),
     "magic.casting_components_f":    (NOT_IMPLEMENTED, "focus item required"),
@@ -462,7 +465,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     # ── Magic: save semantics ───────────────────────────────────────────
     "magic.save_negates":            (IMPLEMENTED,    "save = no effect"),
     "magic.save_half":               (IMPLEMENTED,    "save = halve damage"),
-    "magic.save_partial":            (PARTIAL,        "some apply_condition_save handlers do partial; varies per spell"),
+    "magic.save_partial":            (IMPLEMENTED,    "_handle_apply_condition_save honors effect.condition_on_save_success: failed save applies effect.condition (e.g., frightened), passing save applies the lesser condition (e.g., shaken). Cause Fear is the canonical exemplar"),
     "magic.save_disbelief":          (IMPLEMENTED,    "spells.disbelief_save(target, source, dc, roller, interacted): rolls Will + (4 if interacted) vs DC; on success calls remove_effects_from_source which clears modifiers and tracked conditions sourced under the illusion. Caller decides when an interaction triggers the re-save"),
 
     # ── Skills ──────────────────────────────────────────────────────────
