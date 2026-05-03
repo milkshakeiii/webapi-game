@@ -155,6 +155,39 @@ def roll_save(
     return total >= dc, nat, total
 
 
+_ENERGY_DAMAGE_TYPES: frozenset[str] = frozenset({
+    "fire", "cold", "electricity", "acid", "sonic",
+})
+
+
+def apply_typed_damage(
+    target: Combatant, amount: int, damage_type: str | None,
+) -> tuple[int, str | None]:
+    """Apply ``amount`` damage to ``target``, honoring energy
+    immunity / resistance when ``damage_type`` is an energy type.
+
+    Returns ``(applied, note)`` — applied is the amount that actually
+    reduced HP; note is a human-readable trace ("immune", "resisted N",
+    or None for normal damage).
+
+    Non-energy damage_types and ``None`` are passed through unchanged.
+    """
+    if amount <= 0:
+        return 0, None
+    note: str | None = None
+    if damage_type and damage_type in _ENERGY_DAMAGE_TYPES:
+        if damage_type in target.energy_immunity:
+            return 0, "immune"
+        resist = target.energy_resistance.get(damage_type, 0)
+        if resist > 0:
+            absorbed = min(resist, amount)
+            amount = max(0, amount - resist)
+            note = f"resisted {absorbed}"
+    if amount > 0:
+        target.take_damage(amount)
+    return amount, note
+
+
 def parse_saving_throw(saving_throw_str: str) -> tuple[str | None, str]:
     """Return (save_kind, semantic).
 
@@ -414,14 +447,18 @@ def _handle_magic_missile(
         r = roller.roll(dmg_dice, take_max=take_max)
         total_damage += r.total
         out.log.append(f"  missile {i+1}: {r.breakdown}")
-    target.take_damage(total_damage)
+    damage_type = str(eff.get("damage_type", "force")) or None
+    applied, energy_note = apply_typed_damage(target, total_damage, damage_type)
     if target.current_hp <= 0:
         target.add_condition("dying")
     if target.current_hp <= -10:
         target.add_condition("dead")
     out.targets_affected.append(target.id)
-    out.damage_per_target[target.id] = total_damage
-    out.log.append(f"  {count} missile(s) hit {target.name} for {total_damage}")
+    out.damage_per_target[target.id] = applied
+    note = f" ({energy_note})" if energy_note else ""
+    out.log.append(
+        f"  {count} missile(s) hit {target.name} for {applied}{note}"
+    )
 
 
 def _handle_scaling_damage(
@@ -460,14 +497,19 @@ def _handle_scaling_damage(
             final = raw_damage // 2
         elif passed and semantic in ("negates", "harmless_negates"):
             final = 0
-    target.take_damage(final)
+    damage_type = str(eff.get("damage_type", "")) or None
+    applied, energy_note = apply_typed_damage(target, final, damage_type)
     if target.current_hp <= 0:
         target.add_condition("dying")
     if target.current_hp <= -10:
         target.add_condition("dead")
     out.targets_affected.append(target.id)
-    out.damage_per_target[target.id] = final
-    out.log.append(f"  {target.name} takes {final} damage (rolled {raw_damage})")
+    out.damage_per_target[target.id] = applied
+    note = f" ({energy_note})" if energy_note else ""
+    out.log.append(
+        f"  {target.name} takes {applied} {damage_type or ''} damage"
+        f" (rolled {raw_damage}){note}"
+    )
 
 
 def _handle_buff_target(

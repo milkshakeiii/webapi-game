@@ -336,9 +336,9 @@ CORE_MECHANICS: dict[str, Entry] = {
     # ── Combat: damage, DR, energy ──────────────────────────────────────
     "combat.dr_application":         (IMPLEMENTED,    "_apply_dr in combat.py; bypass keywords (S/P/B/silver/magic/etc.); first-DR-wins on multi-DR creatures (rare today)"),
     "combat.dr_multi_keyword":       (NOT_IMPLEMENTED, "DR 10/silver and magic — bypass-keyword set is OR; AND semantics needed"),
-    "combat.energy_damage":          (NOT_IMPLEMENTED, "no engine source of fire/cold/electricity/acid/sonic damage yet"),
-    "combat.energy_resistance":      (NOT_IMPLEMENTED, "no consumers — pair with first energy-damage spell"),
-    "combat.energy_immunity":        (NOT_IMPLEMENTED, "same"),
+    "combat.energy_damage":          (IMPLEMENTED,    "fire / cold / electricity / acid / sonic recognized in spells.apply_typed_damage; spell handlers (scaling_damage, magic_missile) read effect.damage_type and route through it. Spells: burning_hands, fireball, lightning_bolt, shocking_grasp, scorching_ray, cone_of_cold, acid_arrow, acid_splash"),
+    "combat.energy_resistance":      (IMPLEMENTED,    "Combatant.energy_resistance: dict[damage_type, points-per-hit]; apply_typed_damage subtracts points before damage applies. Resistance caps at the damage amount (no negative damage)"),
+    "combat.energy_immunity":        (IMPLEMENTED,    "Combatant.energy_immunity: set[damage_type]; apply_typed_damage drops damage to 0 with note='immune'"),
     "combat.bleed_damage":           (PARTIAL,        "ferocity-bleed implemented in tick_round; no generic bleed-condition system"),
     "combat.nonlethal_damage":       (NOT_IMPLEMENTED, "no separate nonlethal HP track"),
 

@@ -146,6 +146,13 @@ class Combatant:
     mount_id: str | None = None
     rider_id: str | None = None
 
+    # Energy resistance: ``{damage_type: amount}`` (e.g.,
+    # ``{"fire": 10}`` reduces fire damage by 10/hit, min 0).
+    # Energy immunity: ``{damage_type, ...}`` — completely ignores
+    # damage of these types. Read by spells.apply_typed_damage.
+    energy_resistance: dict[str, int] = field(default_factory=dict)
+    energy_immunity: set[str] = field(default_factory=set)
+
     # Per-source-tracking of conditions applied by ongoing effects.
     # Spell handlers that call ``add_condition`` should also call
     # ``register_sourced_condition(source, condition_id)`` so dispel /
