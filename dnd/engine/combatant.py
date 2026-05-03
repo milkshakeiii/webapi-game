@@ -366,6 +366,30 @@ class Combatant:
         if amount < 0:
             raise ValueError(f"heal must be >= 0, got {amount}")
         self.current_hp = min(self.max_hp, self.current_hp + amount)
+        # PF1 RAW: any source of magical healing stops bleed effects.
+        if amount > 0 and self.bleed > 0:
+            self.stop_bleed()
+
+    def apply_bleed(self, amount: int) -> None:
+        """Add ``amount`` HP-per-round bleed damage.
+
+        Bleed sources (bleeding critical, wounding weapons, stirge
+        attached drain, the Bleed cantrip, etc.) call this to layer
+        bleed on a target. The ``bleed`` condition is set as a
+        side-channel marker so the conditions set reflects the state.
+        """
+        if amount <= 0:
+            return
+        if self.is_immune_to_bleed():
+            return
+        self.bleed += amount
+        if "bleed" not in self.conditions:
+            self.conditions.add("bleed")
+
+    def stop_bleed(self) -> None:
+        """Clear all active bleed and the matching condition."""
+        self.bleed = 0
+        self.conditions.discard("bleed")
 
     def add_condition(self, condition_id: str) -> bool:
         """Apply ``condition_id`` unless the combatant is immune.
@@ -564,6 +588,13 @@ class Combatant:
             self.modifiers.add(Modifier(value=-4, type="untyped",
                                         target="skill:perception",
                                         source="fascinated"))
+        elif condition_id == "invisible":
+            # PF1: invisible creature has total concealment (50% miss
+            # chance for attackers who can't see it). +2 attack and
+            # target-denies-Dex are applied in _do_attack when this
+            # condition is present on the attacker.
+            self.resources["pre_invisible_concealment"] = self.concealment
+            self.concealment = max(self.concealment, 50)
 
     def _on_condition_removed(self, condition_id: str) -> None:
         """Undo the side effects of a condition that's leaving."""
@@ -605,6 +636,9 @@ class Combatant:
             self.speed = self.speed * 2
         elif condition_id == "fascinated":
             self.modifiers.remove_by_source("fascinated")
+        elif condition_id == "invisible":
+            prev = self.resources.pop("pre_invisible_concealment", 0)
+            self.concealment = prev
 
     def apply_negative_levels(self, n: int = 1) -> None:
         """Add ``n`` negative levels (PF1 energy drain).
@@ -725,7 +759,7 @@ class Combatant:
             self.current_hp -= self.bleed
             if self.current_hp <= self.death_threshold:
                 self.add_condition("dead")
-                self.bleed = 0
+                self.stop_bleed()
         # Per-round healing.
         if "dead" not in self.conditions and self.current_hp < self.max_hp:
             heal = self.fast_healing + self.regeneration
@@ -733,7 +767,7 @@ class Combatant:
                 self.current_hp = min(self.max_hp, self.current_hp + heal)
                 # Any healing stops bleed.
                 if self.bleed > 0:
-                    self.bleed = 0
+                    self.stop_bleed()
         return expired
 
     def _read_con_score(self) -> int:
@@ -1036,6 +1070,17 @@ def combatant_from_monster(
             coll.add(mod(int(total), "untyped", f"skill:{skill_id}",
                          f"{source_prefix}:skill_block"))
 
+    # PF1: incorporeal subtype creatures (ghost, shadow, wraith) take
+    # half-or-no damage from corporeal sources and impose 50% miss
+    # from non-force, non-ghost-touch attacks. We approximate via the
+    # generic concealment field (50%).
+    # TODO(incorporeal): the engine doesn't yet distinguish force /
+    # ghost-touch attacks, and corporeal-source damage is NOT halved.
+    # Both gaps need an attack-tag system before they can be wired —
+    # tracked in conditions coverage as PARTIAL.
+    subtypes = [s.lower() for s in (monster.subtypes or [])]
+    base_concealment = 50 if "incorporeal" in subtypes else 0
+
     return Combatant(
         id=_new_id(),
         name=name or monster.name,
@@ -1065,6 +1110,7 @@ def combatant_from_monster(
         damage_reduction=_monster_damage_reduction(monster),
         death_threshold=_monster_death_threshold(monster),
         condition_immunities=_monster_condition_immunities(monster),
+        concealment=base_concealment,
     )
 
 

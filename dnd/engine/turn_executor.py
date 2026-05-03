@@ -87,6 +87,14 @@ def execute_turn(
     do = intent.do
     ns = intent.namespace
 
+    # PF1 confusion: each round, a confused actor rolls 1d100 to
+    # decide what they actually do.  01-25 act normally; 26-50 babble
+    # (do nothing); 51-75 self-attack; 76-100 attack nearest creature.
+    if "confused" in actor.conditions:
+        do = _resolve_confusion(actor, do, encounter, grid, roller, events)
+        if do is None:
+            return TurnResult(actor.id, rule_index, events)
+
     # Free actions first.
     for fa in do.get("free", []) or []:
         fa_type = fa.get("type") if isinstance(fa, dict) else None
@@ -149,6 +157,86 @@ _STANDARD_ACTION_EVENT_KINDS: frozenset[str] = frozenset({
     "stunning_fist", "aid_another", "total_defense",
     "trample", "coup_de_grace",
 })
+
+
+def _resolve_confusion(
+    actor: Combatant,
+    do: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    events: list[TurnEvent],
+) -> dict | None:
+    """Apply PF1 confusion table; return new ``do`` or ``None`` to skip.
+
+    Returning ``None`` means the actor's turn is fully consumed by
+    the confusion outcome (do-nothing or self-attack); the caller
+    should bail out of further action processing.
+    """
+    r = roller.roll("1d100")
+    val = r.terms[0].rolls[0] if r.terms else int(r.total)
+    if val <= 25:
+        events.append(TurnEvent(actor.id, "confused_act_normally",
+                                {"roll": val}))
+        return do
+    if val <= 50:
+        events.append(TurnEvent(actor.id, "confused_babble",
+                                {"roll": val}))
+        return None
+    if val <= 75:
+        # Self-damage: 1d8 + Str modifier with held weapon. We don't
+        # track held weapons cleanly for monsters, so use 1d8 + Str.
+        str_mod = _ability_modifier(actor, "str")
+        dmg_roll = roller.roll("1d8")
+        damage = max(1, int(dmg_roll.total) + str_mod)
+        actor.take_damage(damage)
+        _apply_post_damage_state(actor)
+        events.append(TurnEvent(actor.id, "confused_self_attack", {
+            "roll": val,
+            "damage": damage,
+            "die_roll": int(dmg_roll.total),
+            "str_mod": str_mod,
+            "hp_after": actor.current_hp,
+        }))
+        return None
+    # 76-100: attack nearest creature (any team, friend or foe).
+    nearest = _nearest_living_creature(actor, grid)
+    if nearest is None:
+        events.append(TurnEvent(actor.id, "confused_babble",
+                                {"roll": val,
+                                 "reason": "no nearest creature"}))
+        return None
+    events.append(TurnEvent(actor.id, "confused_attack_nearest", {
+        "roll": val,
+        "target_id": nearest.id,
+    }))
+    # Pass the Combatant object directly so _resolve_target doesn't try
+    # to evaluate the id as a DSL expression.
+    return {"standard": {"type": "attack", "target": nearest}}
+
+
+def _nearest_living_creature(actor: Combatant, grid: Grid) -> Combatant | None:
+    """Return the closest non-dead creature other than the actor.
+
+    Used by confusion to pick the attack target. Returns ``None`` if
+    no other living creature exists on the grid.
+    """
+    if grid is None or not getattr(grid, "combatants", None):
+        return None
+    best: Combatant | None = None
+    best_dist = float("inf")
+    ax, ay = actor.position
+    for cid, other in grid.combatants.items():
+        if other.id == actor.id:
+            continue
+        if "dead" in other.conditions:
+            continue
+        ox, oy = other.position
+        d = max(abs(ox - ax), abs(oy - ay))  # Chebyshev (square grid)
+        if d < best_dist:
+            best_dist = d
+            best = other
+    return best
 
 
 def _turn_used_standard_action(events: list[TurnEvent]) -> bool:
@@ -256,6 +344,9 @@ def _execute_composite(
         return
     if composite == "stunning_fist":
         _do_stunning_fist(actor, args, encounter, grid, roller, ns, events)
+        return
+    if composite == "coup_de_grace":
+        _do_coup_de_grace(actor, args, encounter, grid, roller, ns, events)
         return
     if composite == "aid_another":
         _do_aid_another(actor, args, encounter, grid, roller, ns, events)
@@ -1827,6 +1918,14 @@ def _do_attack(
         ac_situation = "flat_footed"
     elif _has_dex_denied(target):
         ac_situation = "flat_footed"
+    # Invisible attacker: +2 attack and target denied Dex (target can't
+    # see attacker absent True Seeing or pinpointing). PF1 ranged
+    # invisible attackers don't get the +2 (RAW: only melee).
+    invisible_bonus = 0
+    if "invisible" in actor.conditions:
+        if not is_ranged:
+            invisible_bonus = 2
+        ac_situation = "flat_footed"
     # Weapon proficiency: -4 attack if the attacker isn't proficient
     # with the weapon they're using. ``_weapon_not_proficient`` checks
     # the cached proficient categories on the combatant against the
@@ -1873,6 +1972,7 @@ def _do_attack(
             + prone_atk_penalty
             + prone_target_modifier
             + helpless_bonus
+            + invisible_bonus
             + nonprof_penalty
             + armor_nonprof_penalty
             - ac_situational_bonus  # subtracted because it makes the target harder to hit
@@ -2668,6 +2768,96 @@ def _do_stunning_fist(
     actor.remove_condition("stunning_fist_pending")
     actor.resources.pop("stunning_fist_dc", None)
     actor.resources.pop("stunning_fist_round", None)
+
+
+def _do_coup_de_grace(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """PF1 coup-de-grace: full-round attack against a helpless target.
+
+    Auto-hits, auto-crits (max die count, multiplied bonus), and the
+    target makes a Fort save vs DC = 10 + damage dealt; failure
+    instantly kills. Provokes AoO from threateners adjacent to the
+    actor (PF1 RAW: "delivering a coup de grace provokes attacks of
+    opportunity from threatening opponents").
+    """
+    target = _resolve_target(args.get("target"), ns)
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "coup_de_grace: no target"}))
+        return
+    if "helpless" not in target.conditions:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "coup_de_grace: target not helpless"}))
+        return
+    if not grid.is_adjacent(actor, target):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "coup_de_grace: target not adjacent"}))
+        return
+    options = actor.attack_options
+    if not options:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "coup_de_grace: actor has no weapon"}))
+        return
+    # Provoke AoO from each threatening enemy before the strike resolves.
+    # Helpless / sleeping / dazed / fascinated / panicked / cowering /
+    # nauseated creatures cannot react with an AoO.
+    _CANNOT_AOO = frozenset({
+        "helpless", "sleeping", "paralyzed", "petrified", "stunned",
+        "unconscious", "dying", "dead", "pinned", "dazed",
+        "fascinated", "panicked", "cowering", "nauseated",
+    })
+    if grid is not None:
+        for cid, other in list(grid.combatants.items()):
+            if other.id == actor.id or other.team == actor.team:
+                continue
+            if other.conditions & _CANNOT_AOO:
+                continue
+            if grid.threatens(other, actor):
+                _do_aoo(other, actor, grid, events, encounter=encounter)
+                if actor.current_hp <= 0:
+                    return
+    chosen = options[0]
+    crit_mult = int(chosen.get("crit_multiplier", 2))
+    damage_dice = str(chosen["damage"])
+    damage_bonus = int(chosen.get("damage_bonus", 0))
+    from .combat import damage_roll
+    raw_damage, individual = damage_roll(
+        roller, damage_dice, damage_bonus, crit_dice_count=crit_mult,
+    )
+    raw_damage = max(1, raw_damage)
+    target.take_damage(raw_damage,
+                       damage_type=str(chosen.get("damage_type", "")))
+    fort_dc = 10 + raw_damage
+    r_save = roller.roll("1d20")
+    save_nat = r_save.terms[0].rolls[0]
+    save_total = save_nat + target.save("fort")
+    save_passed = save_total >= fort_dc
+    died = False
+    if not save_passed:
+        target.add_condition("dead")
+        died = True
+    elif target.current_hp <= target.death_threshold:
+        target.add_condition("dead")
+        died = True
+    events.append(TurnEvent(actor.id, "coup_de_grace", {
+        "target_id": target.id,
+        "weapon": chosen.get("name", "weapon"),
+        "damage": raw_damage,
+        "individual": individual,
+        "crit_multiplier": crit_mult,
+        "fort_dc": fort_dc,
+        "fort_natural": save_nat,
+        "fort_total": save_total,
+        "fort_passed": save_passed,
+        "died": died,
+    }))
 
 
 def _resolve_maneuver(
