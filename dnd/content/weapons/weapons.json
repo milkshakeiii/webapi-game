@@ -19,5 +19,7 @@
   {"id": "falchion", "name": "Falchion", "category": "martial", "wield": "two_handed", "damage_dice": "2d4", "damage_type": "S", "crit_range": [18, 20], "crit_multiplier": 2, "weight": 8, "cost_gp": 75, "is_melee": true},
   {"id": "longbow", "name": "Longbow", "category": "martial", "wield": "two_handed", "damage_dice": "1d8", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 3, "weight": 3, "cost_gp": 75, "is_melee": false, "range_increment": 100},
   {"id": "shortbow", "name": "Shortbow", "category": "martial", "wield": "two_handed", "damage_dice": "1d6", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 3, "weight": 2, "cost_gp": 30, "is_melee": false, "range_increment": 60},
-  {"id": "lance", "name": "Lance", "category": "martial", "wield": "two_handed", "damage_dice": "1d8", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 3, "weight": 10, "cost_gp": 10, "is_melee": true, "has_reach": true}
+  {"id": "lance", "name": "Lance", "category": "martial", "wield": "two_handed", "damage_dice": "1d8", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 3, "weight": 10, "cost_gp": 10, "is_melee": true, "has_reach": true},
+  {"id": "longspear", "name": "Longspear", "category": "simple", "wield": "two_handed", "damage_dice": "1d8", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 3, "weight": 9, "cost_gp": 5, "is_melee": true, "has_reach": true},
+  {"id": "glaive", "name": "Glaive", "category": "martial", "wield": "two_handed", "damage_dice": "1d10", "damage_type": "S", "crit_range": [20, 20], "crit_multiplier": 3, "weight": 10, "cost_gp": 8, "is_melee": true, "has_reach": true}
 ]

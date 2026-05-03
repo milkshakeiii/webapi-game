@@ -107,6 +107,7 @@ class Weapon:
     is_finesse: bool = False
     can_throw: bool = False
     range_increment: int = 0  # 0 means no ranged use
+    has_reach: bool = False   # PF1 "reach weapon": threatens at 10 ft, not 5
     weight: float = 0.0
     cost_gp: float = 0.0
     raw: dict = field(default_factory=dict)
@@ -292,6 +293,7 @@ def _weapon_from_dict(d: dict) -> Weapon:
         is_finesse=bool(d.get("is_finesse", False)),
         can_throw=bool(d.get("can_throw", False)),
         range_increment=int(d.get("range_increment", 0)),
+        has_reach=bool(d.get("has_reach", False)),
         weight=float(d.get("weight", 0)),
         cost_gp=float(d.get("cost_gp", 0)),
         raw=d,

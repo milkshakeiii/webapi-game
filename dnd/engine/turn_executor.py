@@ -376,6 +376,13 @@ def _move_along(
                 pass
             else:
                 rider.position = next_step
+        # Difficult terrain: cost the step at the feature's
+        # movement_cost_multiplier (rounded up). PF1 RAW: each square
+        # of difficult terrain counts as 2 squares of movement.
+        f = grid.feature_at(*next_step)
+        if f is not None and f.movement_cost_multiplier > 1.0:
+            extra = int(f.movement_cost_multiplier) - 1
+            steps_taken += extra
         cur = next_step
         steps_taken += 1
 
@@ -1222,6 +1229,11 @@ def _do_attack(
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "attack target not in melee range"}))
         return
+    # Total cover blocks line of effect for ranged attacks entirely.
+    if is_ranged and _total_cover_blocks_line(actor, target, grid):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "total cover blocks line of effect"}))
+        return
 
     # Sneak attack precision damage if attacker qualifies.
     precision_dice = _sneak_attack_dice(actor, target, grid, encounter)
@@ -1401,6 +1413,23 @@ def _do_attack(
                 damage=0, damage_dealt_pre_dr=0, dr_absorbed=0,
                 log=outcome.log + [
                     f"blinded miss chance: rolled {miss_roll.total}/100 ≤ 50 — miss",
+                ],
+            )
+    # Target concealment: if the target has concealment > 0 and the
+    # attack would otherwise hit, roll 1d100; on a roll ≤ concealment,
+    # the attack misses. Standard concealment = 20%; total concealment
+    # = 50%.
+    if outcome.hit and getattr(target, "concealment", 0) > 0:
+        c_roll = roller.roll("1d100")
+        if c_roll.total <= target.concealment:
+            from dataclasses import replace as _replace
+            outcome = _replace(
+                outcome,
+                hit=False, crit=False,
+                damage=0, damage_dealt_pre_dr=0, dr_absorbed=0,
+                log=outcome.log + [
+                    f"concealment miss: rolled {c_roll.total}/100 ≤ "
+                    f"{target.concealment} — miss",
                 ],
             )
     if outcome.hit and outcome.damage > 0:
@@ -2785,18 +2814,26 @@ def _cover_ac_bonus(
 ) -> int:
     """Return the cover bonus to ``target``'s AC vs ``attacker``.
 
-    PF1 simplified for v1:
-      - Hard cover (intervening wall): +4 AC, regardless of attack type.
-      - Soft cover (intervening combatant): +4 AC, ranged attacks only.
-      - Hard cover trumps soft cover; we don't double-count.
-      - Greater cover (+8) is deferred — needs a model for "more than
-        half the path is blocked" beyond the binary one we use here.
+    PF1 cover tiers (simplified for the grid-and-Bresenham model):
+      - No walls in line: no hard cover. Soft cover (+4) applies if a
+        non-attacker non-target combatant stands on the line AND the
+        attack is ranged.
+      - Exactly one wall on the line: hard cover (+4 AC, +2 Reflex —
+        the Reflex piece is read by callers via ``_cover_reflex_bonus``).
+      - Two or more walls on the line: greater cover (+8 AC, +4
+        Reflex). Models "the cover is more than half" from RAW.
+      - Total cover (line of effect fully blocked) is rejected at the
+        attack-validity stage by ``_total_cover_blocks_line``, not
+        here — this function only returns AC bonuses for attacks
+        that are still resolvable.
+
+    Hard / greater cover trumps soft cover; we don't stack them.
     """
     if grid is None:
         return 0
     from .grid import _bresenham
     line = _bresenham(attacker.position, target.position)
-    has_hard = False
+    wall_count = 0
     has_soft = False
     for cell in line:
         if cell == attacker.position or cell == target.position:
@@ -2804,8 +2841,8 @@ def _cover_ac_bonus(
         # Hard cover from a wall on the line.
         f = grid.features.get(cell)
         if f is not None and f.blocks_line_of_sight:
-            has_hard = True
-            break
+            wall_count += 1
+            continue
         # Soft cover from any other combatant standing in the way.
         for cid, occupant in grid.combatants.items():
             if occupant.id in (attacker.id, target.id):
@@ -2813,11 +2850,36 @@ def _cover_ac_bonus(
             if occupant.position == cell:
                 has_soft = True
                 break
-    if has_hard:
-        return 4
+    if wall_count >= 2:
+        return 8  # greater cover
+    if wall_count == 1:
+        return 4  # hard cover
     if has_soft and is_ranged:
-        return 4
+        return 4  # soft cover (ranged only)
     return 0
+
+
+def _total_cover_blocks_line(
+    attacker: Combatant,
+    target: Combatant,
+    grid: Grid | None,
+) -> bool:
+    """True when the line of effect from attacker to target is fully
+    blocked — ranged attacks and most spells fail entirely (PF1 'total
+    cover'). We treat 3+ walls in the line as total cover.
+    """
+    if grid is None:
+        return False
+    from .grid import _bresenham
+    line = _bresenham(attacker.position, target.position)
+    walls = 0
+    for cell in line:
+        if cell == attacker.position or cell == target.position:
+            continue
+        f = grid.features.get(cell)
+        if f is not None and f.blocks_line_of_sight:
+            walls += 1
+    return walls >= 3
 
 
 def _firing_into_melee_penalty(

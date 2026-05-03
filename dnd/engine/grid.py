@@ -26,6 +26,27 @@ from .combatant import Combatant
 from .sizes import get_size
 
 
+def _wields_reach_weapon(combatant: Combatant) -> bool:
+    """True if the combatant's primary attack uses a reach weapon.
+
+    Reads the first non-offhand attack option's ``weapon_id`` and
+    looks up its ``has_reach`` field via the default registry. Returns
+    False for natural-attack monsters (no weapon_id).
+    """
+    for opt in combatant.attack_options:
+        if opt.get("is_offhand"):
+            continue
+        wid = opt.get("weapon_id")
+        if not wid:
+            return False
+        from .content import default_registry
+        try:
+            return bool(default_registry().get_weapon(wid).has_reach)
+        except Exception:
+            return False
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Features
 # ---------------------------------------------------------------------------
@@ -205,20 +226,34 @@ class Grid:
         Excludes squares occupied by the combatant itself. Includes
         squares occupied by anyone else (you threaten allies' squares
         too — friendliness matters at the AoO trigger, not here).
+
+        With a reach weapon (lance, longspear, glaive — primary weapon
+        flagged ``has_reach``), the threatened set is shifted out by
+        +1 square: a Medium creature threatens distance 2 only and
+        NOT adjacent. Without a reach weapon, threat covers all
+        squares within ``reach_squares``.
         """
         reach = self.reach_squares(combatant)
         if reach <= 0:
             return set()
+        wields_reach = _wields_reach_weapon(combatant)
+        if wields_reach:
+            min_d = reach + 1
+            max_d = reach + 1
+        else:
+            min_d = 1
+            max_d = reach
         own = set(self.footprint_squares(combatant))
         threatened: set[tuple[int, int]] = set()
         for sx, sy in own:
-            for tx in range(sx - reach, sx + reach + 1):
-                for ty in range(sy - reach, sy + reach + 1):
+            for tx in range(sx - max_d, sx + max_d + 1):
+                for ty in range(sy - max_d, sy + max_d + 1):
                     if not self.in_bounds(tx, ty):
                         continue
                     if (tx, ty) in own:
                         continue
-                    if self.distance_squares((sx, sy), (tx, ty)) <= reach:
+                    d = self.distance_squares((sx, sy), (tx, ty))
+                    if min_d <= d <= max_d:
                         threatened.add((tx, ty))
         return threatened
 

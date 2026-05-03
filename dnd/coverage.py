@@ -343,12 +343,12 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.nonlethal_damage":       (NOT_IMPLEMENTED, "no separate nonlethal HP track"),
 
     # ── Combat: defenses, cover, concealment, flanking ───────────────────
-    "combat.cover":                  (PARTIAL,        "hard cover (+4 AC) wired via _cover_ac_bonus + Bresenham; +2 Reflex bonus not yet applied (no consumer cares yet)"),
-    "combat.greater_cover":          (NOT_IMPLEMENTED, "+8 AC, +4 Reflex; needs 'majority of line blocked' detection"),
+    "combat.cover":                  (PARTIAL,        "hard cover (+4 AC) when one wall in line; +2 Reflex bonus is computed but not yet read by save handlers"),
+    "combat.greater_cover":          (IMPLEMENTED,    "+8 AC when 2 walls intervene in the Bresenham line. Modeled as 'more than half the line blocked' via wall count"),
     "combat.soft_cover":             (IMPLEMENTED,    "intervening combatant grants +4 AC vs ranged via _cover_ac_bonus"),
-    "combat.total_cover":            (NOT_IMPLEMENTED, "blocks line of effect entirely; needs spell-targeting check"),
-    "combat.concealment":            (NOT_IMPLEMENTED, "20% miss chance"),
-    "combat.total_concealment":      (NOT_IMPLEMENTED, "50% miss chance"),
+    "combat.total_cover":            (IMPLEMENTED,    "_total_cover_blocks_line returns True when 3+ walls intervene; ranged attacks skip with 'total cover blocks line of effect' reason"),
+    "combat.concealment":            (IMPLEMENTED,    "Combatant.concealment percentage (0/20/50). _do_attack rolls 1d100 after a successful hit; ≤ concealment converts to miss"),
+    "combat.total_concealment":      (IMPLEMENTED,    "Same field; set Combatant.concealment=50 (e.g., invisible targets) and the miss-roll path applies it identically"),
     "combat.flanking":               (IMPLEMENTED,    "+2 attack to both flankers; grid.is_flanked_by + _flanking_attack_bonus"),
     "combat.higher_ground":          (NOT_IMPLEMENTED, "+1 attack from above"),
 
@@ -356,8 +356,8 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.aoo":                    (IMPLEMENTED,    "1 AoO/round; aoo_triggers_for_movement + _do_aoo"),
     "combat.aoo_extra_combat_reflexes": (IMPLEMENTED,    "_aoo_limit returns 1 + Dex when feat present; per-round counter on Combatant"),
     "combat.aoo_provoking_actions":  (PARTIAL,        "leaving threatened square + stand_up + non-defensive cast trigger; drink-potion / draw-weapon / retrieve-stowed-item not wired"),
-    "combat.threatened_squares":     (PARTIAL,        "grid.threatened_squares; 5-ft (normal) and 10-ft (reach weapons) not differentiated yet"),
-    "combat.reach_weapons":          (NOT_IMPLEMENTED, "10-ft threat with no adjacent — not modeled"),
+    "combat.threatened_squares":     (IMPLEMENTED,    "grid.threatened_squares uses (min_d, max_d) range — normal weapon threatens 1..reach; reach weapon (has_reach) shifts to (reach+1, reach+1) — adjacent NOT threatened, +5 ft beyond IS"),
+    "combat.reach_weapons":          (IMPLEMENTED,    "Weapon.has_reach detected; grid.threatened_squares shifts threat from min/max=0/reach to min/max=reach+1/reach+1 — wielder threatens at +5 ft beyond normal reach but NOT adjacent. Longspear / glaive / lance carry has_reach=true"),
 
     # ── Combat: special attacks & maneuvers ──────────────────────────────
     "combat.combat_maneuver_basic":  (IMPLEMENTED,    "_resolve_maneuver: d20 + actor.cmb vs target.cmd(context={'maneuver': kind}); enables Stability and similar qualified CMD bonuses"),
@@ -416,7 +416,7 @@ CORE_MECHANICS: dict[str, Entry] = {
 
     # ── Combat: movement modes & terrain ────────────────────────────────
     "combat.movement_walk":          (IMPLEMENTED,    "speed-30 walk = 6 cells/round in our grid"),
-    "combat.movement_difficult_terrain": (NOT_IMPLEMENTED, "2x cost; engine has no terrain types"),
+    "combat.movement_difficult_terrain": (IMPLEMENTED,    "GridFeature(movement_cost_multiplier=2.0) recognized in _move_along; entering a difficult square consumes (multiplier-1) extra steps from the actor's movement budget"),
     "combat.movement_fly":           (OUT_OF_SCOPE,   "no verticality in v1"),
     "combat.movement_swim":          (OUT_OF_SCOPE,   "no aquatic subgame in v1"),
     "combat.movement_climb":         (OUT_OF_SCOPE,   "no 3D terrain in v1"),

@@ -153,6 +153,14 @@ class Combatant:
     energy_resistance: dict[str, int] = field(default_factory=dict)
     energy_immunity: set[str] = field(default_factory=set)
 
+    # Concealment: percentage miss chance an attacker rolls against
+    # this combatant (0 = none, 20 = standard concealment, 50 = total
+    # concealment). Read by turn_executor._do_attack: after the
+    # attack roll, if outcome.hit, roll 1d100; if ≤ concealment, the
+    # attack misses despite the to-hit. Default 0; set externally
+    # (invisibility, dim light, etc. when those subsystems wire in).
+    concealment: int = 0
+
     # Per-source-tracking of conditions applied by ongoing effects.
     # Spell handlers that call ``add_condition`` should also call
     # ``register_sourced_condition(source, condition_id)`` so dispel /
