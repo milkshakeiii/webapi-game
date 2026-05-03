@@ -432,7 +432,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "magic.spell_resistance":        (IMPLEMENTED,    "d20 + caster_level vs target SR via spells.overcomes_sr"),
     "magic.caster_level":            (IMPLEMENTED,    "spells.caster_level returns char.level for v1; multiclass partial"),
     "magic.spell_failure_armor":     (IMPLEMENTED,    "_is_arcane_caster + _arcane_spell_failure_pct in turn_executor; 1d100 ≤ ASF% in _do_cast for S-component spells. Slot consumed on failure. Skipped if 'still_spell' metamagic is applied"),
-    "magic.spell_known_vs_prepared": (PARTIAL,        "castable_spells set populated; preparation slot system not fully modeled"),
+    "magic.spell_known_vs_prepared": (IMPLEMENTED,    "Combatant.casting_type ('prepared' / 'spontaneous' / '') read from class.spell_progression.type. Prepared casters consume from Combatant.prepared_spells (populated from Character.spells_prepared at dispatch); spontaneous use Combatant.castable_spells (from Character.spells_known when set, else class-wide list). Empty prep is a permissive fallback so default-dispatched heroes still cast"),
 
     # ── Magic: components & casting ─────────────────────────────────────
     "magic.casting_components_v":    (PARTIAL,        "V-component spells fail outright when caster is silenced; deafened caster has 20% spell-failure roll. The 'silenced' condition exists but isn't applied by any current effect — applies when externally set"),

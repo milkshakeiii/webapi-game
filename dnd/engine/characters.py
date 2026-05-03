@@ -380,6 +380,17 @@ def _extract_class_bonus_feats(
 # ---------------------------------------------------------------------------
 
 
+def _int_keyed_dict(d: dict | None) -> dict[int, list[str]] | None:
+    """Coerce a JSON-decoded dict whose keys are stringified ints into
+    a dict[int, list[str]]. Returns ``None`` if input is None."""
+    if d is None:
+        return None
+    out: dict[int, list[str]] = {}
+    for k, v in d.items():
+        out[int(k)] = list(v or [])
+    return out
+
+
 @dataclass
 class Character:
     """The static inputs that define a character.
@@ -420,6 +431,27 @@ class Character:
     # Level-up plan from L2 to target_level. None for L1 characters.
     level_plan: dict | None = None             # serialized LevelUpPlan
 
+    # Spell-prep state (modified at the castle, baked into the
+    # combatant at dispatch).
+    #
+    # ``spells_prepared``: for prepared casters (wizard / cleric /
+    # druid / paladin / ranger / witch / magus). Maps spell level →
+    # list of spell IDs prepared today. Duplicates are allowed (a
+    # wizard may prepare magic_missile twice into two L1 slots). The
+    # list length must equal the class's spells-per-day at that level.
+    #
+    # ``spells_known``: for spontaneous casters (sorcerer / bard /
+    # oracle / summoner / skald). Maps spell level → list of spell
+    # IDs known. Each level's list must equal the class's
+    # spells-known count for that level.
+    #
+    # If None, the engine uses class defaults (spontaneous: all
+    # eligible spells; prepared: a 'sensible default' from class hints
+    # — for v1, just pick the first N spells from the spell list at
+    # each level).
+    spells_prepared: dict[int, list[str]] | None = None
+    spells_known: dict[int, list[str]] | None = None
+
     def to_dict(self) -> dict:
         d = asdict(self)
         d["base_ability_scores"] = self.base_ability_scores.to_dict()
@@ -451,6 +483,8 @@ class Character:
             equipped_offhand_weapon=d.get("equipped_offhand_weapon"),
             starting_gold=int(d.get("starting_gold", 0)),
             level_plan=d.get("level_plan"),
+            spells_prepared=_int_keyed_dict(d.get("spells_prepared")),
+            spells_known=_int_keyed_dict(d.get("spells_known")),
         )
 
 
@@ -505,6 +539,11 @@ class CharacterRequest:
     # omitted; ignored unless race is half-elf.
     adaptability_skill_focus: str | None = None
 
+    # Spell-prep state (see Character for semantics). Modified at the
+    # castle by players, baked into the Combatant at dispatch time.
+    spells_prepared: dict[int, list[str]] | None = None
+    spells_known: dict[int, list[str]] | None = None
+
     @classmethod
     def from_dict(cls, d: dict) -> CharacterRequest:
         ab = d.get("ability_scores")
@@ -539,6 +578,8 @@ class CharacterRequest:
             shield_explicitly_none=(shield_present and equipment.get("shield") is None),
             level_plan=d.get("level_plan"),
             adaptability_skill_focus=d.get("adaptability_skill_focus"),
+            spells_prepared=_int_keyed_dict(d.get("spells_prepared")),
+            spells_known=_int_keyed_dict(d.get("spells_known")),
         )
 
 
@@ -699,6 +740,8 @@ def create_character(
         equipped_offhand_weapon=request.equipped_offhand_weapon,
         starting_gold=starting_gold,
         level_plan=plan_dict,
+        spells_prepared=request.spells_prepared,
+        spells_known=request.spells_known,
     )
 
 

@@ -82,6 +82,23 @@ class Combatant:
     # levels they have slots for). Empty for non-casters and monsters.
     castable_spells: set[str] = field(default_factory=set)
 
+    # Casting model: "spontaneous" (sorcerer / bard / oracle) or
+    # "prepared" (wizard / cleric / druid / paladin / ranger / witch
+    # / magus). Determines how _do_cast consumes spells:
+    #   - spontaneous: any spell in castable_spells of legal level
+    #     can be cast; only the slot is consumed.
+    #   - prepared: the spell must be in prepared_spells[level], and
+    #     casting consumes both the slot AND one entry from that list
+    #     (re-cast requires preparing the spell again).
+    # ``""`` means non-caster / not modeled — spells fall through the
+    # spontaneous path.
+    casting_type: str = ""
+
+    # Per-level list of prepared spell IDs. Populated at construction
+    # for prepared casters from Character.spells_prepared (or class
+    # defaults if the character didn't pre-pick). Duplicates allowed.
+    prepared_spells: dict[int, list[str]] = field(default_factory=dict)
+
     # Smite target id (paladin Smite Evil declared target). Empty when none.
     smite_target_id: str | None = None
 
@@ -1081,6 +1098,13 @@ def combatant_from_character(
     hp_max = cumulative.hp_max + _compute(0, coll.for_target("hp_max"))
     bab = cumulative.bab
 
+    # Determine the casting model from the primary class's
+    # spell_progression (prepared / spontaneous / "" for non-casters).
+    casting_type = ""
+    sp = class_.spell_progression
+    if sp:
+        casting_type = str(sp.get("type", ""))
+
     # Populate castable spells based on class + level.
     castable: set[str] = set()
     if cumulative.spells_per_day:
@@ -1089,14 +1113,41 @@ def combatant_from_character(
              if (isinstance(v, int) and v > 0) or v == "at_will"),
             default=0,
         )
-        for sid, spell in registry.spells.items():
-            if class_.id in spell.level_by_class:
-                if spell.level_by_class[class_.id] <= max_castable_level:
-                    castable.add(sid)
-            # Multiclass casters: also include spells from other caster classes.
-            for cid in cumulative.class_levels:
-                if cid != class_.id and cid in spell.level_by_class:
-                    castable.add(sid)
+        if casting_type == "spontaneous" and character.spells_known:
+            # Spontaneous caster: castable = explicitly-known spells (per
+            # the character sheet), filtered by level cap and validated
+            # against the registry.
+            for level_key, ids in character.spells_known.items():
+                lvl = int(level_key)
+                if lvl > max_castable_level:
+                    continue
+                for sid in ids:
+                    if sid in registry.spells:
+                        castable.add(sid)
+        else:
+            # Default / prepared casters: all class-list spells up to
+            # the level cap are castable in principle (prepared casters
+            # additionally need them in prepared_spells to actually
+            # cast).
+            for sid, spell in registry.spells.items():
+                if class_.id in spell.level_by_class:
+                    if spell.level_by_class[class_.id] <= max_castable_level:
+                        castable.add(sid)
+                # Multiclass casters: include spells from other caster
+                # classes.
+                for cid in cumulative.class_levels:
+                    if cid != class_.id and cid in spell.level_by_class:
+                        castable.add(sid)
+
+    # Prepared casters: bake spells_prepared from the character sheet
+    # into the combatant's prepared_spells. Without explicit prep, we
+    # leave it empty — _do_cast will reject casts with a clear error
+    # rather than silently letting them through.
+    prepared_spells: dict[int, list[str]] = {}
+    if casting_type == "prepared" and character.spells_prepared:
+        for level_key, ids in character.spells_prepared.items():
+            lvl = int(level_key)
+            prepared_spells[lvl] = list(ids)
     # Slot resources keyed by spell level.
     spell_slot_resources: dict[str, int] = {}
     if cumulative.spells_per_day:
@@ -1190,6 +1241,8 @@ def combatant_from_character(
         template_kind="character",
         template=character,
         castable_spells=castable,
+        casting_type=casting_type,
+        prepared_spells=prepared_spells,
         death_threshold=-int(final_scores.get("con") or 10),
         weapon_proficiency_categories=weapon_profs,
         armor_proficiency_categories=armor_profs,

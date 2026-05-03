@@ -2649,6 +2649,48 @@ def _do_cast(
         }))
         return
 
+    # ── Prepared casters: spell must be in prepared_spells ──────────
+    # Prepared casters consume one entry from prepared_spells[level]
+    # in addition to the slot. Spontaneous casters skip this check —
+    # any spell in castable_spells of legal level is fair game. The
+    # prepared list may have duplicates (a wizard who prepared
+    # magic_missile twice can cast it twice).
+    #
+    # Permissive fallback: if a prepared caster's prepared_spells is
+    # entirely empty (no prep for any level), we treat the actor as
+    # if spontaneous. This keeps the "default-dispatch hero with no
+    # prep specified" path working — castable_spells is the gate.
+    # As soon as ANY prep exists for ANY level, the prepared-caster
+    # rules apply at every level (an empty list at a specific level
+    # = nothing prepared at that level).
+    has_any_prep = bool(actor.prepared_spells) and any(
+        actor.prepared_spells.values()
+    )
+    if actor.casting_type == "prepared" and has_any_prep:
+        prep_list = actor.prepared_spells.get(base_spell_level, [])
+        if spell_id not in prep_list:
+            events.append(TurnEvent(actor.id, "skip", {
+                "reason": f"spell {spell_id!r} not prepared at level "
+                          f"{base_spell_level} (prepared casters must "
+                          f"have it in their daily prep)",
+                "prepared_at_level": list(prep_list),
+            }))
+            return
+
+    def _consume_slot() -> None:
+        """Decrement the spell slot and (for prepared casters with
+        an active prep) remove one matching entry from
+        prepared_spells. Called once per cast-attempt that gets past
+        the prepared-spell check, even if the cast subsequently
+        fails (RAW: ASF / concentration failure still consumes the
+        slot AND the prep)."""
+        actor.resources[slot_key] = max(0, actor.resources.get(slot_key, 0) - 1)
+        if actor.casting_type == "prepared" and has_any_prep:
+            prep_list = actor.prepared_spells.get(base_spell_level, [])
+            if spell_id in prep_list:
+                prep_list.remove(spell_id)
+                actor.prepared_spells[base_spell_level] = prep_list
+
     # ── Arcane spell failure from armor ─────────────────────────────
     # Arcane casters wearing armor / shields with non-zero
     # arcane_spell_failure roll a d100 per cast; failure consumes the
@@ -2670,7 +2712,7 @@ def _do_cast(
                 "asf_pct": asf_pct,
                 "roll": asf_roll.total,
             }))
-            actor.resources[slot_key] = remaining - 1
+            _consume_slot()
             return
 
     # ── Spell components check ──────────────────────────────────────
@@ -2720,7 +2762,7 @@ def _do_cast(
                     "total": total_g, "dc": grapple_dc,
                 },
             }))
-            actor.resources[slot_key] = remaining - 1
+            _consume_slot()
             return
 
     # ── Concentration check if threatened (cast on the defensive). ──
@@ -2752,7 +2794,7 @@ def _do_cast(
             total = nat + cl + ab_mod
             passed = total >= conc_dc
             # Slot is consumed regardless of success.
-            actor.resources[slot_key] = remaining - 1
+            _consume_slot()
             if not passed:
                 events.append(TurnEvent(actor.id, "cast_failed", {
                     "spell_id": spell_id,
@@ -2779,7 +2821,7 @@ def _do_cast(
                         "spell_id": spell_id,
                         "reason": "killed_by_aoo_during_cast",
                     }))
-                    actor.resources[slot_key] = remaining - 1
+                    _consume_slot()
                     return
             damage_taken = max(0, hp_before_aoos - actor.current_hp)
             if damage_taken > 0:
@@ -2808,11 +2850,11 @@ def _do_cast(
                         },
                         "damage_taken": damage_taken,
                     }))
-                    actor.resources[slot_key] = remaining - 1
+                    _consume_slot()
                     return
-            actor.resources[slot_key] = remaining - 1
+            _consume_slot()
     else:
-        actor.resources[slot_key] = remaining - 1
+        _consume_slot()
 
     # ── Resolve targets, expanding for buff_party / AoE. ──
     targets = _expand_cast_targets(actor, spell, args, encounter, grid, ns)
