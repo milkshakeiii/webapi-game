@@ -493,5 +493,979 @@
       "max_target_hd": 5
     },
     "summary": "Target with ≤5 HD must Will save. Failed save: frightened 1d4 rounds. Successful save: shaken 1 round."
+  },
+  {
+    "id": "shield",
+    "name": "Shield",
+    "school": "abjuration",
+    "subschool": "force",
+    "descriptors": ["force"],
+    "level_by_class": {"sorcerer": 1, "wizard": 1, "magus": 1},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "personal",
+    "target": "self",
+    "duration": "minutes_per_level",
+    "saving_throw": "none",
+    "spell_resistance": "no",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 4, "modifier_type": "shield", "target": "ac"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "+4 shield bonus to AC. Negates magic missile."
+  },
+  {
+    "id": "divine_favor",
+    "name": "Divine Favor",
+    "school": "evocation",
+    "descriptors": [],
+    "level_by_class": {"cleric": 1, "paladin": 1, "warpriest": 1},
+    "components": ["V", "S", "DF"],
+    "casting_time": "standard",
+    "range": "personal",
+    "target": "self",
+    "duration": "minutes_per_level",
+    "saving_throw": "none",
+    "spell_resistance": "no",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 1, "modifier_type": "luck", "target": "attack"},
+        {"value": 1, "modifier_type": "luck", "target": "damage"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "+1 luck to attack and damage rolls (scales 1/3 caster levels, capped at +3) for 1 min."
+  },
+  {
+    "id": "shield_of_faith",
+    "name": "Shield of Faith",
+    "school": "abjuration",
+    "descriptors": [],
+    "level_by_class": {"cleric": 1, "paladin": 1},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 2, "modifier_type": "deflection", "target": "ac"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "+2 deflection to AC (+1 per 6 caster levels, max +5)."
+  },
+  {
+    "id": "magic_weapon",
+    "name": "Magic Weapon",
+    "school": "transmutation",
+    "descriptors": [],
+    "level_by_class": {"cleric": 1, "paladin": 1, "sorcerer": 1, "wizard": 1, "magus": 1},
+    "components": ["V", "S", "DF"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "weapon_touched",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 1, "modifier_type": "enhancement", "target": "attack"},
+        {"value": 1, "modifier_type": "enhancement", "target": "damage"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "+1 enhancement to attack and damage with one weapon."
+  },
+  {
+    "id": "protection_from_evil",
+    "name": "Protection from Evil",
+    "school": "abjuration",
+    "descriptors": ["good"],
+    "level_by_class": {"cleric": 1, "paladin": 1, "sorcerer": 1, "wizard": 1, "inquisitor": 1},
+    "components": ["V", "S", "M", "DF"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "no",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 2, "modifier_type": "deflection", "target": "ac"},
+        {"value": 2, "modifier_type": "resistance", "target": "fort_save"},
+        {"value": 2, "modifier_type": "resistance", "target": "ref_save"},
+        {"value": 2, "modifier_type": "resistance", "target": "will_save"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "+2 deflection AC and +2 resistance saves vs evil creatures (we apply unconditionally for v1). Plus mind-control protection."
+  },
+  {
+    "id": "true_strike",
+    "name": "True Strike",
+    "school": "divination",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 1, "wizard": 1, "magus": 1},
+    "components": ["V", "F"],
+    "casting_time": "standard",
+    "range": "personal",
+    "target": "self",
+    "duration": "1_round",
+    "saving_throw": "none",
+    "spell_resistance": "no",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 20, "modifier_type": "insight", "target": "attack"}
+      ],
+      "duration_rounds_per_caster_level": 0
+    },
+    "summary": "+20 insight bonus to your next attack roll within 1 round."
+  },
+  {
+    "id": "enlarge_person",
+    "name": "Enlarge Person",
+    "school": "transmutation",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 1, "wizard": 1, "magus": 1},
+    "components": ["V", "S", "M"],
+    "casting_time": "1_round",
+    "range": "close",
+    "target": "one_humanoid",
+    "duration": "minutes_per_level",
+    "saving_throw": "fort_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 2, "modifier_type": "size", "target": "ability:str"},
+        {"value": -2, "modifier_type": "size", "target": "ability:dex"},
+        {"value": -1, "modifier_type": "size", "target": "ac"},
+        {"value": -1, "modifier_type": "size", "target": "attack"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "Increase target one size category. +2 Str, -2 Dex, -1 size AC, -1 attack."
+  },
+  {
+    "id": "ray_of_enfeeblement",
+    "name": "Ray of Enfeeblement",
+    "school": "necromancy",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 1, "wizard": 1, "witch": 1},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_creature",
+    "duration": "rounds_per_level",
+    "saving_throw": "fort_partial",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": -6, "modifier_type": "untyped", "target": "ability:str"}
+      ],
+      "duration_rounds_per_caster_level": 1
+    },
+    "summary": "Ranged touch attack imposing -1d6+1/2 caster level Strength penalty (max -5 + half level). Save halves the penalty."
+  },
+  {
+    "id": "grease",
+    "name": "Grease",
+    "school": "conjuration",
+    "subschool": "creation",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 1, "wizard": 1, "bard": 1},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "10_ft_square_or_one_object",
+    "duration": "minutes_per_level",
+    "saving_throw": "reflex_negates",
+    "spell_resistance": "no",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "prone",
+      "save": "ref",
+      "duration_rounds_per_caster_level": 0
+    },
+    "summary": "Greasy area causes creatures to fall prone (Reflex negates). Items greased grant +10 to opposed disarm/steal."
+  },
+  {
+    "id": "command",
+    "name": "Command",
+    "school": "enchantment",
+    "subschool": "compulsion",
+    "descriptors": ["mind_affecting", "language_dependent"],
+    "level_by_class": {"cleric": 1, "inquisitor": 1, "witch": 1},
+    "components": ["V"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_creature",
+    "duration": "1_round",
+    "saving_throw": "will_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "dazed",
+      "save": "will",
+      "duration_rounds_per_caster_level": 0
+    },
+    "summary": "Single command word obeyed for 1 round (approximated as dazed for v1)."
+  },
+  {
+    "id": "doom",
+    "name": "Doom",
+    "school": "necromancy",
+    "descriptors": ["mind_affecting", "fear"],
+    "level_by_class": {"cleric": 1, "inquisitor": 1, "witch": 1},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "medium",
+    "target": "one_creature",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "shaken",
+      "save": "will",
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "Target is shaken for 1 min/level. Will negates."
+  },
+  {
+    "id": "sanctuary",
+    "name": "Sanctuary",
+    "school": "abjuration",
+    "descriptors": [],
+    "level_by_class": {"cleric": 1, "inquisitor": 1, "warpriest": 1},
+    "components": ["V", "S", "DF"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "rounds_per_level",
+    "saving_throw": "will_negates",
+    "spell_resistance": "no",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 0, "modifier_type": "untyped", "target": "sanctuary_marker"}
+      ],
+      "duration_rounds_per_caster_level": 1
+    },
+    "summary": "Opponents must Will save (DC = sanctuary's DC) to attack target; failure = can't attack target this turn."
+  },
+  {
+    "id": "cure_moderate_wounds",
+    "name": "Cure Moderate Wounds",
+    "school": "conjuration",
+    "subschool": "healing",
+    "descriptors": [],
+    "level_by_class": {"cleric": 2, "druid": 3, "bard": 2, "paladin": 3, "ranger": 3},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "instantaneous",
+    "saving_throw": "will_half_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "heal",
+      "dice": "2d8",
+      "plus_caster_level": true,
+      "max_plus": 10
+    },
+    "summary": "Heals 2d8 + 1/level (max +10)."
+  },
+  {
+    "id": "cure_serious_wounds",
+    "name": "Cure Serious Wounds",
+    "school": "conjuration",
+    "subschool": "healing",
+    "descriptors": [],
+    "level_by_class": {"cleric": 3, "druid": 4, "bard": 3, "paladin": 4, "ranger": 4},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "instantaneous",
+    "saving_throw": "will_half_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "heal",
+      "dice": "3d8",
+      "plus_caster_level": true,
+      "max_plus": 15
+    },
+    "summary": "Heals 3d8 + 1/level (max +15)."
+  },
+  {
+    "id": "cure_critical_wounds",
+    "name": "Cure Critical Wounds",
+    "school": "conjuration",
+    "subschool": "healing",
+    "descriptors": [],
+    "level_by_class": {"cleric": 4, "druid": 5, "bard": 4},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "instantaneous",
+    "saving_throw": "will_half_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "heal",
+      "dice": "4d8",
+      "plus_caster_level": true,
+      "max_plus": 20
+    },
+    "summary": "Heals 4d8 + 1/level (max +20)."
+  },
+  {
+    "id": "bulls_strength",
+    "name": "Bull's Strength",
+    "school": "transmutation",
+    "descriptors": [],
+    "level_by_class": {"cleric": 2, "sorcerer": 2, "wizard": 2, "paladin": 2, "alchemist": 2},
+    "components": ["V", "S", "M", "DF"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 4, "modifier_type": "enhancement", "target": "ability:str"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "+4 enhancement to Strength for 1 min/level."
+  },
+  {
+    "id": "cats_grace",
+    "name": "Cat's Grace",
+    "school": "transmutation",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 2, "wizard": 2, "bard": 2, "alchemist": 2},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 4, "modifier_type": "enhancement", "target": "ability:dex"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "+4 enhancement to Dexterity for 1 min/level."
+  },
+  {
+    "id": "bears_endurance",
+    "name": "Bear's Endurance",
+    "school": "transmutation",
+    "descriptors": [],
+    "level_by_class": {"cleric": 2, "druid": 2, "sorcerer": 2, "wizard": 2, "ranger": 2, "alchemist": 2},
+    "components": ["V", "S", "M", "DF"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 4, "modifier_type": "enhancement", "target": "ability:con"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "+4 enhancement to Constitution for 1 min/level."
+  },
+  {
+    "id": "eagles_splendor",
+    "name": "Eagle's Splendor",
+    "school": "transmutation",
+    "descriptors": [],
+    "level_by_class": {"cleric": 2, "sorcerer": 2, "wizard": 2, "bard": 2, "paladin": 2, "alchemist": 2},
+    "components": ["V", "S", "M", "DF"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 4, "modifier_type": "enhancement", "target": "ability:cha"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "+4 enhancement to Charisma for 1 min/level."
+  },
+  {
+    "id": "foxs_cunning",
+    "name": "Fox's Cunning",
+    "school": "transmutation",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 2, "wizard": 2, "bard": 2, "alchemist": 2},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 4, "modifier_type": "enhancement", "target": "ability:int"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "+4 enhancement to Intelligence for 1 min/level."
+  },
+  {
+    "id": "owls_wisdom",
+    "name": "Owl's Wisdom",
+    "school": "transmutation",
+    "descriptors": [],
+    "level_by_class": {"cleric": 2, "druid": 2, "sorcerer": 2, "wizard": 2, "paladin": 2, "ranger": 2, "alchemist": 2},
+    "components": ["V", "S", "M", "DF"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 4, "modifier_type": "enhancement", "target": "ability:wis"}
+      ],
+      "duration_minutes_per_caster_level": 1
+    },
+    "summary": "+4 enhancement to Wisdom for 1 min/level."
+  },
+  {
+    "id": "hold_person",
+    "name": "Hold Person",
+    "school": "enchantment",
+    "subschool": "compulsion",
+    "descriptors": ["mind_affecting"],
+    "level_by_class": {"cleric": 2, "sorcerer": 3, "wizard": 3, "bard": 2, "witch": 2},
+    "components": ["V", "S", "F", "DF"],
+    "casting_time": "standard",
+    "range": "medium",
+    "target": "one_humanoid",
+    "duration": "rounds_per_level",
+    "saving_throw": "will_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "paralyzed",
+      "save": "will",
+      "duration_rounds_per_caster_level": 1,
+      "creature_type": "humanoid"
+    },
+    "summary": "Paralyzes one humanoid for 1 round/level. Will negates; new save each round."
+  },
+  {
+    "id": "hideous_laughter",
+    "name": "Hideous Laughter",
+    "school": "enchantment",
+    "subschool": "compulsion",
+    "descriptors": ["mind_affecting"],
+    "level_by_class": {"sorcerer": 2, "wizard": 2, "bard": 1, "witch": 2},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_creature",
+    "duration": "rounds_per_level",
+    "saving_throw": "will_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "helpless",
+      "save": "will",
+      "duration_rounds_per_caster_level": 1
+    },
+    "summary": "Target laughs uncontrollably (helpless). Will negates."
+  },
+  {
+    "id": "daze",
+    "name": "Daze",
+    "school": "enchantment",
+    "subschool": "compulsion",
+    "descriptors": ["mind_affecting"],
+    "level_by_class": {"sorcerer": 0, "wizard": 0, "bard": 0, "witch": 0},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_humanoid_4_hd_or_less",
+    "duration": "1_round",
+    "saving_throw": "will_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "dazed",
+      "save": "will",
+      "duration_rounds_per_caster_level": 0,
+      "max_target_hd": 4,
+      "creature_type": "humanoid"
+    },
+    "summary": "Target with 4 HD or fewer is dazed for 1 round. Will negates."
+  },
+  {
+    "id": "fear",
+    "name": "Fear",
+    "school": "necromancy",
+    "subschool": "fear",
+    "descriptors": ["mind_affecting", "fear"],
+    "level_by_class": {"sorcerer": 4, "wizard": 4, "bard": 3, "witch": 4},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "30_ft_cone",
+    "target": "cone_shaped_burst",
+    "duration": "rounds_per_level",
+    "saving_throw": "will_partial",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "panicked",
+      "condition_on_save_success": "shaken",
+      "save": "will",
+      "duration_rounds_per_caster_level": 1,
+      "area": {"shape": "cone", "size_ft": 30}
+    },
+    "summary": "Cone of fear. Failed save: panicked 1 round/level. Save: shaken 1 round."
+  },
+  {
+    "id": "scare",
+    "name": "Scare",
+    "school": "necromancy",
+    "subschool": "fear",
+    "descriptors": ["mind_affecting", "fear"],
+    "level_by_class": {"sorcerer": 2, "wizard": 2, "bard": 2, "witch": 2},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_living_creature_per_3_levels_5_hd_or_less",
+    "duration": "rounds_per_level",
+    "saving_throw": "will_partial",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "frightened",
+      "condition_on_save_success": "shaken",
+      "save": "will",
+      "duration_rounds_per_caster_level": 1,
+      "max_target_hd": 5
+    },
+    "summary": "Targets with 5 HD or fewer become frightened on failed Will save (shaken on success)."
+  },
+  {
+    "id": "deep_slumber",
+    "name": "Deep Slumber",
+    "school": "enchantment",
+    "subschool": "compulsion",
+    "descriptors": ["mind_affecting"],
+    "level_by_class": {"sorcerer": 3, "wizard": 3, "bard": 3, "witch": 3},
+    "components": ["V", "S", "M"],
+    "casting_time": "1_round",
+    "range": "medium",
+    "target": "one_or_more_creatures_within_10_ft",
+    "duration": "minutes_per_level",
+    "saving_throw": "will_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "sleeping",
+      "save": "will",
+      "duration_minutes_per_caster_level": 1,
+      "max_hit_dice": 10
+    },
+    "summary": "Like sleep but affects up to 10 HD of creatures."
+  },
+  {
+    "id": "stinking_cloud",
+    "name": "Stinking Cloud",
+    "school": "conjuration",
+    "subschool": "creation",
+    "descriptors": ["poison"],
+    "level_by_class": {"sorcerer": 3, "wizard": 3},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "medium",
+    "target": "20_ft_radius_spread",
+    "duration": "rounds_per_level",
+    "saving_throw": "fort_negates",
+    "spell_resistance": "no",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "nauseated",
+      "save": "fort",
+      "duration_rounds_per_caster_level": 1,
+      "area": {"shape": "spread", "size_ft": 20}
+    },
+    "summary": "20-ft spread of nauseating gas. Fortitude negates each round."
+  },
+  {
+    "id": "web",
+    "name": "Web",
+    "school": "conjuration",
+    "subschool": "creation",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 2, "wizard": 2, "summoner": 2, "magus": 2, "witch": 2},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "medium",
+    "target": "20_ft_radius_spread",
+    "duration": "minutes_per_level",
+    "saving_throw": "reflex_negates",
+    "spell_resistance": "no",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "entangled",
+      "save": "ref",
+      "duration_minutes_per_caster_level": 1,
+      "area": {"shape": "spread", "size_ft": 20}
+    },
+    "summary": "20-ft web fills the area. Reflex negates entanglement."
+  },
+  {
+    "id": "glitterdust",
+    "name": "Glitterdust",
+    "school": "conjuration",
+    "subschool": "creation",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 2, "wizard": 2, "bard": 2, "witch": 2},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "medium",
+    "target": "10_ft_radius_spread",
+    "duration": "rounds_per_level",
+    "saving_throw": "will_negates",
+    "spell_resistance": "no",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "blinded",
+      "save": "will",
+      "duration_rounds_per_caster_level": 1,
+      "area": {"shape": "burst", "size_ft": 10}
+    },
+    "summary": "Glittering dust outlines invisible creatures and blinds those who fail Will."
+  },
+  {
+    "id": "sound_burst",
+    "name": "Sound Burst",
+    "school": "evocation",
+    "descriptors": ["sonic"],
+    "level_by_class": {"cleric": 2, "bard": 2},
+    "components": ["V", "S", "DF"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "10_ft_radius_spread",
+    "duration": "instantaneous",
+    "saving_throw": "fort_partial",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "scaling_damage",
+      "dice": "1d8",
+      "damage_type": "sonic",
+      "scaling": "fixed",
+      "max_dice": 1,
+      "area": {"shape": "burst", "size_ft": 10}
+    },
+    "summary": "1d8 sonic damage in a 10-ft burst; Fort save or stunned 1 round (stun not modeled)."
+  },
+  {
+    "id": "haste",
+    "name": "Haste",
+    "school": "transmutation",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 3, "wizard": 3, "bard": 3, "magus": 3, "summoner": 2},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_creature_per_level",
+    "duration": "rounds_per_level",
+    "saving_throw": "fort_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_party",
+      "modifiers": [
+        {"value": 1, "modifier_type": "untyped", "target": "attack"},
+        {"value": 1, "modifier_type": "dodge", "target": "ac"},
+        {"value": 1, "modifier_type": "dodge", "target": "ref_save"}
+      ],
+      "duration_rounds_per_caster_level": 1,
+      "area": {"shape": "burst", "size_ft": 30}
+    },
+    "summary": "Allies gain +1 attack, +1 dodge AC, +1 Reflex save, and one extra attack per full attack."
+  },
+  {
+    "id": "slow",
+    "name": "Slow",
+    "school": "transmutation",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 3, "wizard": 3, "bard": 3, "witch": 3},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_creature_per_level",
+    "duration": "rounds_per_level",
+    "saving_throw": "will_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "staggered",
+      "save": "will",
+      "duration_rounds_per_caster_level": 1
+    },
+    "summary": "Targets are staggered (one move OR standard, not both); -1 attack/AC/save (proxy via staggered)."
+  },
+  {
+    "id": "prayer",
+    "name": "Prayer",
+    "school": "enchantment",
+    "subschool": "compulsion",
+    "descriptors": ["mind_affecting"],
+    "level_by_class": {"cleric": 3, "paladin": 3},
+    "components": ["V", "S", "DF"],
+    "casting_time": "standard",
+    "range": "personal",
+    "target": "emanation",
+    "duration": "rounds_per_level",
+    "saving_throw": "none",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "buff_party",
+      "modifiers": [
+        {"value": 1, "modifier_type": "luck", "target": "attack"},
+        {"value": 1, "modifier_type": "luck", "target": "damage"},
+        {"value": 1, "modifier_type": "luck", "target": "fort_save"},
+        {"value": 1, "modifier_type": "luck", "target": "ref_save"},
+        {"value": 1, "modifier_type": "luck", "target": "will_save"}
+      ],
+      "duration_rounds_per_caster_level": 1,
+      "area": {"shape": "emanation", "size_ft": 40}
+    },
+    "summary": "Allies +1 luck to attack/damage/saves; enemies -1. (We model the ally side only for v1.)"
+  },
+  {
+    "id": "searing_light",
+    "name": "Searing Light",
+    "school": "evocation",
+    "descriptors": ["light"],
+    "level_by_class": {"cleric": 3, "inquisitor": 3, "paladin": 3},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "medium",
+    "target": "one_creature",
+    "duration": "instantaneous",
+    "saving_throw": "none",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "scaling_damage",
+      "dice": "1d8",
+      "damage_type": "light",
+      "scaling": "per_caster_level",
+      "max_dice": 5,
+      "ranged_touch_attack": true,
+      "no_save": true
+    },
+    "summary": "1d8 per 2 caster levels (max 5d8) on ranged touch. Bonus damage vs undead."
+  },
+  {
+    "id": "spiritual_weapon",
+    "name": "Spiritual Weapon",
+    "school": "evocation",
+    "descriptors": ["force"],
+    "level_by_class": {"cleric": 2, "inquisitor": 2, "warpriest": 2},
+    "components": ["V", "S", "DF"],
+    "casting_time": "standard",
+    "range": "medium",
+    "target": "one_creature",
+    "duration": "rounds_per_level",
+    "saving_throw": "none",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "magic_missile",
+      "damage_per_missile": "1d8+1",
+      "damage_type": "force",
+      "missiles_at_caster_level": {"1": 1, "3": 1, "6": 1, "9": 1, "12": 1}
+    },
+    "summary": "Force weapon attacks each round for 1 round/level."
+  },
+  {
+    "id": "lesser_restoration",
+    "name": "Lesser Restoration",
+    "school": "conjuration",
+    "subschool": "healing",
+    "descriptors": [],
+    "level_by_class": {"cleric": 2, "druid": 2, "paladin": 1, "alchemist": 2},
+    "components": ["V", "S"],
+    "casting_time": "3_rounds",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "instantaneous",
+    "saving_throw": "none",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "utility"
+    },
+    "summary": "Heals 1d4 ability damage from one stat OR removes fatigue. (Modeled as utility for v1.)"
+  },
+  {
+    "id": "remove_paralysis",
+    "name": "Remove Paralysis",
+    "school": "conjuration",
+    "subschool": "healing",
+    "descriptors": [],
+    "level_by_class": {"cleric": 2, "paladin": 2},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "up_to_4_creatures",
+    "duration": "instantaneous",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "utility"
+    },
+    "summary": "Removes paralysis from one creature, or partial duration from many. (Modeled as utility for v1.)"
+  },
+  {
+    "id": "mass_cure_light_wounds",
+    "name": "Mass Cure Light Wounds",
+    "school": "conjuration",
+    "subschool": "healing",
+    "descriptors": [],
+    "level_by_class": {"cleric": 5, "druid": 6, "bard": 5},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_creature_per_level",
+    "duration": "instantaneous",
+    "saving_throw": "will_half_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "heal",
+      "dice": "1d8",
+      "plus_caster_level": true,
+      "max_plus": 25
+    },
+    "summary": "Heal 1d8 + 1/level (max +25) for each ally in 30-ft burst."
+  },
+  {
+    "id": "flame_strike",
+    "name": "Flame Strike",
+    "school": "evocation",
+    "descriptors": ["fire"],
+    "level_by_class": {"cleric": 5, "druid": 4, "warpriest": 5, "inquisitor": 5},
+    "components": ["V", "S", "DF"],
+    "casting_time": "standard",
+    "range": "medium",
+    "target": "10_ft_radius_cylinder_40_ft_high",
+    "duration": "instantaneous",
+    "saving_throw": "reflex_half",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "scaling_damage",
+      "dice": "1d6",
+      "damage_type": "fire",
+      "scaling": "per_caster_level",
+      "max_dice": 15,
+      "area": {"shape": "burst", "size_ft": 10}
+    },
+    "summary": "1d6 fire/level (max 15d6); half damage is divine and bypasses fire resistance."
+  },
+  {
+    "id": "ice_storm",
+    "name": "Ice Storm",
+    "school": "evocation",
+    "descriptors": ["cold"],
+    "level_by_class": {"druid": 4, "sorcerer": 4, "wizard": 4, "summoner": 4, "magus": 4, "witch": 4},
+    "components": ["V", "S", "M", "DF"],
+    "casting_time": "standard",
+    "range": "long",
+    "target": "20_ft_radius_cylinder",
+    "duration": "instantaneous",
+    "saving_throw": "none",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "scaling_damage",
+      "dice": "5d6",
+      "damage_type": "cold",
+      "scaling": "fixed",
+      "max_dice": 1,
+      "area": {"shape": "burst", "size_ft": 20},
+      "no_save": true
+    },
+    "summary": "3d6 bludgeoning + 2d6 cold (modeled as 5d6 cold for v1) in a 20-ft cylinder."
+  },
+  {
+    "id": "vampiric_touch",
+    "name": "Vampiric Touch",
+    "school": "necromancy",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 3, "wizard": 3, "magus": 3, "witch": 3},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "one_creature_touched",
+    "duration": "instantaneous",
+    "saving_throw": "none",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "scaling_damage",
+      "dice": "1d6",
+      "damage_type": "negative",
+      "scaling": "per_caster_level",
+      "max_dice": 10,
+      "no_save": true
+    },
+    "summary": "1d6 per 2 caster levels (max 10d6); damage dealt heals the caster (heal not modeled)."
+  },
+  {
+    "id": "chain_lightning",
+    "name": "Chain Lightning",
+    "school": "evocation",
+    "descriptors": ["electricity"],
+    "level_by_class": {"sorcerer": 6, "wizard": 6, "magus": 6, "witch": 6},
+    "components": ["V", "S", "F"],
+    "casting_time": "standard",
+    "range": "long",
+    "target": "primary_plus_secondary_targets",
+    "duration": "instantaneous",
+    "saving_throw": "reflex_half",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "scaling_damage",
+      "dice": "1d6",
+      "damage_type": "electricity",
+      "scaling": "per_caster_level",
+      "max_dice": 20,
+      "area": {"shape": "burst", "size_ft": 30}
+    },
+    "summary": "1d6 electricity/level (max 20d6) primary; secondary chains at half damage."
   }
 ]
