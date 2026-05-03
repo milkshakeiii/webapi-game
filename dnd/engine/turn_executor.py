@@ -3849,7 +3849,7 @@ def _firing_into_melee_penalty(
 
 _DEX_DENIED_CONDITIONS = frozenset({
     "flat_footed", "helpless", "paralyzed", "stunned", "pinned",
-    "cowering", "blinded", "prone", "sleeping",
+    "cowering", "blinded", "prone", "sleeping", "petrified",
 })
 
 

@@ -216,6 +216,14 @@ class Combatant:
     # (invisibility, dim light, etc. when those subsystems wire in).
     concealment: int = 0
 
+    # PF1 energy drain (negative levels). Each negative level applies
+    # -1 to attack rolls, all saves, skill/ability checks, plus -5 max
+    # HP. Restoration removes them one at a time. ``apply_negative_levels``
+    # increments and adds modifiers; ``remove_negative_levels`` decrements
+    # and clears them. The ``energy_drained`` condition is set whenever
+    # the count is > 0 so condition-immunity checks still work.
+    negative_levels: int = 0
+
     # Per-source-tracking of conditions applied by ongoing effects.
     # Spell handlers that call ``add_condition`` should also call
     # ``register_sourced_condition(source, condition_id)`` so dispel /
@@ -285,7 +293,9 @@ class Combatant:
 
     def skill_total(self, skill_id: str) -> int:
         target = f"skill:{skill_id}"
-        return compute(0, self.modifiers.for_target(target))
+        mods = list(self.modifiers.for_target(target))
+        mods.extend(self.modifiers.for_target("skill_check"))
+        return compute(0, mods)
 
     def initiative_modifier(self) -> int:
         return compute(self.bases.get("initiative", 0),
@@ -371,9 +381,30 @@ class Combatant:
         """
         if self.is_immune_to_condition(condition_id):
             return False
+        # Energy drain stacks: each apply adds one negative level.
+        # Bypass the "already present, no double-apply" rule.
+        if condition_id == "energy_drained":
+            self.apply_negative_levels(1)
+            return True
         # Fatigued is masked by the stronger exhausted tier.
         if condition_id == "fatigued" and "exhausted" in self.conditions:
             return False
+        # Fear-tier suppression: a lower tier can't apply over a higher
+        # tier; a higher tier supersedes any lower-tier state.
+        if condition_id == "shaken" and (
+            "frightened" in self.conditions or "panicked" in self.conditions
+        ):
+            return False
+        if condition_id == "frightened" and "panicked" in self.conditions:
+            return False
+        if condition_id == "frightened" and "shaken" in self.conditions:
+            self.conditions.discard("shaken")
+            self.modifiers.remove_by_source("shaken")
+        if condition_id == "panicked":
+            for lower in ("shaken", "frightened"):
+                if lower in self.conditions:
+                    self.conditions.discard(lower)
+                    self.modifiers.remove_by_source(lower)
         if condition_id in self.conditions:
             return True  # already present, no double-application
         self.conditions.add(condition_id)
@@ -385,6 +416,12 @@ class Combatant:
 
     def remove_condition(self, condition_id: str) -> None:
         if condition_id not in self.conditions:
+            return
+        if condition_id == "energy_drained":
+            # Strip every negative level at once. Per-level removal
+            # (e.g., one Restoration per cast) goes through
+            # ``remove_negative_levels`` directly.
+            self.remove_negative_levels(self.negative_levels)
             return
         self.conditions.discard(condition_id)
         self._on_condition_removed(condition_id)
@@ -450,15 +487,83 @@ class Combatant:
             self.modifiers.add(Modifier(value=-4, type="untyped",
                                         target="ability:dex",
                                         source="grappled"))
-        elif condition_id == "unconscious":
-            # PF1 RAW: an unconscious creature is also helpless. We
-            # mark this as a tracked side-effect so removal of
-            # 'unconscious' also drops the implied helpless.
+        elif condition_id == "blinded":
+            # PF1: -2 AC, half speed, -4 to Str-/Dex-keyed skill checks.
+            # Denies Dex to AC handled separately via _has_dex_denied.
+            self.modifiers.add(Modifier(value=-2, type="untyped",
+                                        target="ac", source="blinded"))
+            for s in ("acrobatics", "climb", "disable_device", "fly",
+                      "ride", "sleight_of_hand", "stealth", "swim"):
+                self.modifiers.add(Modifier(value=-4, type="untyped",
+                                            target=f"skill:{s}",
+                                            source="blinded"))
+            self.speed = self.speed // 2
+        elif condition_id == "deafened":
+            # PF1: -4 initiative, 20% spell-fail chance on V-component
+            # spells (handled in _do_cast). The init penalty is wired
+            # as a modifier here.
+            self.modifiers.add(Modifier(value=-4, type="untyped",
+                                        target="initiative",
+                                        source="deafened"))
+        # Helpless cascade (multiple conditions can set this off).
+        if condition_id in _IMPLIES_HELPLESS:
+            # PF1 RAW: unconscious / sleeping / paralyzed / petrified
+            # creatures are also helpless. We only register the
+            # implication when WE add the helpless — if it was already
+            # set from another source, we leave the source map alone so
+            # that lifting our condition won't mistakenly remove an
+            # externally-applied helpless.
             if "helpless" not in self.conditions:
                 self.conditions.add("helpless")
                 self.sourced_conditions.setdefault(
-                    "implied_by_unconscious", set(),
+                    f"implied_by_{condition_id}", set(),
                 ).add("helpless")
+        elif condition_id in ("shaken", "frightened", "panicked"):
+            # PF1: -2 morale on attack, all saves, skill/ability checks.
+            # Tier suppression in add_condition guarantees only one of
+            # the three is active at a time, so the modifiers all carry
+            # the live tier as their source.
+            for tgt in ("attack", "fort_save", "ref_save",
+                        "will_save", "skill_check"):
+                self.modifiers.add(Modifier(value=-2, type="morale",
+                                            target=tgt,
+                                            source=condition_id))
+        elif condition_id == "sickened":
+            # PF1: -2 untyped on attack, weapon damage, saves, ability
+            # and skill checks.
+            for tgt in ("attack", "damage", "fort_save", "ref_save",
+                        "will_save", "skill_check"):
+                self.modifiers.add(Modifier(value=-2, type="untyped",
+                                            target=tgt,
+                                            source="sickened"))
+        elif condition_id == "dazzled":
+            # PF1: -1 attack rolls, -1 sight-based Perception. We model
+            # the Perception piece as a -1 to skill:perception (since
+            # the engine doesn't separate sight-based perception).
+            self.modifiers.add(Modifier(value=-1, type="untyped",
+                                        target="attack",
+                                        source="dazzled"))
+            self.modifiers.add(Modifier(value=-1, type="untyped",
+                                        target="skill:perception",
+                                        source="dazzled"))
+        elif condition_id == "entangled":
+            # PF1: -2 attack, -4 effective Dex (i.e., -4 Dex score),
+            # half speed, can't run/charge (the run/charge ban is
+            # enforced in turn validation).
+            self.modifiers.add(Modifier(value=-2, type="untyped",
+                                        target="attack",
+                                        source="entangled"))
+            self.modifiers.add(Modifier(value=-4, type="untyped",
+                                        target="ability:dex",
+                                        source="entangled"))
+            self.speed = self.speed // 2
+        elif condition_id == "fascinated":
+            # PF1: a fascinated creature stands transfixed; takes a -4
+            # penalty on Perception. Action restriction enforced in
+            # validate_turn.
+            self.modifiers.add(Modifier(value=-4, type="untyped",
+                                        target="skill:perception",
+                                        source="fascinated"))
 
     def _on_condition_removed(self, condition_id: str) -> None:
         """Undo the side effects of a condition that's leaving."""
@@ -469,15 +574,76 @@ class Combatant:
             self.speed = self.speed * 2
         elif condition_id == "grappled":
             self.modifiers.remove_by_source("grappled")
-        elif condition_id == "unconscious":
-            # Drop the unconscious-implied helpless if we added it
-            # ourselves (i.e., the creature wasn't helpless from some
-            # other source). External helpless persists.
+        elif condition_id == "blinded":
+            self.modifiers.remove_by_source("blinded")
+            self.speed = self.speed * 2
+        elif condition_id == "deafened":
+            self.modifiers.remove_by_source("deafened")
+        if condition_id in _IMPLIES_HELPLESS:
+            # Only drop helpless if WE applied it. The implication map
+            # entry is present iff we did the add; missing means
+            # something else (or nothing) added helpless first.
             implied = self.sourced_conditions.pop(
-                "implied_by_unconscious", None,
+                f"implied_by_{condition_id}", None,
             )
             if implied and "helpless" in implied:
-                self.conditions.discard("helpless")
+                # Another helpless-implying condition still set? Leave
+                # helpless in place; its own removal will clear it.
+                still_implied = any(
+                    c in _IMPLIES_HELPLESS for c in self.conditions
+                )
+                if not still_implied:
+                    self.conditions.discard("helpless")
+        elif condition_id in ("shaken", "frightened", "panicked"):
+            self.modifiers.remove_by_source(condition_id)
+        elif condition_id == "sickened":
+            self.modifiers.remove_by_source("sickened")
+        elif condition_id == "dazzled":
+            self.modifiers.remove_by_source("dazzled")
+        elif condition_id == "entangled":
+            self.modifiers.remove_by_source("entangled")
+            self.speed = self.speed * 2
+        elif condition_id == "fascinated":
+            self.modifiers.remove_by_source("fascinated")
+
+    def apply_negative_levels(self, n: int = 1) -> None:
+        """Add ``n`` negative levels (PF1 energy drain).
+
+        Each level: -1 untyped to attack, fort/ref/will saves, skill
+        checks, and ability checks; -5 max HP (current HP also drops
+        by 5, floored at 0). Modifiers are tracked per-level so single
+        Restoration casts can lift one level at a time. Sets the
+        ``energy_drained`` condition while count > 0.
+        """
+        if n <= 0:
+            return
+        for _ in range(n):
+            self.negative_levels += 1
+            src = f"energy_drained_lvl_{self.negative_levels}"
+            for tgt in ("attack", "fort_save", "ref_save",
+                        "will_save", "skill_check"):
+                self.modifiers.add(Modifier(value=-1, type="untyped",
+                                            target=tgt, source=src))
+            self.max_hp = max(1, self.max_hp - 5)
+            if self.current_hp > 0:
+                self.current_hp = max(0, self.current_hp - 5)
+        self.conditions.add("energy_drained")
+
+    def remove_negative_levels(self, n: int = 1) -> None:
+        """Remove ``n`` negative levels, restoring +5 max HP per level.
+
+        Current HP is *not* refunded — Restoration's heal arrives via
+        a separate spell effect. Clears the ``energy_drained`` condition
+        once the count hits zero.
+        """
+        n = max(0, min(n, self.negative_levels))
+        for _ in range(n):
+            src = f"energy_drained_lvl_{self.negative_levels}"
+            self.modifiers.remove_by_source(src)
+            self.max_hp += 5
+            self.negative_levels -= 1
+        if self.negative_levels == 0:
+            self.conditions.discard("energy_drained")
 
     def add_modifier(self, modifier: Modifier) -> None:
         self.modifiers.add(modifier)
@@ -671,6 +837,14 @@ UNDEAD_CONDITION_IMMUNITIES: frozenset[str] = frozenset({
     "exhausted",     # exhaustion
     "nauseated",     # disease / poison / smell-based
     "sickened",      # disease / poison
+    "energy_drained", # negative-energy / death effect
+})
+
+# PF1 RAW: a creature with any of these conditions is also helpless.
+# Applied via ``_on_condition_applied``; removal traces back via
+# ``sourced_conditions["implied_by_<source>"]``.
+_IMPLIES_HELPLESS: frozenset[str] = frozenset({
+    "unconscious", "sleeping", "paralyzed", "petrified",
 })
 
 # Constructs share most undead immunities (no metabolism either).

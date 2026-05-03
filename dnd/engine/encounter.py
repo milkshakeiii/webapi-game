@@ -192,9 +192,10 @@ def _check_actor_legality(turn: Turn, combatant: Combatant) -> None:
             )
 
     if "disabled" in conds:
-        # Disabled (HP exactly 0): same action restriction as staggered;
-        # additionally, standard actions deal 1 HP damage to self
-        # (not modeled here — see WORK_QUEUE).
+        # Disabled (HP exactly 0): same action restriction as staggered.
+        # PF1 RAW: a standard action also deals 1 HP nonlethal damage
+        # to self (often dropping the actor into dying); not modeled
+        # here yet — handled at action resolution if at all.
         if turn.full_round is not None:
             raise TurnValidationError(
                 "disabled combatant cannot take a full-round action"
@@ -235,6 +236,60 @@ def _check_actor_legality(turn: Turn, combatant: Combatant) -> None:
         # Prone allows nothing except stand_up as your move action and
         # melee/ranged with penalties. Skip detailed enforcement for v1.
         pass
+
+    if "dazed" in conds or "fascinated" in conds or "cowering" in conds:
+        # PF1: dazed → no actions for 1 round (defenses normal).
+        # Fascinated → no actions; standard action breaks free.
+        # Cowering → no actions, denies Dex (handled separately).
+        if any(s is not None for s in (
+            turn.full_round, turn.standard, turn.move,
+            turn.swift, turn.five_foot_step,
+        )) or turn.free:
+            blocking = conds & {"dazed", "fascinated", "cowering"}
+            raise TurnValidationError(
+                f"combatant {combatant.id} cannot act ({blocking})"
+            )
+
+    if "nauseated" in conds:
+        # PF1: only a single move action — no standard, no full-round,
+        # no swift, no free actions, no 5-ft step.
+        if any(s is not None for s in (
+            turn.full_round, turn.standard, turn.swift, turn.five_foot_step,
+        )) or turn.free:
+            raise TurnValidationError(
+                "nauseated combatant can only take a single move action"
+            )
+
+    if "entangled" in conds:
+        # PF1: entangled creature cannot run or charge. Other movement
+        # is allowed (at half speed, enforced via the entangled
+        # condition's speed mutation in combatant._on_condition_applied).
+        if turn.full_round is not None:
+            kind = turn.full_round.get("composite") or turn.full_round.get("type")
+            if kind in ("charge", "run"):
+                raise TurnValidationError(
+                    f"entangled combatant cannot take {kind!r} action"
+                )
+
+    if "panicked" in conds:
+        # PF1: panicked creature drops items, flees, and cannot attack
+        # except in self-defense (effectively reduced to move + total
+        # defense). The engine doesn't enforce flee direction; we just
+        # ban offensive standard / full-round actions.
+        for val in (turn.standard, turn.full_round):
+            if val is None:
+                continue
+            kind = val.get("composite") or val.get("type")
+            if kind in (
+                "attack", "cast", "charge", "full_attack",
+                "cleave", "stunning_fist", "smite_evil",
+                "ready_brace", "rage_start", "trample",
+                "grapple_start", "grapple_damage", "grapple_pin",
+                "grapple_move", "grapple_reverse",
+            ):
+                raise TurnValidationError(
+                    f"panicked combatant cannot take {kind!r} action"
+                )
 
 
 # ---------------------------------------------------------------------------
