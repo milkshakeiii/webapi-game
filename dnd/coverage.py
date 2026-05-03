@@ -362,13 +362,13 @@ CORE_MECHANICS: dict[str, Entry] = {
     # ── Combat: special attacks & maneuvers ──────────────────────────────
     "combat.combat_maneuver_basic":  (IMPLEMENTED,    "_resolve_maneuver: d20 + actor.cmb vs target.cmd(context={'maneuver': kind}); enables Stability and similar qualified CMD bonuses"),
     "combat.bull_rush":              (IMPLEMENTED,    "composite 'bull_rush'; pushes target 1 + (margin//5) squares directly away from actor; stops on impassable"),
-    "combat.disarm":                 (PARTIAL,        "composite 'disarm' marks target with 'disarmed' condition; engine doesn't track held-weapon multiset, so the mechanical effect is a proxy"),
+    "combat.disarm":                 (IMPLEMENTED,    "composite 'disarm' actually removes the InventoryItem from target.held_items['main_hand']. Margin ≥ 10 transfers it to the attacker's carried_items; otherwise dropped at the target's square (recorded on encounter.dropped_items if available). Attack options pruned so target can't keep using the lost weapon"),
     "combat.drag":                   (IMPLEMENTED,    "composite 'drag': pulls target 1+(margin//5) squares toward actor; stops at actor's square"),
     "combat.grapple":                (PARTIAL,        "composite 'grapple' marks both as 'grappled'; full grapple action set (pin, move, damage, escape) not yet modeled"),
     "combat.overrun":                (IMPLEMENTED,    "composite 'overrun': actor moves past target; target prone if margin >= 5"),
     "combat.reposition":             (IMPLEMENTED,    "composite 'reposition': move target up to (1 + margin//5) squares; default destination = one square away from actor"),
-    "combat.steal":                  (PARTIAL,        "composite 'steal' marks target with 'stolen_from' proxy; engine doesn't yet model carried-item slots"),
-    "combat.sunder":                 (PARTIAL,        "composite 'sunder' marks target with 'weapon_broken' condition; weapon HP/hardness not modeled"),
+    "combat.steal":                  (IMPLEMENTED,    "composite 'steal' transfers an InventoryItem from target.carried_items to actor.carried_items on success. args.item_id may specify which item; default is the first carried item"),
+    "combat.sunder":                 (IMPLEMENTED,    "composite 'sunder' rolls actor's weapon damage and applies it to target's main-hand InventoryItem (after hardness reduction). Item gains ``broken`` flag at half max HP; destroyed and removed from held_items at 0 HP. Attack options pruned"),
     "combat.trip":                   (IMPLEMENTED,    "composite 'trip' applies prone on success; also fires automatically after a successful melee hit for creatures with the 'trip_attack' racial trait (wolf)"),
     "combat.coup_de_grace":          (IMPLEMENTED,    "_do_coup_de_grace composite: full-round vs adjacent helpless / paralyzed / sleeping / unconscious / pinned target; deals weapon damage at the crit multiplier; target rolls Fort DC 10 + damage or dies. Provoking-AoO not modeled (mostly redundant — actor is already in melee)"),
     "combat.massive_damage":         (IMPLEMENTED,    "_check_massive_damage fires after damage in _do_attack: 50+ damage from one source → Fort DC 15 or die. Bypasses dying-threshold rules"),
@@ -436,7 +436,7 @@ CORE_MECHANICS: dict[str, Entry] = {
 
     # ── Magic: components & casting ─────────────────────────────────────
     "magic.casting_components_v":    (PARTIAL,        "V-component spells fail outright when caster is silenced; deafened caster has 20% spell-failure roll. The 'silenced' condition exists but isn't applied by any current effect — applies when externally set"),
-    "magic.casting_components_s":    (PARTIAL,        "S-component spells while grappled require a concentration check (DC 10 + 4 + spell level); failure consumes the slot. Two-handed-weapon-blocks-S not modeled (no inventory state for held items)"),
+    "magic.casting_components_s":    (IMPLEMENTED,    "Grappled S-component cast requires DC 10 + 4 + spell level concentration; failure consumes slot. Two-handed-weapon-blocks-S enforced when BOTH hands are filled (main_hand=two-handed weapon AND off_hand=anything) — pragmatic exception for wizards with a single quarterstaff in main_hand and no off-hand allows them to re-grip for casting"),
     "magic.casting_components_m":    (NOT_IMPLEMENTED, "material — no component-tracking yet; assumed always available"),
     "magic.casting_components_f":    (NOT_IMPLEMENTED, "focus item required"),
     "magic.casting_components_df":   (NOT_IMPLEMENTED, "divine focus (holy symbol)"),

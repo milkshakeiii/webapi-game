@@ -82,6 +82,18 @@ class Combatant:
     # levels they have slots for). Empty for non-casters and monsters.
     castable_spells: set[str] = field(default_factory=set)
 
+    # Inventory (PF1 held-item / carried-item state).
+    # ``held_items``: dict slot → InventoryItem. Slots: "main_hand",
+    # "off_hand", "armor", "shield". When a disarm succeeds, the
+    # weapon is moved to ground (off the combatant entirely) or to the
+    # disarmer's carried_items (the action-handler decides). When a
+    # sunder succeeds, the InventoryItem.current_hp drops; at half max
+    # the item is broken; at 0 it's destroyed and removed.
+    # ``carried_items``: list of InventoryItem instances not actively
+    # held (potions, scrolls, etc.). Steal targets this list.
+    held_items: dict = field(default_factory=dict)
+    carried_items: list = field(default_factory=list)
+
     # Casting model: "spontaneous" (sorcerer / bard / oracle) or
     # "prepared" (wizard / cleric / druid / paladin / ranger / witch
     # / magus). Determines how _do_cast consumes spells:
@@ -1235,6 +1247,29 @@ def combatant_from_character(
             other.level_1.armor_proficiencies,
         )
 
+    # Build held_items from the character's equipped slots. Each
+    # InventoryItem gets its own HP / hardness for sundering.
+    from .inventory import (
+        make_armor_item, make_shield_item, make_weapon_item,
+    )
+    held_items: dict[str, "InventoryItem"] = {}
+    if weapon_data is not None:
+        held_items["main_hand"] = make_weapon_item(
+            character.equipped_weapon, registry,
+        )
+    if offhand_weapon_data is not None:
+        held_items["off_hand"] = make_weapon_item(
+            character.equipped_offhand_weapon, registry,
+        )
+    if armor_data is not None and character.equipped_armor != "none":
+        held_items["armor"] = make_armor_item(
+            character.equipped_armor, registry,
+        )
+    if shield_data is not None:
+        held_items["shield"] = make_shield_item(
+            character.equipped_shield, registry,
+        )
+
     return Combatant(
         id=_new_id(),
         name=character.name,
@@ -1267,4 +1302,5 @@ def combatant_from_character(
         death_threshold=-int(final_scores.get("con") or 10),
         weapon_proficiency_categories=weapon_profs,
         armor_proficiency_categories=armor_profs,
+        held_items=held_items,
     )

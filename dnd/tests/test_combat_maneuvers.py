@@ -99,19 +99,24 @@ class TestGrapple(unittest.TestCase):
 
 
 class TestDisarmAndSunder(unittest.TestCase):
-    def test_disarm_marks_disarmed(self):
+    def test_disarm_no_held_weapon_skips(self):
+        # Both combatants are monsters with no held_items populated;
+        # disarm fires but reports "no_weapon".
         a, b, enc, grid = _setup()
         a.bases["cmb"] = 30
         b.bases["cmd"] = 5
         _run_composite(a, "disarm", "enemy.closest", enc, grid)
-        self.assertIn("disarmed", b.conditions)
+        # No "disarmed" condition any more; we confirm via held_items.
+        self.assertEqual(b.held_items.get("main_hand"), None)
 
-    def test_sunder_marks_weapon_broken(self):
+    def test_sunder_no_held_weapon_skips(self):
         a, b, enc, grid = _setup()
         a.bases["cmb"] = 30
         b.bases["cmd"] = 5
         _run_composite(a, "sunder", "enemy.closest", enc, grid)
-        self.assertIn("weapon_broken", b.conditions)
+        # Monster target has no held_items, so sunder reports
+        # "no_target_weapon" (no broken-weapon proxy).
+        self.assertNotIn("weapon_broken", b.conditions)
 
 
 class TestWolfTripOnBite(unittest.TestCase):

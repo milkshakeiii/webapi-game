@@ -90,10 +90,25 @@ class TestReposition(unittest.TestCase):
 
 
 class TestSteal(unittest.TestCase):
-    def test_marks_stolen_from(self):
+    def test_steal_with_no_carried_items_reports_empty(self):
+        # Monster target has no carried_items by default — steal
+        # succeeds the CMB roll but reports "no_carried_item".
         a, b, enc, grid = _setup(actor_pos=(5, 5), target_pos=(6, 5))
         _run(a, "steal", enc, grid)
-        self.assertIn("stolen_from", b.conditions)
+        # No transfer happened.
+        self.assertEqual(a.carried_items, [])
+        self.assertEqual(b.carried_items, [])
+
+    def test_steal_transfers_carried_item(self):
+        from dnd.engine.inventory import make_consumable_item
+        a, b, enc, grid = _setup(actor_pos=(5, 5), target_pos=(6, 5))
+        item = make_consumable_item("potion_cure_light")
+        b.carried_items.append(item)
+        _run(a, "steal", enc, grid)
+        # Item moved from b to a.
+        self.assertEqual(b.carried_items, [])
+        self.assertEqual(len(a.carried_items), 1)
+        self.assertEqual(a.carried_items[0].item_id, "potion_cure_light")
 
 
 if __name__ == "__main__":

@@ -2459,7 +2459,10 @@ def _do_combat_maneuver(
         "passed": passed,
     }
     if passed:
-        _apply_maneuver_effect(actor, target, kind, margin, grid, detail)
+        _apply_maneuver_effect(
+            actor, target, kind, margin, grid, detail,
+            args=args, encounter=encounter, roller=roller,
+        )
     events.append(TurnEvent(actor.id, f"maneuver_{kind}", detail))
 
 
@@ -2470,18 +2473,86 @@ def _apply_maneuver_effect(
     margin: int,
     grid: Grid,
     detail: dict,
+    *,
+    args: dict | None = None,
+    encounter: object | None = None,
+    roller: Roller | None = None,
 ) -> None:
+    args = args or {}
     if kind == "trip":
         if target.add_condition("prone"):
             detail["effect"] = "prone"
         else:
             detail["effect"] = "immune"
     elif kind == "disarm":
-        target.add_condition("disarmed")
-        detail["effect"] = "disarmed"
+        # PF1 RAW: success removes the held weapon. Margin ≥ 10
+        # transfers it to the disarmer; otherwise the weapon falls to
+        # the target's square. We model "falls to ground" as moving
+        # the InventoryItem to a side-channel ``dropped_items`` list
+        # on the encounter (or carried_items on the disarmer for
+        # margin ≥ 10).
+        item = target.held_items.pop("main_hand", None)
+        if item is None:
+            detail["effect"] = "no_weapon"
+        else:
+            # Also clear from attack_options so target can't keep
+            # using the disarmed weapon.
+            target.attack_options = [
+                opt for opt in target.attack_options
+                if not (opt.get("weapon_id") == item.item_id
+                        and not opt.get("is_offhand"))
+            ]
+            if margin >= 10:
+                # Transferred to disarmer's carried items.
+                actor.carried_items.append(item)
+                detail["effect"] = "disarmed_to_actor"
+            else:
+                # Dropped at target's square — record on the encounter
+                # if it has a ``dropped_items`` dict; otherwise just
+                # discard (target will need to retrieve_stowed_item to
+                # pick it back up next turn).
+                if hasattr(encounter, "dropped_items"):
+                    sq = target.position
+                    encounter.dropped_items.setdefault(sq, []).append(item)
+                detail["effect"] = "disarmed_to_ground"
+            detail["disarmed_item_id"] = item.item_id
     elif kind == "sunder":
-        target.add_condition("weapon_broken")
-        detail["effect"] = "weapon_broken"
+        # PF1 RAW: damage the wielded weapon (or shield, optionally).
+        # We default to main_hand. Damage = weapon damage roll on the
+        # actor's primary attack, modified by hardness. At half max
+        # HP, item gets ``broken``. At 0 HP, destroyed and removed.
+        item = target.held_items.get("main_hand")
+        if item is None:
+            detail["effect"] = "no_target_weapon"
+        else:
+            # Use the actor's primary weapon damage as the sunder
+            # damage roll. We don't bother re-rolling here; just
+            # take the average of the dice plus damage_bonus as a
+            # rough damage estimate. (Full damage roll could go in
+            # later when sunder cares about crits etc.)
+            actor_attack = (actor.attack_options[0]
+                            if actor.attack_options else None)
+            damage = 0
+            if actor_attack:
+                # Roll the weapon damage.
+                dmg_dice = str(actor_attack.get("damage", "1d4"))
+                dmg_bonus = int(actor_attack.get("damage_bonus", 0))
+                r = roller.roll(dmg_dice)
+                damage = r.total + dmg_bonus
+            actual_loss = item.take_damage(max(0, damage))
+            detail["effect"] = "sundered"
+            detail["sunder_damage"] = damage
+            detail["item_hp_loss"] = actual_loss
+            detail["item_hp_remaining"] = item.current_hp
+            detail["item_broken"] = item.broken
+            if item.is_destroyed():
+                target.held_items.pop("main_hand", None)
+                target.attack_options = [
+                    opt for opt in target.attack_options
+                    if not (opt.get("weapon_id") == item.item_id
+                            and not opt.get("is_offhand"))
+                ]
+                detail["item_destroyed"] = True
     elif kind == "grapple":
         actor.add_condition("grappled")
         target.add_condition("grappled")
@@ -2594,10 +2665,23 @@ def _apply_maneuver_effect(
         detail["max_distance"] = max_distance
     elif kind == "steal":
         # PF1: take a small carried item (not held weapon — that's
-        # disarm). v1 doesn't model item slots beyond proxy
-        # conditions; mark the target with "stolen_from".
-        target.add_condition("stolen_from")
-        detail["effect"] = "stolen_from"
+        # disarm). On success, transfer one carried item from target
+        # to actor. The script can specify which via args.item_id;
+        # otherwise we take the first one available.
+        wanted_item_id = args.get("item_id")
+        chosen_idx: int | None = None
+        for i, it in enumerate(target.carried_items):
+            if wanted_item_id is None or it.item_id == wanted_item_id:
+                chosen_idx = i
+                break
+        if chosen_idx is None:
+            detail["effect"] = "no_carried_item"
+        else:
+            item = target.carried_items.pop(chosen_idx)
+            actor.carried_items.append(item)
+            detail["effect"] = "stolen"
+            detail["stolen_item_id"] = item.item_id
+            detail["stolen_instance_id"] = item.instance_id
 
 
 def _do_aid_another(
@@ -2838,6 +2922,28 @@ def _do_cast(
                 "roll": miss.total,
             }))
             return
+    # PF1 RAW: a two-handed weapon in your main hand denies you a
+    # free hand for somatic components. Pragmatic exception (matches
+    # tabletop convention): wizards / sorcerers / etc. with a single
+    # two-handed weapon (typical: quarterstaff in main_hand, off_hand
+    # empty) are presumed to free a hand to cast and re-grip after.
+    # Only block S when BOTH main_hand and off_hand are filled, leaving
+    # no free hand at all.
+    if has_s and "grappled" not in actor.conditions:
+        main_weapon = actor.held_items.get("main_hand")
+        off_weapon = actor.held_items.get("off_hand")
+        if main_weapon is not None and off_weapon is not None:
+            from .content import default_registry
+            try:
+                w = default_registry().get_weapon(main_weapon.item_id)
+                if w.wield == "two_handed":
+                    events.append(TurnEvent(actor.id, "cast_failed", {
+                        "spell_id": spell_id,
+                        "reason": "somatic_blocked_no_free_hand",
+                    }))
+                    return
+            except Exception:
+                pass
     if has_s and "grappled" in actor.conditions:
         # PF1 RAW: somatic spells while grappled require a concentration
         # check (DC 10 + grappler's CMB + spell level). We don't track
