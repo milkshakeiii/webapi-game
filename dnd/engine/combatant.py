@@ -94,6 +94,14 @@ class Combatant:
     held_items: dict = field(default_factory=dict)
     carried_items: list = field(default_factory=list)
 
+    # Grapple link. ``grappling_target_id`` is set on the grappler;
+    # ``grappled_by_id`` is set on the creature being grappled. Both
+    # combatants also have the "grappled" condition. Pin transitions
+    # the target to "pinned" + "helpless" without changing the
+    # grappler. Both fields are None when not grappling.
+    grappling_target_id: str | None = None
+    grappled_by_id: str | None = None
+
     # Casting model: "spontaneous" (sorcerer / bard / oracle) or
     # "prepared" (wizard / cleric / druid / paladin / ranger / witch
     # / magus). Determines how _do_cast consumes spells:

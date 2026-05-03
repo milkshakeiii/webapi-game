@@ -221,6 +221,18 @@ def _execute_composite(
     if composite == "ready_brace":
         _do_ready_brace(actor, args, encounter, events)
         return
+    if composite == "grapple_damage":
+        _do_grapple_damage(actor, args, encounter, grid, roller, ns, events)
+        return
+    if composite == "grapple_move":
+        _do_grapple_move(actor, args, encounter, grid, roller, ns, events)
+        return
+    if composite == "grapple_pin":
+        _do_grapple_pin(actor, args, encounter, grid, roller, ns, events)
+        return
+    if composite == "grapple_break_free":
+        _do_grapple_break_free(actor, args, encounter, grid, roller, ns, events)
+        return
     if composite == "cast":
         _do_cast(actor, args, encounter, grid, roller, ns, events)
         return
@@ -1279,6 +1291,204 @@ def _do_partial_charge(
     args = dict(args)
     args["max_squares_override"] = actor.speed // 5  # 1× speed
     _do_charge(actor, args, encounter, grid, roller, ns, events)
+
+
+def _resolve_grapple_partner(actor: Combatant, grid: Grid) -> Combatant | None:
+    """Look up the actor's grapple partner via grappling_target_id."""
+    tid = actor.grappling_target_id
+    if not tid:
+        return None
+    return grid.combatants.get(tid)
+
+
+def _resolve_grappler(actor: Combatant, grid: Grid) -> Combatant | None:
+    """Look up who is grappling the actor via grappled_by_id."""
+    gid = actor.grappled_by_id
+    if not gid:
+        return None
+    return grid.combatants.get(gid)
+
+
+def _do_grapple_damage(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Continue a grapple to deal damage. PF1 RAW: CMB vs grappled
+    target's CMD; on success, the grappler deals weapon or natural
+    damage as if making a single attack."""
+    target = _resolve_grapple_partner(actor, grid)
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "grapple_damage: not grappling anyone"}))
+        return
+    passed, nat, total, margin = _resolve_maneuver(actor, target,
+                                                   "grapple", roller)
+    detail = {
+        "kind": "grapple_damage", "target_id": target.id,
+        "natural": nat, "total": total, "margin": margin,
+        "passed": passed,
+    }
+    if passed and actor.attack_options:
+        chosen = actor.attack_options[0]
+        dmg_dice = str(chosen.get("damage", "1d4"))
+        dmg_bonus = int(chosen.get("damage_bonus", 0))
+        r = roller.roll(dmg_dice)
+        damage = max(0, r.total + dmg_bonus)
+        damage_type = str(chosen.get("damage_type", "")) or None
+        target.take_damage(damage, damage_type=damage_type)
+        _apply_post_damage_state(target)
+        detail["damage"] = damage
+    events.append(TurnEvent(actor.id, "grapple_damage", detail))
+
+
+def _do_grapple_move(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Continue a grapple to move both actor and target up to half
+    actor's speed. PF1 RAW: requires CMB vs CMD; the target may attempt
+    to break free with a CMB / Escape Artist check."""
+    target = _resolve_grapple_partner(actor, grid)
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "grapple_move: not grappling anyone"}))
+        return
+    passed, nat, total, margin = _resolve_maneuver(actor, target,
+                                                   "grapple", roller)
+    detail = {
+        "kind": "grapple_move", "target_id": target.id,
+        "natural": nat, "total": total, "margin": margin,
+        "passed": passed,
+    }
+    if passed:
+        direction = args.get("direction", "north")
+        max_squares = max(1, (actor.speed // 5) // 2)
+        dest = _square_in_direction(actor, direction, max_squares)
+        if dest is not None:
+            # Try to move actor to dest; if it works, drag target to
+            # actor's previous position.
+            old_actor_pos = actor.position
+            try:
+                grid.move(actor, dest)
+                # Move target to where actor was.
+                try:
+                    grid.move(target, old_actor_pos)
+                    detail["actor_to"] = list(actor.position)
+                    detail["target_to"] = list(target.position)
+                except Exception:
+                    # Couldn't drag; revert actor.
+                    grid.move(actor, old_actor_pos)
+                    detail["effect"] = "move_blocked"
+            except Exception:
+                detail["effect"] = "move_blocked"
+    events.append(TurnEvent(actor.id, "grapple_move", detail))
+
+
+def _do_grapple_pin(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Continue a grapple to pin the target. PF1 RAW: CMB - 5 vs CMD
+    (i.e., +5 difficulty). On success, target gains 'pinned' (and
+    helpless via the unconscious-implies-helpless model? No — pinned
+    explicitly makes the target helpless per RAW). Pinning consumes
+    a maintain action."""
+    target = _resolve_grapple_partner(actor, grid)
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "grapple_pin: not grappling anyone"}))
+        return
+    cmb = actor.cmb() - 5  # +5 difficulty for pin
+    cmd = target.cmd(context={"maneuver": "grapple"})
+    r = roller.roll("1d20")
+    nat = r.terms[0].rolls[0]
+    total = nat + cmb
+    passed = total >= cmd
+    detail = {
+        "kind": "grapple_pin", "target_id": target.id,
+        "natural": nat, "total": total, "margin": total - cmd,
+        "passed": passed,
+    }
+    if passed:
+        target.add_condition("pinned")
+        target.add_condition("helpless")
+        detail["effect"] = "pinned"
+    events.append(TurnEvent(actor.id, "grapple_pin", detail))
+
+
+def _do_grapple_break_free(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """The grappled creature attempts to escape. PF1 RAW: standard
+    action; the grappled creature rolls CMB or Escape Artist vs the
+    grappler's CMB. On success, both lose 'grappled' (and the target
+    loses 'pinned' / 'helpless' if pinned).
+
+    The script may pass ``method='cmb'`` (default) or ``'escape_artist'``
+    to choose the check. Escape Artist uses skills.skill_check.
+    """
+    grappler = _resolve_grappler(actor, grid)
+    if grappler is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "grapple_break_free: not grappled"}))
+        return
+    method = args.get("method", "cmb")
+    grappler_cmb = grappler.cmb()
+    if method == "escape_artist":
+        from .skills import skill_check
+        from .content import default_registry
+        result = skill_check(
+            actor, "escape_artist", dc=grappler_cmb, roller=roller,
+            registry=default_registry(),
+        )
+        passed = bool(result.success)
+        nat = result.natural
+        total = result.total
+    else:
+        r = roller.roll("1d20")
+        nat = r.terms[0].rolls[0]
+        total = nat + actor.cmb()
+        passed = total >= grappler_cmb
+    detail = {
+        "kind": "grapple_break_free",
+        "grappler_id": grappler.id,
+        "method": method,
+        "natural": nat,
+        "total": total,
+        "vs": grappler_cmb,
+        "passed": passed,
+    }
+    if passed:
+        # Both lose grappled; target loses pinned/helpless if pinned.
+        actor.remove_condition("grappled")
+        actor.remove_condition("pinned")
+        actor.remove_condition("helpless")
+        actor.grappled_by_id = None
+        grappler.remove_condition("grappled")
+        grappler.grappling_target_id = None
+        detail["effect"] = "freed"
+    events.append(TurnEvent(actor.id, "grapple_break_free", detail))
 
 
 def _do_ready_brace(
@@ -2642,6 +2852,8 @@ def _apply_maneuver_effect(
     elif kind == "grapple":
         actor.add_condition("grappled")
         target.add_condition("grappled")
+        actor.grappling_target_id = target.id
+        target.grappled_by_id = actor.id
         detail["effect"] = "grappled"
     elif kind == "bull_rush":
         # Push direction: from actor toward target's far side.
