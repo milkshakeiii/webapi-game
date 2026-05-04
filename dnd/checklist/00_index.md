@@ -4,6 +4,12 @@ _Auto-generated. Each shard below is a manual-verdict checklist for one_
 _category of PF1 content from the Foundry PF1e dataset. Tick the_
 _`[ ]` boxes as you walk each shard, then update `dnd/coverage.py`._
 
+_The `rules/` subdirectory is a separate reference dump — full RAW_
+_prose for core mechanics (combat, magic, conditions, skills, special_
+_abilities, movement) scraped from d20pfsrd.com. Foundry's `rules` pack_
+_(below) only contains category headers; the prose lives in `rules/`._
+_See `dnd/tools/dump_rules.py` to refresh._
+
 | Category | Items | File |
 |---|---:|---|
 | feats | 390 | [feats.md](feats.md) |

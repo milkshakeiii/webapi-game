@@ -81,3 +81,26 @@ Skipped: `technology` (sci-fi gear), `macros` (JS scripts), `roll-tables`
 
 The script is idempotent. Re-running overwrites every shard. You can
 `git diff` to see what changed in their dataset between snapshots.
+
+## dump_rules.py
+
+Scrapes core-mechanic rules pages from d20pfsrd.com into
+`dnd/checklist/rules/<slug>.md`. Companion to `generate_checklist.py`:
+the Foundry pack covers content but its `rules` shard is empty, so
+this fills the gap with full RAW prose for combat, magic, conditions,
+skills, special abilities, and movement.
+
+### Running
+
+`markdownify` and `beautifulsoup4` aren't in stdlib. Use a venv:
+
+```bash
+python3 -m venv /tmp/rulesenv
+/tmp/rulesenv/bin/pip install markdownify beautifulsoup4
+/tmp/rulesenv/bin/python -m dnd.tools.dump_rules \
+    --out dnd/checklist/rules
+```
+
+The pages don't change often, so the dumps are committed and the
+script is mainly there to refresh if a page moves or you want to add
+more chapters. Edit the `PAGES` list at the top to add slugs.
