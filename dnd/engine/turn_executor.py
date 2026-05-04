@@ -175,20 +175,32 @@ def execute_turn(
             events.append(TurnEvent(actor.id, "free",
                                     {"action": fa}))
 
-    # Swift action. Currently the only swift action wired is a
-    # quickened spell cast: ``swift = {"type": "cast", "spell": ...,
-    # "metamagic": ["quicken_spell", ...]}``. Quickened-spell metamagic
-    # raises the slot cost +4 and lets the caster also take a standard
-    # action this turn (action-economy enforcement comes from the Turn
-    # validator, which already allows swift alongside standard).
+    # Swift action. Two ways to land a cast in the swift slot: a
+    # native swift-time spell (``Spell.casting_time == "swift"``) or
+    # any spell quickened via the Quicken Spell metamagic feat. The
+    # latter raises the slot cost +4. Action-economy validation
+    # already allows swift alongside standard.
     swift = do.get("swift")
     if swift is not None:
         stype = swift.get("type")
         if stype == "cast":
             mm = list(swift.get("metamagic") or [])
-            if "quicken_spell" not in mm:
+            spell_id = swift.get("spell")
+            native_swift = False
+            if spell_id:
+                try:
+                    from .content import default_registry
+                    s = default_registry().get_spell(spell_id)
+                    native_swift = (
+                        _classify_casting_time(s.casting_time) == "swift"
+                    )
+                except Exception:
+                    pass
+            if "quicken_spell" not in mm and not native_swift:
                 events.append(TurnEvent(actor.id, "skip", {
-                    "reason": "swift cast requires quicken_spell metamagic",
+                    "reason": "swift cast requires either a native swift-time "
+                              "spell or the quicken_spell metamagic",
+                    "spell": spell_id,
                 }))
             else:
                 _do_cast(actor, swift, encounter, grid, roller, ns, events)
@@ -627,6 +639,49 @@ def _turn_used_standard_action(events: list[TurnEvent]) -> bool:
         if e.kind in _STANDARD_ACTION_EVENT_KINDS:
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Spell casting-time classification
+# ---------------------------------------------------------------------------
+
+
+def _classify_casting_time(ct: str) -> str:
+    """Bucket a Spell.casting_time string into one of the action-slot
+    categories the engine recognizes:
+
+    - ``standard``   — single standard action (default)
+    - ``swift``      — swift action (1 / round)
+    - ``immediate``  — immediate action (interrupts; not yet wired)
+    - ``free``       — free action (very rare, e.g. some abilities)
+    - ``full_round`` — single full-round action
+    - ``multi_round``— takes multiple rounds (1 round counts here per
+      RAW: 'a 1-round casting time means the spell completes just
+      before your next turn')
+
+    The strings come from JSON / Foundry; we accept several common
+    shapes (``1_round``, ``"1 round"``, ``"3_rounds"``).
+    """
+    s = (ct or "standard").strip().lower().replace(" ", "_")
+    if s in ("standard", "1_standard", "1_standard_action", "standard_action"):
+        return "standard"
+    if s in ("swift", "1_swift", "swift_action"):
+        return "swift"
+    if s in ("immediate", "1_immediate", "immediate_action"):
+        return "immediate"
+    if s in ("free", "1_free", "free_action"):
+        return "free"
+    if s in ("full_round", "full-round", "1_full_round", "full"):
+        return "full_round"
+    if s in ("1_round", "1round"):
+        return "multi_round"
+    if s.endswith("_rounds") or s.endswith("rounds"):
+        return "multi_round"
+    if (
+        "minute" in s or "hour" in s or "day" in s
+    ):
+        return "multi_round"  # ritual-grade casts; treat the same for v1
+    return "standard"
 
 
 # ---------------------------------------------------------------------------
@@ -4712,6 +4767,24 @@ def _do_cast(
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": f"unknown spell {spell_id!r}: {e}"}))
         return
+
+    # Casting-time classification. Emit a structured event so callers
+    # can see what the spell's RAW casting time was (the engine still
+    # resolves multi-round casts on the same turn — proper deferral to
+    # 'just before the caster's next turn' is a separate, larger
+    # change). Standard / swift casts pass through silently.
+    ct_class = _classify_casting_time(spell.casting_time)
+    if ct_class in ("multi_round", "full_round"):
+        events.append(TurnEvent(actor.id, "cast_long_casting_time", {
+            "spell_id": spell_id,
+            "casting_time": spell.casting_time,
+            "classification": ct_class,
+            "note": (
+                "RAW: spell completes 'just before the caster's next "
+                "turn' (or N rounds later); engine resolves on the "
+                "current turn for now."
+            ),
+        }))
 
     # Knowledge / preparation check.
     if actor.castable_spells and spell_id not in actor.castable_spells:

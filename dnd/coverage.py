@@ -548,6 +548,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "magic.casting_components_df":   (NOT_IMPLEMENTED, "divine focus (holy symbol)"),
     "magic.casting_components_xp":   (OUT_OF_SCOPE,   "3.5e XP-cost components; PF1 uses gp instead"),
     "magic.casting_in_threatened_square": (IMPLEMENTED, "non-defensive cast provokes; defensive concentration check via spells.cast_spell"),
+    "magic.casting_time":            (PARTIAL,        "Spell.casting_time is now read by execute_turn (swift slot accepts native swift-time spells OR quickened metamagic) and _do_cast (multi-round / full-round casts emit a 'cast_long_casting_time' event noting the deferral gap). The spell still resolves on the same turn it's cast — proper RAW timing ('completes just before next turn' for 1-round casts; N rounds later for multi-round) is a future change."),
     "magic.casting_defensively":     (IMPLEMENTED,    "DC 15 + 2*spell_level concentration; nat 1 fails"),
     "magic.concentration_on_damage": (IMPLEMENTED,    "DC 10 + damage + spell level concentration roll fired in _do_cast when AoO during a non-defensive cast deals damage; failure consumes slot and emits cast_failed"),
     "magic.concentration_grappled":  (IMPLEMENTED,    "DC 10 + grappler's CMB + spell level on S-component cast while grappled; failure consumes slot. Looks up grappler via grappled_by_id."),
