@@ -305,7 +305,7 @@
       "scaling": "per_caster_level",
       "max_dice": 5,
       "no_save": true,
-      "ranged_touch_attack": true
+      "melee_touch_attack": true
     },
     "summary": "1d6 electricity/CL (max 5d6) on touch; +3 attack vs metal-armor wearers (not modeled)."
   },

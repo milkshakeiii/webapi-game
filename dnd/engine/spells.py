@@ -537,10 +537,24 @@ def _handle_magic_missile(
             count = int(c)
     dmg_dice = str(eff.get("damage_per_missile", "1d4+1"))
     take_max = "maximize_spell" in out.metamagic
+    requires_touch = bool(
+        eff.get("ranged_touch_attack") or eff.get("melee_touch_attack")
+    )
+    ranged = bool(eff.get("ranged_touch_attack"))
     total_damage = 0
+    hit_count = 0
     for i in range(count):
+        if requires_touch:
+            hit, log_lines = resolve_spell_touch_attack(
+                caster, target, ranged=ranged, roller=roller,
+                grid=out.grid,
+            )
+            out.log.extend(log_lines)
+            if not hit:
+                continue
         r = roller.roll(dmg_dice, take_max=take_max)
         total_damage += r.total
+        hit_count += 1
         out.log.append(f"  missile {i+1}: {r.breakdown}")
     damage_type = str(eff.get("damage_type", "force")) or None
     spell_tags = _spell_attack_tags(spell, damage_type)
@@ -556,7 +570,8 @@ def _handle_magic_missile(
     out.damage_per_target[target.id] = applied
     note = f" ({energy_note})" if energy_note else ""
     out.log.append(
-        f"  {count} missile(s) hit {target.name} for {applied}{note}"
+        f"  {hit_count}/{count} missile(s) hit {target.name} "
+        f"for {applied}{note}"
     )
 
 
@@ -566,6 +581,17 @@ def _handle_scaling_damage(
     current_round: int = 1,
 ) -> None:
     eff = spell.effect
+    # Touch-attack roll if the spell requires one. On miss, the
+    # spell has no effect (RAW: a missed touch attack does nothing).
+    if eff.get("ranged_touch_attack") or eff.get("melee_touch_attack"):
+        ranged = bool(eff.get("ranged_touch_attack"))
+        hit, log_lines = resolve_spell_touch_attack(
+            caster, target, ranged=ranged, roller=roller,
+            grid=out.grid,
+        )
+        out.log.extend(log_lines)
+        if not hit:
+            return
     dice_per = str(eff.get("dice", "1d4"))
     scaling = eff.get("scaling", "fixed")
     max_dice = int(eff.get("max_dice", 1))
@@ -672,6 +698,84 @@ def _handle_buff_party(
     _handle_buff_target(caster, spell, target, dc, cl, registry, roller, out)
 
 
+def resolve_spell_touch_attack(
+    caster: Combatant,
+    target: Combatant,
+    *,
+    ranged: bool,
+    roller: Roller,
+    grid=None,
+    encounter=None,
+) -> tuple[bool, list[str]]:
+    """Roll a spell touch attack against ``target``'s touch AC.
+
+    PF1 RAW: spells flagged as ranged_touch_attack or
+    melee_touch_attack require an attack roll vs the target's touch
+    AC. Hit on total ≥ touch AC OR natural 20; auto-miss on natural 1.
+    BAB + Dex (ranged) or BAB + Str (melee) + size; range increment
+    penalty for ranged-touch beyond the spell's first range increment
+    (we use the close/medium/long bands for the spell's stated range
+    rather than a strict per-increment table — within the spell's max
+    range, no penalty in v1).
+
+    Returns ``(hit, log_lines)``.
+    """
+    bab = int(caster.bases.get("bab", 0))
+    ability = "dex" if ranged else "str"
+    if (
+        caster.template_kind == "character"
+        and caster.template is not None
+    ):
+        scores = caster.template.base_ability_scores
+        try:
+            base = int(scores.get(ability) or 10)
+        except TypeError:
+            base = 10
+        for m in caster.modifiers.for_target(f"ability:{ability}"):
+            base += m.value
+        score = int(base)
+    elif (
+        caster.template_kind == "monster"
+        and caster.template is not None
+    ):
+        scores = getattr(caster.template, "ability_scores", None) or {}
+        score = int(scores.get(ability, 10) or 10)
+    else:
+        score = 10
+    ability_mod = (score - 10) // 2 if score > 0 else 0
+    # Size modifier to attack — typed AC mods carry size; we mirror
+    # via the actor's size if available. PF1 size-to-attack table:
+    # Fine +8, Diminutive +4, Tiny +2, Small +1, Medium 0, Large -1,
+    # Huge -2, Gargantuan -4, Colossal -8.
+    size_to_atk = {
+        "fine": 8, "diminutive": 4, "tiny": 2, "small": 1,
+        "medium": 0, "large": -1, "huge": -2,
+        "gargantuan": -4, "colossal": -8,
+    }
+    size_mod = size_to_atk.get(
+        str(getattr(caster, "size", "medium")).lower(), 0,
+    )
+    # General-purpose attack modifiers (Inspire Courage, etc.).
+    from .modifiers import compute as _compute_mod
+    attack_general = _compute_mod(0, caster.modifiers.for_target("attack"))
+    if ranged:
+        attack_general += _compute_mod(
+            0, caster.modifiers.for_target("attack:ranged"),
+        )
+    bonus = bab + ability_mod + size_mod + attack_general
+    r = roller.roll("1d20")
+    nat = int(r.terms[0].rolls[0])
+    total = nat + bonus
+    target_ac = target.ac("touch")
+    hit = (nat == 20) or (nat != 1 and total >= target_ac)
+    label = "ranged touch" if ranged else "melee touch"
+    log = [
+        f"  {label} attack: d20={nat} + {bonus} = {total} "
+        f"vs touch AC {target_ac} → {'HIT' if hit else 'MISS'}"
+    ]
+    return hit, log
+
+
 def _spell_save_context(spell: Spell) -> dict:
     """Build the effect-tag context for save resolution against a spell.
 
@@ -701,6 +805,16 @@ def _handle_apply_condition_save(
     eff = spell.effect
     cond = str(eff["condition"])
     cond_on_save = eff.get("condition_on_save_success")
+    # Touch-attack roll if the spell requires one (e.g. touch_of_fatigue).
+    if eff.get("ranged_touch_attack") or eff.get("melee_touch_attack"):
+        ranged = bool(eff.get("ranged_touch_attack"))
+        hit, log_lines = resolve_spell_touch_attack(
+            caster, target, ranged=ranged, roller=roller,
+            grid=out.grid,
+        )
+        out.log.extend(log_lines)
+        if not hit:
+            return
     save_kind, _ = parse_saving_throw(spell.saving_throw)
     if save_kind:
         passed, nat, total = roll_save(
