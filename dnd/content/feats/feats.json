@@ -498,6 +498,34 @@
     "summary": "Overrun without provoking. +2 to overrun CMB. Targets cannot avoid overrun."
   },
   {
+    "id": "improved_drag",
+    "name": "Improved Drag",
+    "type": "combat",
+    "prerequisites": {"feats": ["power_attack"], "abilities": {"str": 13}, "bab": 1},
+    "summary": "Drag without provoking. +2 to drag CMB and CMD against drag."
+  },
+  {
+    "id": "improved_reposition",
+    "name": "Improved Reposition",
+    "type": "combat",
+    "prerequisites": {"feats": ["combat_expertise"], "abilities": {"int": 13}},
+    "summary": "Reposition without provoking. +2 to reposition CMB and CMD against reposition."
+  },
+  {
+    "id": "improved_steal",
+    "name": "Improved Steal",
+    "type": "combat",
+    "prerequisites": {"feats": ["combat_expertise"], "abilities": {"int": 13}},
+    "summary": "Steal without provoking. +2 to steal CMB and CMD against steal."
+  },
+  {
+    "id": "improved_dirty_trick",
+    "name": "Improved Dirty Trick",
+    "type": "combat",
+    "prerequisites": {"feats": ["combat_expertise"], "abilities": {"int": 13}},
+    "summary": "Dirty trick without provoking. +2 to dirty trick CMB and CMD against dirty tricks."
+  },
+  {
     "id": "improved_feint",
     "name": "Improved Feint",
     "type": "combat",

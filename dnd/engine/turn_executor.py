@@ -668,7 +668,7 @@ def _execute_composite(
         return
     if composite in (
         "trip", "disarm", "sunder", "bull_rush", "grapple",
-        "drag", "overrun", "reposition", "steal",
+        "drag", "overrun", "reposition", "steal", "dirty_trick",
     ):
         _do_combat_maneuver(
             actor, composite, args, encounter, grid, roller, ns, events,
@@ -3654,7 +3654,8 @@ def _resolve_maneuver(
     vs trip / bullrush) qualify.
 
     Trip-CMB bonus from the wielded weapon (whip, scythe, flail = +2)
-    is layered on for ``kind == "trip"``.
+    is layered on for ``kind == "trip"``. The Improved-X feat for
+    the matching maneuver adds +2 CMB.
     """
     cmb = actor.cmb()
     if kind == "trip" and actor.attack_options:
@@ -3666,6 +3667,9 @@ def _resolve_maneuver(
                 cmb += w.trip_bonus
             except Exception:
                 pass
+    improved_feat = _IMPROVED_FEAT_FOR_MANEUVER.get(kind)
+    if improved_feat and _has_feat(actor, improved_feat):
+        cmb += 2
     cmd = target.cmd(context={"maneuver": kind})
     r = roller.roll("1d20")
     nat = r.terms[0].rolls[0]
@@ -3675,7 +3679,28 @@ def _resolve_maneuver(
 
 _MANEUVER_KINDS = frozenset({
     "trip", "disarm", "sunder", "bull_rush", "grapple",
-    "drag", "overrun", "reposition", "steal",
+    "drag", "overrun", "reposition", "steal", "dirty_trick",
+})
+
+# Per-maneuver mapping to the Improved-X feat that grants:
+#   - +2 CMB on this maneuver
+#   - skips the AoO that the maneuver attempt would otherwise provoke
+_IMPROVED_FEAT_FOR_MANEUVER: dict[str, str] = {
+    "trip": "improved_trip",
+    "disarm": "improved_disarm",
+    "sunder": "improved_sunder",
+    "bull_rush": "improved_bull_rush",
+    "grapple": "improved_grapple",
+    "overrun": "improved_overrun",
+    "drag": "improved_drag",
+    "reposition": "improved_reposition",
+    "steal": "improved_steal",
+    "dirty_trick": "improved_dirty_trick",
+}
+
+# Conditions a dirty-trick attacker may apply (RAW menu).
+_DIRTY_TRICK_CONDITIONS: frozenset[str] = frozenset({
+    "blinded", "dazzled", "deafened", "entangled", "shaken", "sickened",
 })
 
 
@@ -3689,22 +3714,14 @@ def _do_combat_maneuver(
     ns: dict[str, Any],
     events: list[TurnEvent],
 ) -> None:
-    """Standalone combat-maneuver composite (trip / disarm / sunder /
-    bull_rush / grapple).
+    """Standalone combat-maneuver composite.
 
-    All maneuvers share the d20 + CMB vs CMD primitive. Effects on
-    success vary by kind:
+    All maneuvers share the d20 + CMB vs CMD primitive. PF1 RAW:
+    each maneuver provokes an AoO from the target unless the actor
+    has the matching ``improved_<kind>`` feat. The Improved feat
+    also grants +2 CMB on that maneuver (applied in _resolve_maneuver).
 
-    - trip: target gains the ``prone`` condition.
-    - disarm: target gains ``disarmed`` (proxy — engine doesn't yet
-      model held weapons multiset).
-    - sunder: target's weapon gains ``weapon_broken`` proxy.
-    - bull_rush: target moves 1 + (margin // 5) squares directly away
-      from actor, into passable cells; stops on the first impassable.
-    - grapple: both gain ``grappled``.
-
-    Maneuver-time AoOs (PF1 RAW: provoke unless you have Improved X)
-    are NOT yet modeled; v1 treats every maneuver as if Improved.
+    Effects on success vary by kind — see ``_apply_maneuver_effect``.
     """
     if kind not in _MANEUVER_KINDS:
         raise ValueError(f"unknown maneuver kind {kind!r}")
@@ -3718,11 +3735,31 @@ def _do_combat_maneuver(
                                 {"reason": f"{kind}: target not adjacent"}))
         return
 
+    # AoO provocation: unless the actor has the Improved-X feat for
+    # this maneuver, the target gets a free attack of opportunity
+    # against the actor before the CMB roll resolves.
+    improved_feat = _IMPROVED_FEAT_FOR_MANEUVER.get(kind)
+    provokes = improved_feat is None or not _has_feat(actor, improved_feat)
+    if provokes and not (
+        target.is_unconscious()
+        or target.conditions & {
+            "helpless", "sleeping", "paralyzed", "petrified",
+            "stunned", "dazed", "fascinated", "panicked",
+            "cowering", "nauseated",
+        }
+    ):
+        # Target retaliates with one AoO (subject to their per-round
+        # AoO budget — _do_aoo respects Combat Reflexes / Dex limits).
+        _do_aoo(target, actor, grid, events, encounter=encounter)
+        if actor.current_hp <= 0:
+            return  # actor incapacitated by AoO; skip the maneuver
+
     passed, nat, total, margin = _resolve_maneuver(actor, target, kind, roller)
     detail = {
         "kind": kind, "target_id": target.id,
         "natural": nat, "total": total, "margin": margin,
         "passed": passed,
+        "provoked_aoo": provokes,
     }
     if passed:
         _apply_maneuver_effect(
@@ -3931,6 +3968,23 @@ def _apply_maneuver_effect(
         detail["effect"] = "repositioned"
         detail["new_position"] = list(target.position)
         detail["max_distance"] = max_distance
+    elif kind == "dirty_trick":
+        # PF1 RAW: pick one of blinded / dazzled / deafened /
+        # entangled / shaken / sickened. Duration = 1 round + 1
+        # round per 5 by which the CMB exceeded the CMD. The condition
+        # can be removed by a standard action (not modeled here — the
+        # condition just sits there until tick removes it).
+        cond = str(args.get("condition", "dazzled")).lower()
+        if cond not in _DIRTY_TRICK_CONDITIONS:
+            cond = "dazzled"
+        duration = 1 + max(0, margin // 5)
+        applied = target.add_condition(cond)
+        detail["effect"] = "dirty_trick"
+        detail["condition"] = cond
+        detail["duration"] = duration
+        detail["applied"] = applied
+        if not applied:
+            detail["note"] = "target_immune"
     elif kind == "steal":
         # PF1: take a small carried item (not held weapon — that's
         # disarm). On success, transfer one carried item from target
