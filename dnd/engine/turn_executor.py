@@ -6057,9 +6057,19 @@ def _do_aoo(
         damage_type=str(chosen.get("damage_type", "")),
         name=str(chosen.get("name", "weapon")),
     )
-    # AoO uses a fresh d20 in the encounter's RNG sequence.
-    from .dice import Roller as _R
-    aoo_roller = _R()  # not deterministic — TODO route encounter RNG.
+    # AoO uses the encounter's RNG sequence so seeded simulations stay
+    # deterministic. Without this routing the AoO would use Python's
+    # global RNG (random.Random(None) seeds from os.urandom), which
+    # makes any test that fires an AoO order-dependent — that was the
+    # root cause of the test_disarm / test_explicit_condition_choice
+    # / test_dirty_trick / test_steal flake cluster.
+    if encounter is not None and encounter.roller is not None:
+        aoo_roller = encounter.roller
+    else:
+        # No encounter (rare in test paths): fall back to a fixed seed
+        # so behavior is at least repeatable within a process.
+        from .dice import Roller as _R
+        aoo_roller = _R(seed=0)
     outcome = resolve_attack(profile, target.defense_profile(), aoo_roller)
     if outcome.hit and outcome.damage > 0:
         target.take_damage(outcome.damage)
