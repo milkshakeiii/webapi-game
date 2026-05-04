@@ -1,0 +1,28 @@
+{
+  "id": "air",
+  "name": "Air",
+  "summary": "Servants of sky / wind deities.",
+  "granted_power_l1": {
+    "id": "lightning_arc",
+    "name": "Lightning Arc",
+    "summary": "Standard action, ranged touch attack 30 ft; 1d6 + 1/2 CL electricity damage. Usable 3 + Wis modifier times per day.",
+    "kind": "active_ranged_damage",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "damage_dice": "1d6",
+    "damage_plus_half_cl": true,
+    "damage_type": "electricity",
+    "range_ft": 30
+  },
+  "spells_per_level": {
+    "1": "obscuring_mist",
+    "2": "wind_wall",
+    "3": "gaseous_form",
+    "4": "air_walk",
+    "5": "control_winds",
+    "6": "chain_lightning",
+    "7": "elemental_body_iv",
+    "8": "whirlwind",
+    "9": "elemental_swarm"
+  },
+  "higher_level_powers": []
+}

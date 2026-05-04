@@ -666,6 +666,9 @@ def _execute_composite(
     if composite == "detect_evil":
         _do_detect_evil(actor, args, grid, ns, events)
         return
+    if composite == "domain_power":
+        _do_domain_power(actor, args, encounter, grid, roller, ns, events)
+        return
     if composite == "aid_another":
         _do_aid_another(actor, args, encounter, grid, roller, ns, events)
         return
@@ -3204,6 +3207,247 @@ def _monster_hd(actor: Combatant) -> int:
         return int(hd_str)
     except ValueError:
         return 1
+
+
+def _do_domain_power(
+    actor: Combatant,
+    args: dict,
+    encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Cleric / druid domain L1 granted power.
+
+    args.domain_id selects which of the actor's two domains to use.
+    The granted power's data is loaded from the registry; per-day
+    uses are tracked under ``domain_<power_id>_uses`` in resources.
+
+    Power kinds dispatched here:
+      - active_touch_heal     (Healing: Rebuke Death)
+      - active_touch_buff     (War: Battle Rage; Good: Touch of Good)
+      - active_touch_info     (Knowledge: Lore Keeper)
+      - active_ranged_damage  (Air/Earth/Fire: ranged elemental darts)
+      - active_touch_condition (Evil: Touch of Evil → sickened)
+      - active_self_buff      (Trickery: Copycat → concealment)
+      - active_touch_damage_bleed (Death: Bleeding Touch)
+      - active_ranged_weapon_attack (Magic: Hand of the Acolyte)
+
+    Other kinds (e.g. Law's "treat d20 as 11") are tracked in coverage
+    but not yet wired.
+    """
+    from .content import default_registry
+    domain_id = str(args.get("domain_id") or "")
+    if domain_id not in actor.domains:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": f"domain_power: actor "
+                                 f"hasn't picked domain {domain_id!r}"}))
+        return
+    try:
+        domain = default_registry().get_domain(domain_id)
+    except Exception:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": f"domain_power: unknown "
+                                 f"domain {domain_id!r}"}))
+        return
+    pwr = domain.granted_power_l1 or {}
+    pid = pwr.get("id")
+    if not pid:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": f"domain_power: domain "
+                                 f"{domain_id!r} has no L1 power"}))
+        return
+    uses_key = f"domain_{pid}_uses"
+    if int(actor.resources.get(uses_key, 0)) <= 0:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": f"domain_power: no uses "
+                                 f"left ({uses_key})"}))
+        return
+
+    # Compute caster level (cleric class levels for now).
+    cl = _character_level(actor)
+
+    kind = pwr.get("kind", "")
+    detail: dict = {"domain_id": domain_id, "power_id": pid, "kind": kind}
+
+    if kind == "active_touch_heal":
+        target = _resolve_target(args.get("target"), ns)
+        if target is None or not grid.is_adjacent(actor, target):
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "touch_heal: target not adjacent"}))
+            return
+        if pwr.get("requires_target_at_or_below_zero_hp") and target.current_hp > 0:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "rebuke_death: target above 0 HP"}))
+            return
+        actor.resources[uses_key] = int(actor.resources[uses_key]) - 1
+        dice = str(pwr.get("heal_dice", "1d4"))
+        r = roller.roll(dice)
+        amount = int(r.total)
+        if pwr.get("heal_plus_half_cl"):
+            amount += max(1, cl // 2)
+        target.heal(amount)
+        if target.current_hp >= 0 and "dying" in target.conditions:
+            target.remove_condition("dying")
+        detail.update({"target_id": target.id, "healed": amount,
+                       "uses_remaining": actor.resources[uses_key]})
+        events.append(TurnEvent(actor.id, "domain_power", detail))
+        return
+
+    if kind == "active_touch_buff":
+        target = _resolve_target(args.get("target"), ns)
+        if target is None or not grid.is_adjacent(actor, target):
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "touch_buff: target not adjacent"}))
+            return
+        actor.resources[uses_key] = int(actor.resources[uses_key]) - 1
+        bonus_value = max(1, cl // 2)
+        cur_round = encounter.round_number if encounter else 0
+        duration = int(pwr.get("buff_duration_rounds", 1))
+        expires = cur_round + duration
+        src = f"domain:{pid}"
+        primary = pwr.get("buff_modifier") or {}
+        if primary:
+            target.modifiers.add(Modifier(
+                value=bonus_value,
+                type=str(primary.get("type", "untyped")),
+                target=str(primary.get("target", "attack")),
+                source=src,
+                expires_round=expires,
+            ))
+        for extra in pwr.get("extra_modifiers") or []:
+            target.modifiers.add(Modifier(
+                value=bonus_value,
+                type=str(extra.get("type", "untyped")),
+                target=str(extra.get("target", "attack")),
+                source=src,
+                expires_round=expires,
+            ))
+        detail.update({"target_id": target.id, "bonus": bonus_value,
+                       "expires_round": expires,
+                       "uses_remaining": actor.resources[uses_key]})
+        events.append(TurnEvent(actor.id, "domain_power", detail))
+        return
+
+    if kind == "active_touch_info":
+        target = _resolve_target(args.get("target"), ns)
+        if target is None or not grid.is_adjacent(actor, target):
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "touch_info: target not adjacent"}))
+            return
+        actor.resources[uses_key] = int(actor.resources[uses_key]) - 1
+        info = {"target_id": target.id, "name": target.name}
+        if target.template_kind == "monster" and target.template is not None:
+            info["type"] = getattr(target.template, "type", "")
+            info["cr"] = getattr(target.template, "cr", "")
+            info["alignment"] = getattr(target.template, "alignment", "")
+        detail.update({"info": info,
+                       "uses_remaining": actor.resources[uses_key]})
+        events.append(TurnEvent(actor.id, "domain_power", detail))
+        return
+
+    if kind == "active_ranged_damage":
+        target = _resolve_target(args.get("target"), ns)
+        if target is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "ranged_damage: no target"}))
+            return
+        # Range gate: simple Chebyshev distance.
+        ax, ay = actor.position
+        tx, ty = target.position
+        max_squares = int(pwr.get("range_ft", 30)) // 5
+        if max(abs(ax - tx), abs(ay - ty)) > max_squares:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "ranged_damage: out of range"}))
+            return
+        actor.resources[uses_key] = int(actor.resources[uses_key]) - 1
+        dice = str(pwr.get("damage_dice", "1d6"))
+        r = roller.roll(dice)
+        amount = int(r.total)
+        if pwr.get("damage_plus_half_cl"):
+            amount += max(1, cl // 2)
+        dtype = str(pwr.get("damage_type", ""))
+        # Honor energy resistance / immunity for energy-typed damage.
+        from .spells import apply_typed_damage
+        applied, note = apply_typed_damage(
+            target, amount, dtype,
+            attack_tags=frozenset({"magic"}),
+            roller=roller,
+        )
+        _apply_post_damage_state(target)
+        detail.update({"target_id": target.id, "damage": applied,
+                       "damage_type": dtype, "note": note,
+                       "uses_remaining": actor.resources[uses_key]})
+        events.append(TurnEvent(actor.id, "domain_power", detail))
+        return
+
+    if kind == "active_touch_condition":
+        target = _resolve_target(args.get("target"), ns)
+        if target is None or not grid.is_adjacent(actor, target):
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "touch_condition: target not adjacent"}))
+            return
+        actor.resources[uses_key] = int(actor.resources[uses_key]) - 1
+        cond = str(pwr.get("condition", "sickened"))
+        applied = target.add_condition(cond)
+        detail.update({"target_id": target.id, "condition": cond,
+                       "applied": applied,
+                       "uses_remaining": actor.resources[uses_key]})
+        events.append(TurnEvent(actor.id, "domain_power", detail))
+        return
+
+    if kind == "active_self_buff":
+        actor.resources[uses_key] = int(actor.resources[uses_key]) - 1
+        cur_round = encounter.round_number if encounter else 0
+        duration_formula = pwr.get("buff_duration_rounds_formula", "1")
+        if duration_formula == "cl_rounds":
+            duration = max(1, cl)
+        else:
+            duration = int(pwr.get("buff_duration_rounds", 1))
+        expires = cur_round + duration
+        primary = pwr.get("buff_modifier") or {}
+        src = f"domain:{pid}"
+        if primary:
+            actor.modifiers.add(Modifier(
+                value=int(primary.get("value", 1)),
+                type=str(primary.get("type", "untyped")),
+                target=str(primary.get("target", "ac")),
+                source=src,
+                expires_round=expires,
+            ))
+        # Concealment-style targets: also bump the field directly.
+        if primary.get("target") == "concealment":
+            actor.concealment = max(actor.concealment, int(primary.get("value", 0)))
+        detail.update({"expires_round": expires,
+                       "uses_remaining": actor.resources[uses_key]})
+        events.append(TurnEvent(actor.id, "domain_power", detail))
+        return
+
+    if kind == "active_touch_damage_bleed":
+        target = _resolve_target(args.get("target"), ns)
+        if target is None or not grid.is_adjacent(actor, target):
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "touch_damage_bleed: target not adjacent"}))
+            return
+        actor.resources[uses_key] = int(actor.resources[uses_key]) - 1
+        dice = str(pwr.get("damage_dice", "1d6"))
+        r = roller.roll(dice)
+        amount = int(r.total)
+        target.take_damage(amount)
+        target.apply_bleed(int(pwr.get("bleed_amount", 1)))
+        _apply_post_damage_state(target)
+        detail.update({"target_id": target.id, "damage": amount,
+                       "uses_remaining": actor.resources[uses_key]})
+        events.append(TurnEvent(actor.id, "domain_power", detail))
+        return
+
+    # Unhandled kind (Law's treat-d20-as-11, Magic's Hand of the
+    # Acolyte): consume use, record event with note.
+    actor.resources[uses_key] = int(actor.resources[uses_key]) - 1
+    detail.update({"note": f"power kind {kind!r} not yet wired",
+                   "uses_remaining": actor.resources[uses_key]})
+    events.append(TurnEvent(actor.id, "domain_power", detail))
 
 
 def _do_detect_evil(

@@ -232,6 +232,12 @@ class Combatant:
     # aura per encounter" which mirrors the most common sub-cases.
     aura_saves_taken: set[str] = field(default_factory=set)
 
+    # PF1 cleric domain selection: list of domain ids picked at L1
+    # (via class_choices.domains). Empty for non-clerics or for a
+    # cleric who hasn't committed yet. Used by the domain-power
+    # composite handler to route by id and look up uses-per-day pools.
+    domains: list[str] = field(default_factory=list)
+
     # PF1 engulf link: when a gelatinous-cube engulf save fails, the
     # victim's engulfed_by_id is set to the cube. Used for pull-along
     # (cube movement drags the victim) and for the per-round acid
@@ -1833,6 +1839,26 @@ def combatant_from_character(
     if cleric_levels > 0:
         # Channel Energy: 3 + Cha mod per day.
         spell_slot_resources["channel_uses"] = max(0, 3 + cha_mod)
+        # Domains: read class_choices.domains (list of 2 domain ids).
+        # For each, add a per-day pool for the L1 granted power and
+        # extend castable_spells with the domain's per-level spells.
+        wis_mod = final_scores.modifier("wis")
+        domain_ids = list((character.class_choices or {}).get("domains") or [])
+        for did in domain_ids:
+            try:
+                dom = registry.get_domain(did)
+            except Exception:
+                continue
+            pwr = dom.granted_power_l1 or {}
+            pid = pwr.get("id")
+            if not pid:
+                continue
+            formula = pwr.get("uses_per_day_formula", "3_plus_wis_mod")
+            if formula == "3_plus_wis_mod":
+                uses = max(0, 3 + wis_mod)
+            else:
+                uses = 0
+            spell_slot_resources[f"domain_{pid}_uses"] = uses
     if bard_levels > 0:
         # Bardic Performance: 4 + Cha + 2/level beyond 1st rounds/day.
         spell_slot_resources["performance_rounds"] = (
@@ -2033,4 +2059,7 @@ def combatant_from_character(
         weapon_proficiency_categories=weapon_profs,
         armor_proficiency_categories=armor_profs,
         held_items=held_items,
+        domains=list(
+            (character.class_choices or {}).get("domains") or []
+        ),
     )

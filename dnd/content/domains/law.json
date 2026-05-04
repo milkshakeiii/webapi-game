@@ -1,0 +1,27 @@
+{
+  "id": "law",
+  "name": "Law",
+  "summary": "Servants of order / law-aligned deities.",
+  "granted_power_l1": {
+    "id": "touch_of_law",
+    "name": "Touch of Law",
+    "summary": "Standard action, melee touch on a creature; until end of next turn target rolls all d20 attack/save/check rolls 'as if they had rolled an 11' (treat result as 11 + modifiers). Usable 3 + Wis modifier times per day.",
+    "kind": "active_touch_buff",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "buff_modifier": null,
+    "buff_duration_rounds": 1,
+    "special": "treat_d20_as_11"
+  },
+  "spells_per_level": {
+    "1": "protection_from_chaos",
+    "2": "zone_of_truth",
+    "3": "magic_circle_against_chaos",
+    "4": "order_s_wrath",
+    "5": "dispel_chaos",
+    "6": "hold_monster",
+    "7": "dictum",
+    "8": "shield_of_law",
+    "9": "summon_monster_ix"
+  },
+  "higher_level_powers": []
+}

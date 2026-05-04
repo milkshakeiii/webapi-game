@@ -1,0 +1,28 @@
+{
+  "id": "earth",
+  "name": "Earth",
+  "summary": "Servants of stone / dwarven / mountain deities.",
+  "granted_power_l1": {
+    "id": "acid_dart",
+    "name": "Acid Dart",
+    "summary": "Standard action, ranged touch attack 30 ft; 1d6 + 1/2 CL acid damage. Usable 3 + Wis modifier times per day.",
+    "kind": "active_ranged_damage",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "damage_dice": "1d6",
+    "damage_plus_half_cl": true,
+    "damage_type": "acid",
+    "range_ft": 30
+  },
+  "spells_per_level": {
+    "1": "magic_stone",
+    "2": "soften_earth_and_stone",
+    "3": "stone_shape",
+    "4": "spike_stones",
+    "5": "wall_of_stone",
+    "6": "stoneskin",
+    "7": "earthquake",
+    "8": "iron_body",
+    "9": "elemental_swarm"
+  },
+  "higher_level_powers": []
+}

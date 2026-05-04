@@ -1,0 +1,26 @@
+{
+  "id": "trickery",
+  "name": "Trickery",
+  "summary": "Servants of trickster / chaos / illusion deities.",
+  "granted_power_l1": {
+    "id": "copycat",
+    "name": "Copycat",
+    "summary": "Standard action; create an illusory double (as mirror image, single duplicate) for 1 round/CL. Usable 3 + Wis modifier times per day.",
+    "kind": "active_self_buff",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "buff_modifier": {"value": 20, "type": "untyped", "target": "concealment"},
+    "buff_duration_rounds_formula": "cl_rounds"
+  },
+  "spells_per_level": {
+    "1": "disguise_self",
+    "2": "invisibility",
+    "3": "nondetection",
+    "4": "confusion",
+    "5": "false_vision",
+    "6": "mislead",
+    "7": "screen",
+    "8": "mass_invisibility",
+    "9": "time_stop"
+  },
+  "higher_level_powers": []
+}

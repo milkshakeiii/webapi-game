@@ -1,0 +1,28 @@
+{
+  "id": "knowledge",
+  "name": "Knowledge",
+  "summary": "Servants of deities of secrets and lore. All Knowledge skills are class skills; bonus to identify creatures and recall lore.",
+  "granted_power_l1": {
+    "id": "lore_keeper",
+    "name": "Lore Keeper",
+    "summary": "Touch a creature; learn information about it as if you'd succeeded a Knowledge check (DC 15 + creature's CR/HD). Usable 3 + Wis modifier times per day.",
+    "kind": "active_touch_info",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "info_kind": "creature_lore"
+  },
+  "spells_per_level": {
+    "1": "comprehend_languages",
+    "2": "detect_thoughts",
+    "3": "speak_with_dead",
+    "4": "divination",
+    "5": "true_seeing",
+    "6": "find_the_path",
+    "7": "legend_lore",
+    "8": "discern_location",
+    "9": "foresight"
+  },
+  "higher_level_powers": [
+    {"level": 6, "id": "remote_viewing",
+     "summary": "Use scrying as a spell-like ability for caster_level rounds/day."}
+  ]
+}

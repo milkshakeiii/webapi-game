@@ -1,0 +1,26 @@
+{
+  "id": "death",
+  "name": "Death",
+  "summary": "Servants of death / decay / undead deities.",
+  "granted_power_l1": {
+    "id": "bleeding_touch",
+    "name": "Bleeding Touch",
+    "summary": "Standard action, melee touch; target takes 1d6 damage and starts bleeding 1d6/round (Fort DC 10 + 1/2 CL + Wis to halve duration). Usable 3 + Wis modifier times per day.",
+    "kind": "active_touch_damage_bleed",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "damage_dice": "1d6",
+    "bleed_amount": 6
+  },
+  "spells_per_level": {
+    "1": "cause_fear",
+    "2": "death_knell",
+    "3": "animate_dead",
+    "4": "death_ward",
+    "5": "slay_living",
+    "6": "create_undead",
+    "7": "destruction",
+    "8": "create_greater_undead",
+    "9": "wail_of_the_banshee"
+  },
+  "higher_level_powers": []
+}

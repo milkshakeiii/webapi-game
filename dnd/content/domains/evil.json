@@ -1,0 +1,26 @@
+{
+  "id": "evil",
+  "name": "Evil",
+  "summary": "Servants of evil-aligned deities.",
+  "granted_power_l1": {
+    "id": "touch_of_evil",
+    "name": "Touch of Evil",
+    "summary": "Standard action, melee touch; target sickened for 1/2 CL rounds (min 1). Usable 3 + Wis modifier times per day.",
+    "kind": "active_touch_condition",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "condition": "sickened",
+    "duration_rounds_formula": "half_cl_min_1"
+  },
+  "spells_per_level": {
+    "1": "protection_from_good",
+    "2": "desecrate",
+    "3": "magic_circle_against_good",
+    "4": "unholy_blight",
+    "5": "dispel_good",
+    "6": "create_undead",
+    "7": "blasphemy",
+    "8": "unholy_aura",
+    "9": "summon_monster_ix"
+  },
+  "higher_level_powers": []
+}

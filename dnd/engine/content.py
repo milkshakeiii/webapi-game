@@ -166,6 +166,28 @@ class Spell:
 
 
 @dataclass
+class Domain:
+    """Cleric / druid domain (CRB).
+
+    A domain bundles:
+    - One L1 granted power (an active SLA-style ability or passive
+      modifier), tracked per-day if active.
+    - A list of bonus spells, one per spell level — the cleric
+      adds these to their preparable list and gains one bonus
+      domain slot per level.
+    - Higher-level granted powers (typically L8 / L20) — represented
+      as a list, indexed by class level.
+    """
+    id: str
+    name: str
+    summary: str
+    granted_power_l1: dict          # {id, name, summary, mechanic, uses_per_day_formula}
+    spells_per_level: dict[str, str]  # "1" → spell_id
+    higher_level_powers: list[dict] = field(default_factory=list)
+    raw: dict = field(default_factory=dict)
+
+
+@dataclass
 class Monster:
     id: str
     name: str
@@ -358,6 +380,18 @@ def _spell_from_dict(d: dict) -> Spell:
     )
 
 
+def _domain_from_dict(d: dict) -> Domain:
+    return Domain(
+        id=d["id"],
+        name=d["name"],
+        summary=d.get("summary", ""),
+        granted_power_l1=dict(d.get("granted_power_l1") or {}),
+        spells_per_level=dict(d.get("spells_per_level") or {}),
+        higher_level_powers=list(d.get("higher_level_powers") or []),
+        raw=d,
+    )
+
+
 def _monster_from_dict(d: dict) -> Monster:
     return Monster(
         id=d["id"],
@@ -412,6 +446,7 @@ class ContentRegistry:
     armor: dict[str, Armor] = field(default_factory=dict)
     shields: dict[str, Shield] = field(default_factory=dict)
     spells: dict[str, Spell] = field(default_factory=dict)
+    domains: dict[str, Domain] = field(default_factory=dict)
 
     @classmethod
     def from_directory(cls, content_dir: str | Path) -> ContentRegistry:
@@ -431,7 +466,16 @@ class ContentRegistry:
         registry._load_armor(root / "armor")
         registry._load_shields(root / "shields")
         registry._load_spells(root / "spells")
+        registry._load_domains(root / "domains")
         return registry
+
+    def _load_domains(self, dirpath: Path) -> None:
+        if not dirpath.is_dir():
+            return
+        for path in sorted(dirpath.glob("*.json")):
+            data = _load_json(path)
+            domain = _domain_from_dict(data)
+            self.domains[domain.id] = domain
 
     def _load_races(self, dirpath: Path) -> None:
         if not dirpath.is_dir():
@@ -581,6 +625,15 @@ class ContentRegistry:
             return self.spells[spell_id]
         except KeyError:
             raise ContentNotFoundError(f"spell not found: {spell_id!r}")
+
+    def get_domain(self, domain_id: str) -> Domain:
+        try:
+            return self.domains[domain_id]
+        except KeyError:
+            raise ContentNotFoundError(f"domain not found: {domain_id!r}")
+
+    def all_domains(self) -> Iterable[Domain]:
+        return self.domains.values()
 
     def all_races(self) -> Iterable[Race]:
         return self.races.values()

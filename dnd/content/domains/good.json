@@ -1,0 +1,32 @@
+{
+  "id": "good",
+  "name": "Good",
+  "summary": "Servants of good-aligned deities. Wield holy power to bless allies and hurt evil.",
+  "granted_power_l1": {
+    "id": "touch_of_good",
+    "name": "Touch of Good",
+    "summary": "Standard action, melee touch on an ally; +1/2 caster level (min 1) sacred bonus to attack rolls, skill checks, ability checks, and saving throws for 1 round. Usable 3 + Wis modifier times per day.",
+    "kind": "active_touch_buff",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "buff_modifier": {"value_formula": "half_cl_min_1", "type": "sacred", "target": "attack"},
+    "extra_modifiers": [
+      {"value_formula": "half_cl_min_1", "type": "sacred", "target": "fort_save"},
+      {"value_formula": "half_cl_min_1", "type": "sacred", "target": "ref_save"},
+      {"value_formula": "half_cl_min_1", "type": "sacred", "target": "will_save"},
+      {"value_formula": "half_cl_min_1", "type": "sacred", "target": "skill_check"}
+    ],
+    "buff_duration_rounds": 1
+  },
+  "spells_per_level": {
+    "1": "protection_from_evil",
+    "2": "aid",
+    "3": "magic_circle_against_evil",
+    "4": "holy_smite",
+    "5": "dispel_evil",
+    "6": "blade_barrier",
+    "7": "holy_word",
+    "8": "holy_aura",
+    "9": "summon_monster_ix"
+  },
+  "higher_level_powers": []
+}

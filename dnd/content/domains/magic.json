@@ -1,0 +1,26 @@
+{
+  "id": "magic",
+  "name": "Magic",
+  "summary": "Servants of arcane / magic deities.",
+  "granted_power_l1": {
+    "id": "hand_of_the_acolyte",
+    "name": "Hand of the Acolyte",
+    "summary": "Standard action, ranged attack with a wielded melee weapon at a target within 30 ft; uses BAB + Wis as the attack roll. Usable 3 + Wis modifier times per day.",
+    "kind": "active_ranged_weapon_attack",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "uses_wis_for_attack": true,
+    "range_ft": 30
+  },
+  "spells_per_level": {
+    "1": "identify",
+    "2": "magic_mouth",
+    "3": "dispel_magic",
+    "4": "imbue_with_spell_ability",
+    "5": "spell_resistance",
+    "6": "antimagic_field",
+    "7": "spell_turning",
+    "8": "protection_from_spells",
+    "9": "mage_s_disjunction"
+  },
+  "higher_level_powers": []
+}

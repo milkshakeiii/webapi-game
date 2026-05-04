@@ -1,0 +1,29 @@
+{
+  "id": "war",
+  "name": "War",
+  "summary": "Followers of war and battle deities. Bless your allies' weapons; lead the charge.",
+  "granted_power_l1": {
+    "id": "battle_rage",
+    "name": "Battle Rage",
+    "summary": "Standard action, melee touch on an ally; +1/2 caster level (min 1) on weapon damage rolls until the end of their next turn. Usable 3 + Wis modifier times per day.",
+    "kind": "active_touch_buff",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "buff_modifier": {"value_formula": "half_cl_min_1", "type": "untyped", "target": "damage"},
+    "buff_duration_rounds": 1
+  },
+  "spells_per_level": {
+    "1": "magic_weapon",
+    "2": "spiritual_weapon",
+    "3": "magic_vestment",
+    "4": "divine_power",
+    "5": "flame_strike",
+    "6": "blade_barrier",
+    "7": "power_word_blind",
+    "8": "power_word_stun",
+    "9": "power_word_kill"
+  },
+  "higher_level_powers": [
+    {"level": 8, "id": "weapon_master",
+     "summary": "Free Combat feats from the War domain list."}
+  ]
+}
