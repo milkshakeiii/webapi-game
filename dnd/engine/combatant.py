@@ -238,6 +238,14 @@ class Combatant:
     # composite handler to route by id and look up uses-per-day pools.
     domains: list[str] = field(default_factory=list)
 
+    # PF1 cleric domain spell list: maps spell level → set of
+    # spell_ids that qualify as "domain spells" for this cleric
+    # (union of both picked domains' spells_per_level entries that
+    # we have catalog spells for). _do_cast consults this set to
+    # decide whether a cast can draw from the bonus domain slot
+    # (``domain_slot_<L>``) instead of the regular ``spell_slot_<L>``.
+    domain_spells: dict[int, set[str]] = field(default_factory=dict)
+
     # PF1 engulf link: when a gelatinous-cube engulf save fails, the
     # victim's engulfed_by_id is set to the cube. Used for pull-along
     # (cube movement drags the victim) and for the per-round acid
@@ -1836,12 +1844,16 @@ def combatant_from_character(
     if paladin_levels > 0:
         # Smite Evil: 1/day at L1, +1 every 3 levels.
         spell_slot_resources["smite_evil_uses"] = 1 + (paladin_levels - 1) // 3
+    cleric_domain_spells: dict[int, set[str]] = {}
     if cleric_levels > 0:
         # Channel Energy: 3 + Cha mod per day.
         spell_slot_resources["channel_uses"] = max(0, 3 + cha_mod)
         # Domains: read class_choices.domains (list of 2 domain ids).
-        # For each, add a per-day pool for the L1 granted power and
-        # extend castable_spells with the domain's per-level spells.
+        # For each, add a per-day pool for the L1 granted power, fold
+        # the domain's spells (those we have in the catalog) into the
+        # cleric's castable list and the per-level domain_spells set,
+        # and add a +1 ``domain_slot_<L>`` resource for every level
+        # the cleric can cast (gated by spell_slot_<L> existing).
         wis_mod = final_scores.modifier("wis")
         domain_ids = list((character.class_choices or {}).get("domains") or [])
         for did in domain_ids:
@@ -1851,14 +1863,41 @@ def combatant_from_character(
                 continue
             pwr = dom.granted_power_l1 or {}
             pid = pwr.get("id")
-            if not pid:
-                continue
-            formula = pwr.get("uses_per_day_formula", "3_plus_wis_mod")
-            if formula == "3_plus_wis_mod":
-                uses = max(0, 3 + wis_mod)
-            else:
-                uses = 0
-            spell_slot_resources[f"domain_{pid}_uses"] = uses
+            if pid:
+                formula = pwr.get("uses_per_day_formula", "3_plus_wis_mod")
+                if formula == "3_plus_wis_mod":
+                    uses = max(0, 3 + wis_mod)
+                else:
+                    uses = 0
+                spell_slot_resources[f"domain_{pid}_uses"] = uses
+            # Fold domain spells into the cleric's spell pool.
+            for lvl_str, sid in (dom.spells_per_level or {}).items():
+                try:
+                    lvl = int(lvl_str)
+                except ValueError:
+                    continue
+                if sid not in registry.spells:
+                    continue  # spell not yet in catalog (Phase 8 fill-in)
+                cleric_domain_spells.setdefault(lvl, set()).add(sid)
+        # Bonus domain spell slot per spell level the cleric has
+        # access to (RAW: 1/level, restricted to a domain spell
+        # picked at prep time).
+        for lvl, ids in cleric_domain_spells.items():
+            slot_key = f"spell_slot_{lvl}"
+            if slot_key in spell_slot_resources:
+                spell_slot_resources[f"domain_slot_{lvl}"] = 1
+        # Fold domain spells into castable_spells (cleric can prepare
+        # them in regular slots too) and auto-prepare one domain spell
+        # per level into prepared_spells (filling the bonus slot per
+        # RAW). The auto-pick is deterministic — first id alphabetically
+        # — so tests are stable; patrons can override via
+        # character.spells_prepared.
+        for lvl, ids in cleric_domain_spells.items():
+            castable.update(ids)
+            existing = prepared_spells.setdefault(lvl, [])
+            picked = sorted(ids)[0] if ids else None
+            if picked and picked not in existing:
+                existing.append(picked)
     if bard_levels > 0:
         # Bardic Performance: 4 + Cha + 2/level beyond 1st rounds/day.
         spell_slot_resources["performance_rounds"] = (
@@ -2062,4 +2101,5 @@ def combatant_from_character(
         domains=list(
             (character.class_choices or {}).get("domains") or []
         ),
+        domain_spells={lvl: set(ids) for lvl, ids in cleric_domain_spells.items()},
     )

@@ -259,5 +259,110 @@ class TestUnpickedDomainRejected(unittest.TestCase):
         self.assertIn("skip", kinds)
 
 
+# ---------------------------------------------------------------------------
+# Domain spell list + bonus domain slot
+# ---------------------------------------------------------------------------
+
+
+class TestDomainSpellList(unittest.TestCase):
+    def test_healing_domain_spells_are_castable(self):
+        c = _cleric(("healing", "war"))
+        # cure_light_wounds is the L1 spell on the Healing domain
+        # and should be in castable_spells.
+        self.assertIn("cure_light_wounds", c.castable_spells)
+        # magic_weapon (War L1) likewise.
+        self.assertIn("magic_weapon", c.castable_spells)
+
+    def test_domain_spells_dict_is_indexed_by_level(self):
+        c = _cleric(("healing", "war"))
+        self.assertIn("cure_light_wounds", c.domain_spells.get(1, set()))
+        self.assertIn("magic_weapon", c.domain_spells.get(1, set()))
+
+    def test_bonus_domain_slot_per_level(self):
+        c = _cleric(("healing", "war"))
+        # Cleric L1 has a spell_slot_1 → so we get domain_slot_1 = 1.
+        self.assertEqual(c.resources.get("domain_slot_1"), 1)
+
+
+class TestDomainSlotPreference(unittest.TestCase):
+    def test_domain_spell_drains_domain_slot_first(self):
+        c = _cleric(("healing", "war"))
+        ally = combatant_from_monster(REGISTRY.get_monster("orc"),
+                                      (5, 6), "x")
+        ally.current_hp = 1
+        grid = Grid(width=12, height=12)
+        grid.place(c)
+        grid.place(ally)
+        enc = Encounter.begin(grid, [c, ally], Roller(seed=1))
+        ds_before = c.resources.get("domain_slot_1", 0)
+        ss_before = c.resources.get("spell_slot_1", 0)
+        # Cast cure_light_wounds (Healing's L1 domain spell) — should
+        # come from domain_slot_1, not the regular L1 slot.
+        script = BehaviorScript(name="cast", rules=[
+            Rule(do={"standard": {
+                "type": "cast",
+                "spell": "cure_light_wounds",
+                "spell_level": 1,
+                "target": ally,
+            }}),
+        ])
+        intent = Interpreter(script).pick_turn(c, enc, grid)
+        execute_turn(c, intent, enc, grid, Roller(seed=1))
+        self.assertEqual(c.resources.get("domain_slot_1", 0), ds_before - 1)
+        self.assertEqual(c.resources.get("spell_slot_1", 0), ss_before)
+
+    def test_non_domain_spell_drains_regular_slot(self):
+        c = _cleric(("healing", "war"))
+        # divine_favor isn't on either domain's list → regular slot.
+        c.castable_spells.add("divine_favor")
+        c.prepared_spells.setdefault(1, []).append("divine_favor")
+        ally = combatant_from_monster(REGISTRY.get_monster("orc"),
+                                      (5, 6), "x")
+        grid = Grid(width=12, height=12)
+        grid.place(c)
+        grid.place(ally)
+        enc = Encounter.begin(grid, [c, ally], Roller(seed=1))
+        ds_before = c.resources.get("domain_slot_1", 0)
+        ss_before = c.resources.get("spell_slot_1", 0)
+        script = BehaviorScript(name="cast", rules=[
+            Rule(do={"standard": {
+                "type": "cast",
+                "spell": "divine_favor",
+                "spell_level": 1,
+                "target": c,
+            }}),
+        ])
+        intent = Interpreter(script).pick_turn(c, enc, grid)
+        execute_turn(c, intent, enc, grid, Roller(seed=1))
+        # Domain slot untouched; regular slot consumed.
+        self.assertEqual(c.resources.get("domain_slot_1", 0), ds_before)
+        self.assertEqual(c.resources.get("spell_slot_1", 0), ss_before - 1)
+
+    def test_domain_spell_falls_back_to_regular_slot_when_bonus_empty(self):
+        c = _cleric(("healing", "war"))
+        c.resources["domain_slot_1"] = 0  # exhaust the bonus
+        ally = combatant_from_monster(REGISTRY.get_monster("orc"),
+                                      (5, 6), "x")
+        ally.current_hp = 1
+        grid = Grid(width=12, height=12)
+        grid.place(c)
+        grid.place(ally)
+        enc = Encounter.begin(grid, [c, ally], Roller(seed=1))
+        ss_before = c.resources.get("spell_slot_1", 0)
+        script = BehaviorScript(name="cast", rules=[
+            Rule(do={"standard": {
+                "type": "cast",
+                "spell": "cure_light_wounds",
+                "spell_level": 1,
+                "target": ally,
+            }}),
+        ])
+        intent = Interpreter(script).pick_turn(c, enc, grid)
+        execute_turn(c, intent, enc, grid, Roller(seed=1))
+        # Domain slot stays at 0, regular slot drains.
+        self.assertEqual(c.resources.get("domain_slot_1", 0), 0)
+        self.assertEqual(c.resources.get("spell_slot_1", 0), ss_before - 1)
+
+
 if __name__ == "__main__":
     unittest.main()

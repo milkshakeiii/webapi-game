@@ -4444,7 +4444,19 @@ def _do_cast(
     spell_level = base_spell_level + metamagic_bump
     slot_key = f"spell_slot_{spell_level}"
     remaining = actor.resources.get(slot_key, 0)
-    if remaining <= 0:
+    # Cleric domain bonus slot: if the spell qualifies (cast at base
+    # level, no metamagic bump above base, and spell_id is in this
+    # cleric's domain_spells set for that level), the bonus
+    # ``domain_slot_<L>`` counts as available.
+    domain_slot_remaining = 0
+    if (
+        metamagic_bump == 0
+        and spell_id in (actor.domain_spells.get(base_spell_level) or set())
+    ):
+        domain_slot_remaining = int(
+            actor.resources.get(f"domain_slot_{base_spell_level}", 0),
+        )
+    if remaining <= 0 and domain_slot_remaining <= 0:
         events.append(TurnEvent(actor.id, "skip", {
             "reason": f"no spell slots remaining at level {spell_level}"
                       f" (base {base_spell_level} + {metamagic_bump} metamagic)",
@@ -4514,10 +4526,30 @@ def _do_cast(
         slot nor prep entry is consumed. Spontaneous casters can
         cast known cantrips freely too. So spell_level == 0 is
         a no-op here.
+
+        Cleric bonus domain slot: when the spell being cast is one
+        of the cleric's domain spells at this level AND the
+        ``domain_slot_<L>`` pool has a use available, that slot is
+        consumed in preference to the regular spell_slot_<L>. The
+        prep-entry burn still happens normally (the domain spell is
+        prepped in the bonus slot).
         """
         if base_spell_level == 0:
             return
-        actor.resources[slot_key] = max(0, actor.resources.get(slot_key, 0) - 1)
+        # Prefer the bonus domain slot when applicable.
+        domain_set = actor.domain_spells.get(base_spell_level) or set()
+        domain_slot_key = f"domain_slot_{base_spell_level}"
+        if (
+            spell_id in domain_set
+            and int(actor.resources.get(domain_slot_key, 0)) > 0
+        ):
+            actor.resources[domain_slot_key] = (
+                int(actor.resources[domain_slot_key]) - 1
+            )
+        else:
+            actor.resources[slot_key] = max(
+                0, actor.resources.get(slot_key, 0) - 1,
+            )
         if actor.casting_type == "prepared" and has_any_prep:
             prep_list = actor.prepared_spells.get(base_spell_level, [])
             if spontaneous_cure:
