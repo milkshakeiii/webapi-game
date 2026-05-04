@@ -652,7 +652,9 @@ def _classify_casting_time(ct: str) -> str:
 
     - ``standard``   — single standard action (default)
     - ``swift``      — swift action (1 / round)
-    - ``immediate``  — immediate action (interrupts; not yet wired)
+    - ``immediate``  — immediate action (interrupts; will be wired as a
+      reactive-interrupt decision-point in DSL v2 — see
+      DECISION_POINT_DSL.md)
     - ``free``       — free action (very rare, e.g. some abilities)
     - ``full_round`` — single full-round action
     - ``multi_round``— takes multiple rounds (1 round counts here per

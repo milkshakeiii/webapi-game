@@ -1,5 +1,17 @@
 # Behavior DSL Vocabulary (v1 Draft)
 
+> **Status: being superseded.** This document describes the v1 turn-
+> building DSL. A redesign — the decision-point DSL — is proposed in
+> `DECISION_POINT_DSL.md` and supersedes the execution model here.
+> The expression vocabulary (conditions, target selectors) carries
+> over largely unchanged; what disappears is the `Turn` slot
+> structure and the assumption that the patron commits to a whole
+> turn before any of it resolves. In particular: reactive actions
+> like `ready_action`, immediate actions, AoO selection, and cleave's
+> secondary-target choice — which v1 either deferred or hardcoded —
+> become first-class decision points in v2. Don't extend v1 in ways
+> the migration would have to undo.
+
 This is the constrained dictionary of expressions and actions a behavior
 script can use. The parser ships only what's listed here; nothing else
 parses.

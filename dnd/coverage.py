@@ -261,7 +261,7 @@ CONDITIONS: dict[str, Entry] = {
     "stunned":         (PARTIAL,        "denies Dex (sneak attack qualifies); cleared automatically via stunned_until_round in tick_round. GAPS: (a) the action ban is enforced only by the stunned_until_round rider — externally-applied stunned (no rider) does NOT block actions in validate_turn; (b) RAW says stunned creatures drop everything held — drop-on-stun is not implemented; (c) RAW imposes -2 AC explicitly — not added as a modifier; (d) RAW gives attackers +4 to combat-maneuver checks against a stunned target — not modeled."),
     "unconscious":     (IMPLEMENTED,    "is_unconscious checks the condition; turn validation prevents acts; applying 'unconscious' adds 'helpless' (tracked under 'implied_by_unconscious' source)"),
     "silenced":        (IMPLEMENTED,    "applied by the Silence spell. Read by _do_cast: V-component spells from a silenced caster fail with reason='verbal_component_blocked'"),
-    "bracing":         (IMPLEMENTED,    "set by ready_brace composite for one round; consumed by the brace-attack trigger in _do_charge (×2 damage on the bracing wielder's first hit against the charger)"),
+    "bracing":         (PARTIAL,        "set by ready_brace composite for one round; consumed by the brace-attack trigger in _do_charge (×2 damage on the bracing wielder's first hit against the charger). Trigger fires unconditionally — the bracer has no opt-out. Becomes a reactive-interrupt decision point in DSL v2 (DECISION_POINT_DSL.md): the bracer picks Brace vs. PassBrace when the charge ends adjacent."),
     "diseased":        (IMPLEMENTED,    "Marker condition applied alongside an ongoing-effect entry on the target's ongoing_effects list. tick_round processes each ongoing disease (period 14400 rounds = 1 day at 1 round / 6 seconds) — re-rolls Fort save, applies ability damage on fail, advances cure-counter on save success. Removed automatically after 2 consecutive successful saves (PF1 RAW)."),
 }
 
@@ -275,7 +275,7 @@ CONDITIONS: dict[str, Entry] = {
 FEATS: dict[str, Entry] = {
     "alertness":             (IMPLEMENTED,     "+2 perception/sense_motive"),
     "athletic":              (IMPLEMENTED,     "+2 climb/swim"),
-    "cleave":                (IMPLEMENTED,     "composite action; -2 AC for the round"),
+    "cleave":                (PARTIAL,         "composite action; -2 AC for the round; on-hit the engine auto-picks the first adjacent foe as the secondary target. GAP: RAW lets the cleaver pick which adjacent foe — patron has no input today. Becomes a sub-action decision point in DSL v2 (DECISION_POINT_DSL.md §3.2)."),
     "combat_expertise":      (IMPLEMENTED,     "attack-time tradeoff; 1-round dodge AC"),
     "combat_reflexes":       (IMPLEMENTED,     "AoO limit = 1 + Dex (min 1) when feat present; throttled per-round in _do_aoo via Combatant.aoos_used_this_round"),
     "diehard":               (NOT_IMPLEMENTED, "act normally while dying"),
@@ -425,7 +425,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.full_round_action":      (IMPLEMENTED,    "Turn.full_round forbids standard+move; charge/withdraw/full_attack are full-round"),
     "combat.swift_action":           (IMPLEMENTED,    "Turn.swift slot honored by execute_turn — currently routes quicken-cast through it; smite_evil / rage_start / bardic_performance work via the composite path with the standard action-economy validator gating them. PF1 RAW limit of one swift per turn is enforced structurally (Turn.swift is a single dict slot)"),
     "combat.free_action":            (IMPLEMENTED,    "validation allowlist covers PF1 RAW free actions: drop_item, fall_prone, speak, signal, end_concentration / cease_concentration, drop_held_charge, drop_to_floor, release_grapple, press_attack, speak_briefly, use_extraordinary_ability"),
-    "combat.immediate_action":       (NOT_IMPLEMENTED, "consumes next round's swift; no model"),
+    "combat.immediate_action":       (NOT_IMPLEMENTED, "consumes next round's swift. Unblocked by the decision-point migration (DECISION_POINT_DSL.md): the reactive-interrupt kind is the natural slot for immediate actions — the engine offers them as legal actions during a different actor's turn when the trigger fires. Land in Phase 3 alongside AoO selection."),
     "combat.action_swap_standard_to_move": (NOT_IMPLEMENTED, "RAW: 'Instead of taking a standard action, you may take a move action.' Engine doesn't permit/limit this swap; the slots dispatch passively runs whatever slots are filled."),
 
     # ── Combat: attack rolls & critical hits ────────────────────────────
@@ -458,7 +458,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.higher_ground":          (NOT_IMPLEMENTED, "+1 attack from above"),
 
     # ── Combat: AoOs ────────────────────────────────────────────────────
-    "combat.aoo":                    (PARTIAL,        "1 AoO/round; aoo_triggers_for_movement + _do_aoo. GAP: RAW says a flat-footed creature cannot make AoOs unless it has the Combat Reflexes feat — _can_take_aoo does not check the threatener's flat_footed condition."),
+    "combat.aoo":                    (PARTIAL,        "1 AoO/round; aoo_triggers_for_movement + _do_aoo. GAPS: (a) RAW says a flat-footed creature cannot make AoOs unless it has the Combat Reflexes feat — _can_take_aoo does not check the threatener's flat_footed condition; (b) AoO weapon / target choice is hardcoded (auto-takes with attack_options[0] against the provoker) — patron has no input. The choice gap is unblocked by DSL v2 (DECISION_POINT_DSL.md §3.4): AoO becomes a reactive-interrupt the threatener's picker resolves with TakeAoO / PassAoO."),
     "combat.aoo_extra_combat_reflexes": (IMPLEMENTED,    "_aoo_limit returns 1 + Dex when feat present; per-round counter on Combatant"),
     "combat.aoo_provoking_actions":  (PARTIAL,        "leaving threatened square, stand_up, non-defensive cast, drink_potion, retrieve_stowed_item, ranged attack while threatened — all trigger AoO via aoo_triggers_for_provoking_action. Ranged AoO fires once per ranged action (full-attack triggers once, not per iterative; tail-spike volley triggers once for the whole volley) via _provoke_ranged_aoo helper. Drawing a weapon does NOT provoke per RAW Action Table. GAP: RAW says attacking unarmed (without Improved Unarmed Strike) provokes an AoO from the armed target — unarmed-vs-armed AoO trigger is not wired."),
     "combat.threatened_squares":     (PARTIAL,        "grid.threatened_squares uses (min_d, max_d) range — normal weapon threatens 1..reach; reach weapon (has_reach) shifts to (reach+1, reach+1) — adjacent NOT threatened, +5 ft beyond IS. GAP: RAW says an unarmed creature without Improved Unarmed Strike does not threaten any squares; the engine ignores armed/unarmed status and the IUS feat — unarmed actors still threaten."),
@@ -563,7 +563,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "magic.concentration_continuous_damage": (NOT_IMPLEMENTED, "RAW: ongoing damage during a cast (e.g., bleed, ongoing area effect) requires a concentration check at half the normal injury DC. Not modeled — only damage-from-AoO during a non-defensive cast triggers a concentration check today."),
     "magic.cast_in_progress":        (NOT_IMPLEMENTED, "RAW: a 1-round cast 'completes just before the caster's next turn'; multi-round casts complete after N rounds; broken concentration during the wait loses the spell. The engine resolves casts on the same turn (see magic.casting_time PARTIAL note)."),
     "magic.dispel_magic":            (IMPLEMENTED,    "dispel_magic spell + _handle_dispel_magic: enumerates spell:* sources on target via active_spell_sources, rolls 1d20+CL vs DC 11+CL, on success calls remove_effects_from_source which clears both modifiers and tracked conditions"),
-    "magic.counterspell":            (NOT_IMPLEMENTED, "ready action with same/dispel + CL check — needs readied/triggered-action queue (deferred)"),
+    "magic.counterspell":            (NOT_IMPLEMENTED, "ready action with same spell or dispel_magic + caster-level check. Unblocked by the decision-point migration (DECISION_POINT_DSL.md): readied actions become a scheduled reactive-interrupt that fires when the trigger condition is met during another actor's cast. Land in Phase 3."),
     "magic.metamagic":               (IMPLEMENTED,    "Empower (×1.5 post-process), Maximize (true max-dice via roller take_max), Still (skip somatic), Silent (skip verbal), Extend (duration ×2), Quicken (cast as swift action). Slot cost = base + sum(level adjustments). All five metamagic feats fully wired"),
 
     # ── Magic: spell areas & targeting ──────────────────────────────────
