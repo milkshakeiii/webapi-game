@@ -115,6 +115,55 @@ class TotalDefense(Action):
     """Standard action: +4 dodge AC for one round; cannot attack."""
 
 
+# ── Combat maneuvers ──────────────────────────────────────────────────
+
+
+_MANEUVER_KINDS: frozenset[str] = frozenset({
+    "trip", "disarm", "sunder", "bull_rush", "grapple",
+    "drag", "overrun", "reposition", "steal", "dirty_trick",
+})
+
+
+@dataclass(frozen=True)
+class Maneuver(Action):
+    """One of the 10 PF1 combat maneuvers. ``kind`` is the discriminator;
+    valid values in ``_MANEUVER_KINDS``. Standard action (consumes the
+    standard slot). Provokes AoO from the target unless the actor has
+    the matching ``improved_<kind>`` feat."""
+
+    kind: str
+    target_id: str
+    options: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class GrappleDamage(Action):
+    """Standard action while grappling: deal weapon damage to the
+    grappled foe via CMB vs CMD."""
+
+
+@dataclass(frozen=True)
+class GrappleMove(Action):
+    """Standard action while grappling: move both grappler and grappled
+    up to half speed in a cardinal/intercardinal direction; CMB vs CMD."""
+
+    direction: str
+
+
+@dataclass(frozen=True)
+class GrapplePin(Action):
+    """Standard action while grappling: pin the foe (regular CMB vs
+    CMD); pinned + helpless on success."""
+
+
+@dataclass(frozen=True)
+class GrappleBreakFree(Action):
+    """Standard action while grappled: escape via CMB or Escape Artist
+    vs the grappler's CMB."""
+
+    use_skill: bool = False
+
+
 # ---------------------------------------------------------------------------
 # Per-turn slot accounting and game-state wrapper
 # ---------------------------------------------------------------------------
@@ -263,6 +312,43 @@ def enumerate_legal_actions(
     if not slots.standard_used and not slots.full_round_used:
         actions.append(TotalDefense(actor_id=actor.id))
 
+    # Combat maneuvers ────────────────────────────────────────────────
+    # All 10 maneuvers consume the standard slot. Each requires an
+    # adjacent hostile target; ``grapple`` additionally requires the
+    # actor isn't already grappling someone (RAW: you can't initiate a
+    # second grapple while holding one).
+    if not slots.standard_used and not slots.full_round_used:
+        adj_enemies = [
+            t for t in _attackable_targets(actor, grid)
+            if grid.is_adjacent(actor, t)
+        ]
+        for kind in sorted(_MANEUVER_KINDS):
+            if kind == "grapple" and actor.grappling_target_id is not None:
+                continue
+            for target in adj_enemies:
+                actions.append(Maneuver(
+                    actor_id=actor.id, kind=kind, target_id=target.id,
+                ))
+
+    # Grapple maintenance — usable only when the actor is currently
+    # grappling someone (grappling_target_id set) or being grappled
+    # (grappled_by_id set). All consume the standard slot.
+    if not slots.standard_used and not slots.full_round_used:
+        if actor.grappling_target_id is not None:
+            actions.append(GrappleDamage(actor_id=actor.id))
+            actions.append(GrapplePin(actor_id=actor.id))
+            # GrappleMove: enumerate the eight directions; apply step
+            # walks the actor + grappled foe up to half speed that way.
+            for direction in _viable_withdraw_directions(actor, grid):
+                actions.append(GrappleMove(
+                    actor_id=actor.id, direction=direction,
+                ))
+        if actor.grappled_by_id is not None:
+            actions.append(GrappleBreakFree(actor_id=actor.id))
+            actions.append(GrappleBreakFree(
+                actor_id=actor.id, use_skill=True,
+            ))
+
     return actions
 
 
@@ -378,6 +464,50 @@ def apply_action(
         events.append(TurnEvent(actor.id, "total_defense", {
             "ac_bonus": 4, "expires_round": cur_round + 1,
         }))
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, Maneuver):
+        from .turn_executor import _do_combat_maneuver
+        target = grid.combatants.get(action.target_id)
+        if target is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": f"{action.kind}: target gone"}))
+            return ApplyResult(events=events)
+        args = {"target": target, **action.options}
+        _do_combat_maneuver(
+            actor, action.kind, args, encounter, grid, roller, {}, events,
+        )
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, GrappleDamage):
+        from .turn_executor import _do_grapple_damage
+        _do_grapple_damage(actor, {}, encounter, grid, roller, {}, events)
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, GrappleMove):
+        from .turn_executor import _do_grapple_move
+        _do_grapple_move(
+            actor, {"direction": action.direction},
+            encounter, grid, roller, {}, events,
+        )
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, GrapplePin):
+        from .turn_executor import _do_grapple_pin
+        _do_grapple_pin(actor, {}, encounter, grid, roller, {}, events)
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, GrappleBreakFree):
+        from .turn_executor import _do_grapple_break_free
+        _do_grapple_break_free(
+            actor, {"use_skill": action.use_skill},
+            encounter, grid, roller, {}, events,
+        )
         slots.standard_used = True
         return ApplyResult(events=events)
 
