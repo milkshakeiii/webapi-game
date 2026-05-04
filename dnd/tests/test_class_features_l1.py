@@ -24,7 +24,7 @@ def _make(class_id: str) -> object:
     class_choices: dict = {}
     alignment = "true_neutral"
     if class_id == "fighter":
-        class_choices = {"fighter_bonus_feat": "alertness"}
+        class_choices = {"fighter_bonus_feat": "combat_reflexes"}
     elif class_id == "monk":
         class_choices = {"monk_bonus_feat": "improved_unarmed_strike"}
         alignment = "lawful_neutral"

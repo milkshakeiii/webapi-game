@@ -348,11 +348,24 @@ def validate_feats(
                 )
 
 
+_MONK_L1_BONUS_FEAT_LIST: frozenset[str] = frozenset({
+    "catch_off_guard", "combat_reflexes", "deflect_arrows",
+    "dodge", "improved_grapple", "improved_unarmed_strike",
+    "scorpion_style", "throw_anything",
+})
+
+
 def _extract_class_bonus_feats(
     class_: CharacterClass,
     class_choices: dict,
+    registry: ContentRegistry | None = None,
 ) -> list[str]:
-    """Pull any feats granted at level 1 by class choice."""
+    """Pull any feats granted at level 1 by class choice.
+
+    Per-class feat-pool restrictions are enforced here:
+    - fighter: bonus feat must be type='combat'
+    - monk: bonus feat must come from the monk-L1 list (RAW menu)
+    """
     bonus: list[str] = []
     if class_.id == "fighter":
         feat_id = class_choices.get("fighter_bonus_feat")
@@ -360,12 +373,30 @@ def _extract_class_bonus_feats(
             raise CharacterCreationError(
                 "fighter requires class_choices.fighter_bonus_feat at L1"
             )
+        if registry is not None:
+            try:
+                feat = registry.get_feat(_base_feat_id(feat_id))
+            except Exception as e:
+                raise CharacterCreationError(
+                    f"fighter bonus feat {feat_id!r} not found: {e}"
+                )
+            if (feat.type or "").lower() != "combat":
+                raise CharacterCreationError(
+                    f"fighter bonus feat {feat_id!r} must be type 'combat'; "
+                    f"got {feat.type!r}"
+                )
         bonus.append(feat_id)
     elif class_.id == "monk":
         feat_id = class_choices.get("monk_bonus_feat")
         if not feat_id:
             raise CharacterCreationError(
                 "monk requires class_choices.monk_bonus_feat at L1"
+            )
+        base = _base_feat_id(feat_id)
+        if base not in _MONK_L1_BONUS_FEAT_LIST:
+            raise CharacterCreationError(
+                f"monk L1 bonus feat {feat_id!r} not in the RAW menu "
+                f"(allowed: {sorted(_MONK_L1_BONUS_FEAT_LIST)})"
             )
         bonus.append(feat_id)
     elif class_.id == "wizard":
@@ -633,7 +664,9 @@ def create_character(
 
     # Feats.
     expected_feat_count = required_feat_count_l1(class_, race)
-    class_bonus_feats = _extract_class_bonus_feats(class_, request.class_choices)
+    class_bonus_feats = _extract_class_bonus_feats(
+        class_, request.class_choices, registry,
+    )
     chosen_general_feats = list(request.feats)
     if len(chosen_general_feats) != expected_feat_count:
         raise CharacterCreationError(

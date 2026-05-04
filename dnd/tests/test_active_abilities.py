@@ -190,7 +190,7 @@ class TestPowerAttackAdjustments(unittest.TestCase):
 
     def test_no_feat_no_bonus(self):
         f = _fighter(feats=["weapon_focus", "iron_will"],
-                     class_choices={"fighter_bonus_feat": "alertness"})
+                     class_choices={"fighter_bonus_feat": "combat_reflexes"})
         chosen = f.attack_options[0]
         atk_pen, dmg = _power_attack_adjustments(f, chosen, {"power_attack": 1})
         self.assertEqual((atk_pen, dmg), (0, 0))
@@ -241,7 +241,7 @@ class TestCombatExpertise(unittest.TestCase):
 
     def test_no_feat_no_effect(self):
         f = _fighter(feats=["power_attack", "weapon_focus"],
-                    class_choices={"fighter_bonus_feat": "alertness"})
+                    class_choices={"fighter_bonus_feat": "combat_reflexes"})
         chosen = f.attack_options[0]
         enc, grid = _make_encounter(f, _goblin())
         events = []
@@ -275,7 +275,7 @@ class TestCombatExpertise(unittest.TestCase):
 class TestCleave(unittest.TestCase):
     def test_cleave_requires_feat(self):
         f = _fighter(feats=["power_attack", "weapon_focus"],
-                    class_choices={"fighter_bonus_feat": "alertness"})
+                    class_choices={"fighter_bonus_feat": "combat_reflexes"})
         g = _goblin(pos=(6, 5))
         enc, grid = _make_encounter(f, g)
         events = []

@@ -663,6 +663,9 @@ def _execute_composite(
     if composite == "web":
         _do_web(actor, args, encounter, grid, roller, ns, events)
         return
+    if composite == "detect_evil":
+        _do_detect_evil(actor, args, grid, ns, events)
+        return
     if composite == "aid_another":
         _do_aid_another(actor, args, encounter, grid, roller, ns, events)
         return
@@ -3203,6 +3206,53 @@ def _monster_hd(actor: Combatant) -> int:
         return 1
 
 
+def _do_detect_evil(
+    actor: Combatant,
+    args: dict,
+    grid: Grid,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Paladin Detect Evil (at-will SLA, simplified).
+
+    PF1 RAW: paladin can use detect evil at will, concentrating up
+    to 3 rounds for full information. v1 simplification: pick one
+    target; reveal whether it has an evil alignment + the alignment
+    string. Used by AI to inform smite-evil targeting.
+    """
+    if (actor.template_kind != "character"
+            or getattr(actor.template, "class_id", None) != "paladin"):
+        # Multiclass paladin: walk class_levels too.
+        plan = getattr(actor.template, "level_plan", None) if actor.template else None
+        has_paladin = False
+        if plan and isinstance(plan, dict):
+            for entry in (plan.get("levels") or {}).values():
+                if isinstance(entry, dict) and entry.get("class") == "paladin":
+                    has_paladin = True
+                    break
+        if not has_paladin and (
+            actor.template_kind != "character"
+            or getattr(actor.template, "class_id", None) != "paladin"
+        ):
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "detect_evil: not a paladin"}))
+            return
+    target = _resolve_target(args.get("target"), ns)
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "detect_evil: no target"}))
+        return
+    alignment = ""
+    if target.template is not None:
+        alignment = str(getattr(target.template, "alignment", "") or "")
+    is_evil = "evil" in alignment.lower()
+    events.append(TurnEvent(actor.id, "detect_evil", {
+        "target_id": target.id,
+        "alignment": alignment,
+        "is_evil": is_evil,
+    }))
+
+
 def _do_web(
     actor: Combatant,
     args: dict,
@@ -4174,7 +4224,29 @@ def _do_cast(
     has_any_prep = bool(actor.prepared_spells) and any(
         actor.prepared_spells.values()
     )
-    if actor.casting_type == "prepared" and has_any_prep:
+    # Cleric / druid spontaneous casting: at cast time, the actor can
+    # sacrifice any prepared spell of the same level to cast a cure
+    # (cleric: good-aligned) or summon-nature's-ally (druid) instead.
+    # We support cleric cure-swap via an explicit args.spontaneous_cure
+    # flag — any prep at the same level can be consumed, and the cast
+    # spell must be a cure_X variant.
+    spontaneous_cure = bool(args.get("spontaneous_cure"))
+    if spontaneous_cure:
+        if not _is_cleric_class(actor):
+            events.append(TurnEvent(actor.id, "skip", {
+                "reason": "spontaneous_cure: actor is not a cleric",
+            }))
+            return
+        if not spell_id.startswith("cure_"):
+            events.append(TurnEvent(actor.id, "skip", {
+                "reason": "spontaneous_cure: target spell must be a cure_X",
+            }))
+            return
+    if (
+        actor.casting_type == "prepared"
+        and has_any_prep
+        and not spontaneous_cure
+    ):
         prep_list = actor.prepared_spells.get(base_spell_level, [])
         if spell_id not in prep_list:
             events.append(TurnEvent(actor.id, "skip", {
@@ -4195,7 +4267,13 @@ def _do_cast(
         actor.resources[slot_key] = max(0, actor.resources.get(slot_key, 0) - 1)
         if actor.casting_type == "prepared" and has_any_prep:
             prep_list = actor.prepared_spells.get(base_spell_level, [])
-            if spell_id in prep_list:
+            if spontaneous_cure:
+                # Spontaneous cure: any prep entry at this level burns
+                # in place of the cure spell. Take the first available.
+                if prep_list:
+                    prep_list.pop(0)
+                    actor.prepared_spells[base_spell_level] = prep_list
+            elif spell_id in prep_list:
                 prep_list.remove(spell_id)
                 actor.prepared_spells[base_spell_level] = prep_list
 
@@ -4915,6 +4993,22 @@ _ARCANE_CASTER_CLASSES: frozenset[str] = frozenset({
     "wizard", "sorcerer", "bard", "magus", "summoner", "witch",
     "bloodrager", "skald",
 })
+
+
+def _is_cleric_class(actor: Combatant) -> bool:
+    """True if the actor has any cleric levels (spontaneous cure-swap
+    eligible). Walks the level plan for multiclass clerics."""
+    if actor.template_kind != "character" or actor.template is None:
+        return False
+    char = actor.template
+    if getattr(char, "class_id", None) == "cleric":
+        return True
+    plan = getattr(char, "level_plan", None)
+    if plan and isinstance(plan, dict):
+        for entry in (plan.get("levels") or {}).values():
+            if isinstance(entry, dict) and entry.get("class") == "cleric":
+                return True
+    return False
 
 
 def _is_arcane_caster(actor: Combatant) -> bool:

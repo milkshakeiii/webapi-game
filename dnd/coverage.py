@@ -172,7 +172,7 @@ CLASS_FEATURES_L1: dict[str, Entry] = {
     "aura_cleric":            (OUT_OF_SCOPE,    "tag-only; mostly relevant to Detect Alignment"),
     "channel_energy_1d6":     (IMPLEMENTED,     "channel_energy composite; heal_living/harm_undead modes"),
     "domains":                (NOT_IMPLEMENTED, "domain selection + domain spells/powers"),
-    "spontaneous_casting":    (NOT_IMPLEMENTED, "swap prepared slot for cure spell"),
+    "spontaneous_casting":    (IMPLEMENTED,    "Cleric cure-swap: passing args.spontaneous_cure=True to the 'cast' composite lets the actor cast a cure_X spell at any level for which they have a prepared slot, even without specifically preparing the cure. Burns the first prepared spell at that level in place of the cure. Druid summon-nature's-ally analogue is not yet wired."),
     "orisons":                (NOT_IMPLEMENTED, "0-level spell list"),
 
     # Druid
@@ -182,22 +182,22 @@ CLASS_FEATURES_L1: dict[str, Entry] = {
     "orisons_druid":          (NOT_IMPLEMENTED, "0-level spell list"),
 
     # Fighter
-    "fighter_bonus_combat_feat_1": (IMPLEMENTED, "extra combat feat slot at L1; selected via class_choices"),
+    "fighter_bonus_combat_feat_1": (IMPLEMENTED, "extra combat feat slot at L1; selected via class_choices. Validated to type='combat' in _extract_class_bonus_feats."),
 
     # Monk
     "ac_bonus_monk":          (IMPLEMENTED,    "+Wis to AC + monk_level/4; gated on armor.category != 'medium'/'heavy'. Wired in combatant_from_character"),
     "flurry_of_blows":        (NOT_IMPLEMENTED, "extra unarmed attacks at -2/-2"),
     "stunning_fist_1day":     (IMPLEMENTED,     "stunning_fist composite: declares + attacks; on hit target rolls Fort vs DC 10 + 1/2 level + Wis or stunned 1 round; use consumed regardless of hit"),
     "unarmed_strike":         (NOT_IMPLEMENTED, "improved unarmed strike auto-feat + scaling damage"),
-    "monk_bonus_feat_1":      (IMPLEMENTED,     "extra feat at L1; selected via class_choices"),
+    "monk_bonus_feat_1":      (IMPLEMENTED,     "extra feat at L1; selected via class_choices. Validated against the RAW menu: catch_off_guard / combat_reflexes / deflect_arrows / dodge / improved_grapple / improved_unarmed_strike / scorpion_style / throw_anything (in _extract_class_bonus_feats)."),
 
     # Paladin
     "aura_of_good":           (OUT_OF_SCOPE,    "tag-only"),
-    "detect_evil":            (NOT_IMPLEMENTED, "at-will detect evil"),
+    "detect_evil":            (IMPLEMENTED,    "Composite action 'detect_evil': pick a target, emit detect_evil event with target's alignment + is_evil flag. v1 simplification — RAW concentration rounds for area scan / count are not modeled (v1 has a single-target reveal which suits AI smite-targeting decisions)."),
     "smite_evil_1day":        (IMPLEMENTED,     "smite_evil composite; resource tracked"),
 
     # Ranger
-    "first_favored_enemy":    (NOT_IMPLEMENTED, "+2 attack/damage/skills vs chosen creature type"),
+    "first_favored_enemy":    (IMPLEMENTED,    "Opt-in via class_choices.first_favored_enemy = '<creature_type>'. Qualifier-based +2 attack/damage and +2 Bluff/Knowledge*/Perception/Sense Motive/Survival, all gated on context['target_type'] matching the chosen type. Higher-level scaling (+2 every 5 levels) and additional favored enemies handled in later phases."),
     "track":                  (NOT_IMPLEMENTED, "+1/2 level to Survival for tracking"),
     "wild_empathy_ranger":    (NOT_IMPLEMENTED, "diplomacy-style check vs animals"),
 

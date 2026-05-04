@@ -1881,6 +1881,33 @@ def combatant_from_character(
         # qualifier not enforced).
         coll.add(mod(ranger_levels, "untyped", "skill:diplomacy",
                      "wild_empathy_ranger"))
+        # First Favored Enemy (L1): qualifier-based +2 attack/damage
+        # and +2 Bluff/Knowledge/Perception/Sense Motive/Survival
+        # vs the chosen creature type. Pick is opt-in via
+        # class_choices.first_favored_enemy; absent means the patron
+        # hasn't committed yet and no bonus applies.
+        chosen_type = (character.class_choices or {}).get(
+            "first_favored_enemy",
+        )
+        if chosen_type:
+            fe_qualifier = (("target_type", (str(chosen_type),)),)
+            for tgt in ("attack", "damage"):
+                coll.add(Modifier(
+                    value=2, type="untyped", target=tgt,
+                    source="first_favored_enemy",
+                    qualifier=fe_qualifier,
+                ))
+            for skill in ("bluff", "knowledge_arcana",
+                          "knowledge_dungeoneering",
+                          "knowledge_geography", "knowledge_local",
+                          "knowledge_nature", "knowledge_planes",
+                          "knowledge_religion", "perception",
+                          "sense_motive", "survival"):
+                coll.add(Modifier(
+                    value=2, type="untyped", target=f"skill:{skill}",
+                    source="first_favored_enemy",
+                    qualifier=fe_qualifier,
+                ))
 
     # Druid: Wild Empathy (same idea).
     if druid_levels > 0:

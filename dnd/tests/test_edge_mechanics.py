@@ -79,7 +79,7 @@ class TestArmorProficiencyPenalty(unittest.TestCase):
             "feats": ["dodge", "iron_will"],
             "skill_ranks": {"climb": 1, "swim": 1},
             "bonus_languages": [],
-            "class_choices": {"fighter_bonus_feat": "alertness"},
+            "class_choices": {"fighter_bonus_feat": "combat_reflexes"},
             "equipment": {"weapon": "longsword", "armor": "chainmail",
                           "shield": "heavy_steel_shield"},
         })

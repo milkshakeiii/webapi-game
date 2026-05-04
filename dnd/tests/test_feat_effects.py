@@ -27,7 +27,7 @@ def _request(**overrides):
         "feats": ["power_attack", "weapon_focus"],
         "skill_ranks": {"climb": 1, "swim": 1},
         "bonus_languages": [],
-        "class_choices": {"fighter_bonus_feat": "alertness"},
+        "class_choices": {"fighter_bonus_feat": "combat_reflexes"},
     }
     base.update(overrides)
     return CharacterRequest.from_dict(base)

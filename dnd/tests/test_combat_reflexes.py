@@ -30,7 +30,7 @@ def _fighter(feats, scores=None, free_ability="dex"):
         "feats": feats,
         "skill_ranks": {"climb": 1, "swim": 1},
         "bonus_languages": [],
-        "class_choices": {"fighter_bonus_feat": "alertness"},
+        "class_choices": {"fighter_bonus_feat": "weapon_focus_longsword"},
     })
     char = create_character(req, REGISTRY)
     return combatant_from_character(char, REGISTRY, (5, 5), "x")

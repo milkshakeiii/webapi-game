@@ -38,7 +38,7 @@ def _fighter(team="x", pos=(5, 5)):
         "feats": ["dodge", "iron_will"],
         "skill_ranks": {"climb": 1, "swim": 1},
         "bonus_languages": [],
-        "class_choices": {"fighter_bonus_feat": "alertness"},
+        "class_choices": {"fighter_bonus_feat": "combat_reflexes"},
     })
     char = create_character(req, REGISTRY)
     return combatant_from_character(char, REGISTRY, pos, team)

@@ -118,7 +118,7 @@ class TestEncumbranceAcpStacks(unittest.TestCase):
             "feats": ["dodge", "iron_will"],
             "skill_ranks": {"climb": 1, "swim": 1},
             "bonus_languages": [],
-            "class_choices": {"fighter_bonus_feat": "alertness"},
+            "class_choices": {"fighter_bonus_feat": "combat_reflexes"},
         }
         if equipment is None:
             # Skip equipment to avoid default loadout — keep test clean.
