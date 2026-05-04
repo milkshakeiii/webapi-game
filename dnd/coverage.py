@@ -166,20 +166,20 @@ CLASS_FEATURES_L1: dict[str, Entry] = {
     # Bard
     "bardic_knowledge":      (IMPLEMENTED,    "+1/2 level (min 1) untyped on every Knowledge skill; applied at combatant_from_character"),
     "bardic_performance":    (PARTIAL,         "Inspire Courage implemented; Countersong, Distraction, Fascinate not"),
-    "cantrips_bard":         (NOT_IMPLEMENTED, "0-level spell list"),
+    "cantrips_bard":         (IMPLEMENTED,    "Bard 0-level spells (light, daze, ghost_sound, mage_hand, etc. — combat-relevant subset wired). At-will: _do_cast bypasses both slot consumption and prep-entry burn at base_spell_level=0. Bard is spontaneous, so any cantrip in castable_spells can be cast freely."),
 
     # Cleric
     "aura_cleric":            (OUT_OF_SCOPE,    "tag-only; mostly relevant to Detect Alignment"),
     "channel_energy_1d6":     (IMPLEMENTED,     "channel_energy composite; heal_living/harm_undead modes"),
     "domains":                (NOT_IMPLEMENTED, "domain selection + domain spells/powers"),
     "spontaneous_casting":    (IMPLEMENTED,    "Cleric cure-swap: passing args.spontaneous_cure=True to the 'cast' composite lets the actor cast a cure_X spell at any level for which they have a prepared slot, even without specifically preparing the cure. Burns the first prepared spell at that level in place of the cure. Druid summon-nature's-ally analogue is not yet wired."),
-    "orisons":                (NOT_IMPLEMENTED, "0-level spell list"),
+    "orisons":                (IMPLEMENTED,    "Cleric 0-level spells (stabilize, light, bleed, guidance, resistance, virtue — combat-relevant subset wired). Prepared casters: orisons in prepared_spells[0] are at-will (slot/prep not consumed at base_spell_level=0)."),
 
     # Druid
     "nature_bond":            (NOT_IMPLEMENTED, "animal companion or domain choice"),
     "nature_sense":           (IMPLEMENTED,    "+2 Knowledge (nature) and +2 Survival; applied at combatant_from_character"),
     "wild_empathy_druid":     (PARTIAL,        "Diplomacy +druid_level applied (used vs animals; the 'vs animals' qualifier isn't enforced in v1)"),
-    "orisons_druid":          (NOT_IMPLEMENTED, "0-level spell list"),
+    "orisons_druid":          (IMPLEMENTED,    "Druid 0-level spells (light, stabilize, flare, guidance, resistance, virtue — combat-relevant subset wired). Prepared semantics: at-will, no slot/prep consumption."),
 
     # Fighter
     "fighter_bonus_combat_feat_1": (IMPLEMENTED, "extra combat feat slot at L1; selected via class_choices. Validated to type='combat' in _extract_class_bonus_feats."),
@@ -208,13 +208,13 @@ CLASS_FEATURES_L1: dict[str, Entry] = {
     # Sorcerer
     "bloodline":              (NOT_IMPLEMENTED, "bloodline selection + powers + bonus spells"),
     "eschew_materials":       (IMPLEMENTED,     "passive feat (no material components for cheap spells)"),
-    "cantrips_sorcerer":      (NOT_IMPLEMENTED, "0-level at-will spells"),
+    "cantrips_sorcerer":      (IMPLEMENTED,    "Sorcerer 0-level spells (acid_splash, ray_of_frost, daze, light, disrupt_undead, flare, touch_of_fatigue, bleed, resistance — combat-relevant subset wired). Spontaneous: any cantrip in castable_spells is at-will (no slot consumption at level 0)."),
 
     # Wizard
     "arcane_school":          (NOT_IMPLEMENTED, "school specialization + bonus slots + powers"),
     "arcane_bond":             (NOT_IMPLEMENTED, "bonded item or familiar"),
     "scribe_scroll":           (NOT_IMPLEMENTED, "item creation feat — crafting deferred to Phase 4"),
-    "cantrips_wizard":         (NOT_IMPLEMENTED, "0-level prepared spells"),
+    "cantrips_wizard":         (IMPLEMENTED,    "Wizard 0-level spells (acid_splash, ray_of_frost, daze, light, disrupt_undead, flare, touch_of_fatigue, bleed, resistance — combat-relevant subset wired). Prepared casters keep cantrips in prepared_spells[0] for at-will casting; slot/prep not consumed at level 0."),
 }
 
 
@@ -396,6 +396,7 @@ SPELL_EFFECT_KINDS: dict[str, Entry] = {
     "scaling_damage":        (IMPLEMENTED, "AoE damage scaling with caster level (e.g., fireball)"),
     "stabilize":             (IMPLEMENTED, "stop dying HP loss"),
     "utility":               (IMPLEMENTED, "no mechanical effect; flavor / GM-call"),
+    "apply_bleed":           (IMPLEMENTED, "Bleed cantrip: target with HP <= 0 makes a Will save or starts bleeding for amount HP/round (Combatant.apply_bleed)"),
 }
 
 

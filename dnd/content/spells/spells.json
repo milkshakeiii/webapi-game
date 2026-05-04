@@ -1467,5 +1467,185 @@
       "area": {"shape": "burst", "size_ft": 30}
     },
     "summary": "1d6 electricity/level (max 20d6) primary; secondary chains at half damage."
+  },
+  {
+    "id": "ray_of_frost",
+    "name": "Ray of Frost",
+    "school": "evocation",
+    "descriptors": ["cold"],
+    "level_by_class": {"sorcerer": 0, "wizard": 0, "witch": 0, "magus": 0},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_creature",
+    "duration": "instantaneous",
+    "saving_throw": "none",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "scaling_damage",
+      "dice": "1d3",
+      "damage_type": "cold",
+      "scaling": "fixed",
+      "no_save": true,
+      "ranged_touch_attack": true
+    },
+    "summary": "Ranged touch attack: 1d3 cold damage."
+  },
+  {
+    "id": "disrupt_undead",
+    "name": "Disrupt Undead",
+    "school": "necromancy",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 0, "wizard": 0, "magus": 0},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_undead",
+    "duration": "instantaneous",
+    "saving_throw": "none",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "scaling_damage",
+      "dice": "1d6",
+      "damage_type": "positive",
+      "scaling": "fixed",
+      "no_save": true,
+      "ranged_touch_attack": true,
+      "target_type_required": "undead"
+    },
+    "summary": "Ranged touch attack vs undead: 1d6 positive energy."
+  },
+  {
+    "id": "flare",
+    "name": "Flare",
+    "school": "evocation",
+    "descriptors": ["light"],
+    "level_by_class": {"druid": 0, "sorcerer": 0, "wizard": 0, "bard": 0, "magus": 0},
+    "components": ["V"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_creature",
+    "duration": "1_minute",
+    "saving_throw": "fortitude_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "dazzled",
+      "save": "fort",
+      "duration_rounds_per_caster_level": 0,
+      "fixed_duration_rounds": 10
+    },
+    "summary": "Burst of light. Fort save or dazzled for 1 minute."
+  },
+  {
+    "id": "touch_of_fatigue",
+    "name": "Touch of Fatigue",
+    "school": "necromancy",
+    "descriptors": [],
+    "level_by_class": {"sorcerer": 0, "wizard": 0, "witch": 0, "magus": 0},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "creature_touched",
+    "duration": "1_round_per_caster_level",
+    "saving_throw": "fortitude_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_condition_save",
+      "condition": "fatigued",
+      "save": "fort",
+      "duration_rounds_per_caster_level": 1,
+      "melee_touch_attack": true
+    },
+    "summary": "Melee touch. Fort save or fatigued for 1 round/level."
+  },
+  {
+    "id": "bleed",
+    "name": "Bleed",
+    "school": "necromancy",
+    "descriptors": [],
+    "level_by_class": {"cleric": 0, "druid": 0, "sorcerer": 0, "wizard": 0, "witch": 0, "magus": 0, "bard": 0},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "close",
+    "target": "one_creature_below_zero_hp",
+    "duration": "instantaneous",
+    "saving_throw": "will_negates",
+    "spell_resistance": "yes",
+    "effect": {
+      "kind": "apply_bleed",
+      "amount": 1,
+      "save": "will",
+      "requires_below_zero_hp": true
+    },
+    "summary": "Cause a stable dying creature to start bleeding 1 HP/round again."
+  },
+  {
+    "id": "resistance",
+    "name": "Resistance",
+    "school": "abjuration",
+    "descriptors": [],
+    "level_by_class": {"cleric": 0, "druid": 0, "sorcerer": 0, "wizard": 0, "bard": 0, "paladin": 1, "witch": 0, "magus": 0},
+    "components": ["V", "S", "M"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "creature_touched",
+    "duration": "1_minute",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 1, "modifier_type": "resistance", "target": "fort_save"},
+        {"value": 1, "modifier_type": "resistance", "target": "ref_save"},
+        {"value": 1, "modifier_type": "resistance", "target": "will_save"}
+      ],
+      "fixed_duration_rounds": 10
+    },
+    "summary": "+1 resistance to all saves for 1 minute."
+  },
+  {
+    "id": "virtue",
+    "name": "Virtue",
+    "school": "transmutation",
+    "descriptors": [],
+    "level_by_class": {"cleric": 0, "druid": 0, "paladin": 1},
+    "components": ["V", "S", "M_DF"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "creature_touched",
+    "duration": "1_minute",
+    "saving_throw": "fortitude_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 1, "modifier_type": "untyped", "target": "hp_max"}
+      ],
+      "fixed_duration_rounds": 10
+    },
+    "summary": "+1 temporary HP for 1 minute."
+  },
+  {
+    "id": "guidance",
+    "name": "Guidance",
+    "school": "divination",
+    "descriptors": [],
+    "level_by_class": {"cleric": 0, "druid": 0},
+    "components": ["V", "S"],
+    "casting_time": "standard",
+    "range": "touch",
+    "target": "creature_touched",
+    "duration": "1_minute_or_until_discharged",
+    "saving_throw": "will_negates_harmless",
+    "spell_resistance": "yes_harmless",
+    "effect": {
+      "kind": "buff_target",
+      "modifiers": [
+        {"value": 1, "modifier_type": "competence", "target": "attack"}
+      ],
+      "fixed_duration_rounds": 10
+    },
+    "summary": "+1 competence on next attack/save/skill (v1: simplified to +1 attack for 1 minute)."
   }
 ]

@@ -898,6 +898,41 @@ def _handle_color_spray(
         )
 
 
+def _handle_apply_bleed(
+    caster: Combatant, spell: Spell, target: Combatant, dc: int,
+    cl: int, registry: ContentRegistry, roller: Roller, out: SpellOutcome,
+    current_round: int = 1,
+) -> None:
+    """Apply ongoing bleed damage (Bleed cantrip: 1 HP/round on a
+    target with HP <= 0). Will save negates."""
+    eff = spell.effect
+    requires_below_zero = bool(eff.get("requires_below_zero_hp"))
+    if requires_below_zero and target.current_hp > 0:
+        out.log.append(
+            f"  {target.name} is not below 0 HP; bleed has no effect"
+        )
+        return
+    save_kind, semantic = parse_saving_throw(spell.saving_throw)
+    if save_kind:
+        passed, nat, total = roll_save(
+            target, save_kind, dc, roller,
+            context=_spell_save_context(spell),
+        )
+        out.log.append(
+            f"  {target.name} {save_kind} save: d20={nat}+"
+            f"{target.save(save_kind)}={total} vs DC {dc} → "
+            f"{'PASS' if passed else 'FAIL'}"
+        )
+        if passed and semantic in ("negates", "harmless_negates"):
+            return
+    amount = int(eff.get("amount", 1))
+    target.apply_bleed(amount)
+    out.targets_affected.append(target.id)
+    out.log.append(
+        f"  {target.name} starts bleeding ({amount} HP/round)"
+    )
+
+
 _EFFECT_HANDLERS: dict[str, Any] = {
     "heal":                  _handle_heal,
     "magic_missile":         _handle_magic_missile,
@@ -910,4 +945,5 @@ _EFFECT_HANDLERS: dict[str, Any] = {
     "utility":               _handle_utility,
     "dispel_magic":          _handle_dispel_magic,
     "color_spray":           _handle_color_spray,
+    "apply_bleed":           _handle_apply_bleed,
 }

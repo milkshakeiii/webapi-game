@@ -4263,7 +4263,16 @@ def _do_cast(
         prepared_spells. Called once per cast-attempt that gets past
         the prepared-spell check, even if the cast subsequently
         fails (RAW: ASF / concentration failure still consumes the
-        slot AND the prep)."""
+        slot AND the prep).
+
+        Cantrips/orisons (level-0 spells) are at-will per RAW —
+        prepared casters keep them in prepared_spells but neither
+        slot nor prep entry is consumed. Spontaneous casters can
+        cast known cantrips freely too. So spell_level == 0 is
+        a no-op here.
+        """
+        if base_spell_level == 0:
+            return
         actor.resources[slot_key] = max(0, actor.resources.get(slot_key, 0) - 1)
         if actor.casting_type == "prepared" and has_any_prep:
             prep_list = actor.prepared_spells.get(base_spell_level, [])
