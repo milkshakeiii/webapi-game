@@ -68,6 +68,55 @@ class TurnResult:
 # ---------------------------------------------------------------------------
 
 
+def _intent_to_turn(do: dict):
+    """Convert a DSL ``do`` dict into a ``Turn`` for action-economy
+    validation.
+
+    The DSL emits ``do`` in three shapes:
+      1. ``{"composite": "<name>", "args": {...}}``
+      2. ``{"slots": {"standard": ..., "move": ..., ...}}``
+      3. inline slot keys: ``{"standard": ..., "move": ..., ...}``
+
+    Composites map to a Turn slot via ``_FULL_ROUND_COMPOSITES`` /
+    ``_FREE_COMPOSITES``; everything else is treated as a standard
+    action. Free actions and swift actions pass through directly.
+    """
+    from .encounter import Turn
+
+    if "composite" in do:
+        name = do["composite"]
+        args = do.get("args") or {}
+        composite_dict = {"composite": name, **args}
+        if name in _FULL_ROUND_COMPOSITES:
+            return Turn(full_round=composite_dict,
+                        free=tuple(do.get("free") or ()),
+                        swift=do.get("swift"))
+        if name in _FREE_COMPOSITES:
+            # Free composites (rage_start, rage_end) don't consume the
+            # action economy. We don't synthesize a free-action entry
+            # for them because the validator's LEGAL_FREE_ACTIONS set
+            # only covers true RAW free actions like fall_prone /
+            # drop_item; composites use a different vocabulary.
+            return Turn(free=tuple(do.get("free") or ()),
+                        swift=do.get("swift"))
+        # Default: standard action.
+        return Turn(standard=composite_dict,
+                    move=do.get("move"),
+                    five_foot_step=do.get("five_foot_step"),
+                    free=tuple(do.get("free") or ()),
+                    swift=do.get("swift"))
+
+    slots = do.get("slots") or do
+    return Turn(
+        full_round=slots.get("full_round"),
+        standard=slots.get("standard"),
+        move=slots.get("move"),
+        swift=slots.get("swift") or do.get("swift"),
+        five_foot_step=slots.get("five_foot_step"),
+        free=tuple(slots.get("free") or do.get("free") or ()),
+    )
+
+
 def execute_turn(
     actor: Combatant,
     intent: TurnIntent | None,
@@ -84,6 +133,22 @@ def execute_turn(
                                 {"reason": "no rule matched" if intent is None else "hold"}))
         # Aura/end-of-turn riders still fire on a held turn — exposure
         # to a stench/gaze isn't avoided by holding action.
+        _apply_end_of_turn_racial_effects(actor, grid, roller, events,
+                                          encounter=encounter)
+        return TurnResult(actor.id, rule_index, events)
+
+    # Validate the action economy before dispatching. An invalid combo
+    # (e.g., a slots dict with both ``move`` and a 5-ft step, or a
+    # full-round composite plus a standard slot) skips with a clear
+    # reason instead of silently running an illegal turn.
+    from .encounter import validate_turn, TurnValidationError
+    try:
+        validate_turn(_intent_to_turn(intent.do), actor, grid)
+    except TurnValidationError as exc:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "invalid_turn",
+            "detail": str(exc),
+        }))
         _apply_end_of_turn_racial_effects(actor, grid, roller, events,
                                           encounter=encounter)
         return TurnResult(actor.id, rule_index, events)
@@ -562,6 +627,30 @@ def _turn_used_standard_action(events: list[TurnEvent]) -> bool:
         if e.kind in _STANDARD_ACTION_EVENT_KINDS:
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Composite categorization (used by the Turn-validation path)
+# ---------------------------------------------------------------------------
+
+
+# Composites that occupy the full-round slot (block both standard and
+# move). The ``hold`` composite is a no-op and bypasses validation
+# entirely (handled inline in execute_turn).
+_FULL_ROUND_COMPOSITES = frozenset({
+    "charge", "full_attack", "withdraw", "run", "partial_charge",
+    "trample", "coup_de_grace", "tail_spike_volley",
+})
+
+# Composites that are free actions per RAW (don't consume the action
+# economy). Rage start/end is free.
+_FREE_COMPOSITES = frozenset({
+    "rage_start", "rage_end",
+})
+
+# Everything else routed through ``_execute_composite`` is treated as a
+# standard action for validation purposes (cast, ready_brace, smite,
+# channel, web, combat maneuvers, etc.).
 
 
 # ---------------------------------------------------------------------------

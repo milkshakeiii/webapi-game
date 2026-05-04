@@ -420,7 +420,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     # ── Combat: turn structure & action economy ──────────────────────────
     "combat.initiative":             (IMPLEMENTED,    "d20 + Dex; encounter.roll_initiative"),
     "combat.surprise_round":         (NOT_IMPLEMENTED, "no surprise mechanic; all combatants act from round 1"),
-    "combat.action_types":           (IMPLEMENTED,    "Turn slots cover standard/move/swift/free/full_round/5ft_step"),
+    "combat.action_types":           (IMPLEMENTED,    "Turn slots cover standard/move/swift/free/full_round/5ft_step. execute_turn invokes validate_turn before dispatch via _intent_to_turn (composite → Turn slot mapping); illegal combinations skip with reason='invalid_turn'"),
     "combat.5_foot_step":            (IMPLEMENTED,    "validate_turn enforces exclusivity; one square only"),
     "combat.full_round_action":      (IMPLEMENTED,    "Turn.full_round forbids standard+move; charge/withdraw/full_attack are full-round"),
     "combat.swift_action":           (IMPLEMENTED,    "Turn.swift slot honored by execute_turn — currently routes quicken-cast through it; smite_evil / rage_start / bardic_performance work via the composite path with the standard action-economy validator gating them. PF1 RAW limit of one swift per turn is enforced structurally (Turn.swift is a single dict slot)"),
