@@ -35,6 +35,37 @@ deleting in the next cleanup pass.
 
 ---
 
+## DSL v2 migration (2026-05-04 — proposal stage)
+
+Decision-point execution model replacing the turn-building DSL.
+Design lives in `DECISION_POINT_DSL.md`; this is the rolled-up
+phase tracker.
+
+- **Phase 1** — substrate (`enumerate_legal_actions`, `apply_action`,
+  `Action` hierarchy). New tests in isolation. Existing executor
+  untouched. Parity harness verifies the substrate covers every
+  state the existing engine reaches. Estimate: 2-3 days.
+- **Phase 2** — `execute_turn` rewritten as the driver loop. Old
+  composites become thin wrappers over `apply_action`. Reactive
+  logic still hardcoded but routed through interrupt decision-points
+  internally. All existing tests pass. Estimate: 2 days.
+- **Phase 3** — reactive abilities (brace, cleave, AoO selection,
+  confused) surface as decision-points patrons can override.
+  Default pickers preserve v1 behavior so untouched scripts don't
+  change. Estimate: 2 days.
+- **Phase 4** — `react:` and `sub:` DSL syntax for decision-point-
+  aware patron scripts. v2 vocabulary doc supersedes
+  `BEHAVIOR_VOCABULARY.md`. Estimate: 1-2 days.
+- **Phase 5** — delete `Turn`, `validate_turn`, `_intent_to_turn`,
+  the slot dispatch, the old `_execute_composite` / `_execute_slots`.
+  One execution model in the codebase. Estimate: half a day.
+
+Open design questions in §7 of the doc need answers as each phase
+begins (random-outcome reactives, continuous-tick interaction, ready
+actions, determinism of multi-AoO ordering, etc.).
+
+---
+
 ## Audit follow-ups (2026-05-04)
 
 Five-slice audit against the d20pfsrd dumps in `dnd/checklist/rules/`
