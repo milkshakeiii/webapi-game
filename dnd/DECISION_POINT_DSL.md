@@ -159,35 +159,62 @@ mechanic. It's deliberately verbose: a `MoveTo(square=X)` plus an
 with movement". Composition emerges from picking a sequence; the
 engine doesn't know about "turn shapes".
 
-### 2.4 Decision-point taxonomy
+### 2.4 Decision-point taxonomy (engine-internal)
 
-Every point at which `next_decision_owner` returns is a
-**decision-point**. There are five kinds:
+The engine classifies decision-points into five kinds for routing
+and scheduling. **The taxonomy is engine-internal — pickers don't
+see it.** Pickers receive a list of legal Actions; the kind is
+encoded implicitly in *what's in the list* (an interrupt offers
+`TakeAoO / PassAoO`; a sub-action offers `CleaveTo / EndFullAttack`;
+an active turn offers the full vocabulary). See §4.1 on why.
 
-1. **Active** — it's the actor's normal turn-step; they pick from
-   their full legal list (move/standard/swift/free/end_turn).
-2. **Forced-substituted** — confusion d% rerolls into a substituted
-   list (act normally / babble / self-attack / attack nearest); the
-   actor still picks, but from the substituted list. Same with a
-   panicked actor whose legal list excludes offense.
-3. **Sub-action choice** — within an iterative full-attack chain,
-   between iteratives, the actor decides whether to continue or stop.
-   Within a charge, after the standard attack, a pouncer chooses the
-   next natural attack target.
-4. **Reactive interrupt** — another actor's action triggered an AoO /
-   brace / cleave continuation that this actor owns. The active
-   actor's loop pauses; the interrupting actor's picker fires; then
-   control returns. The interrupted action's resolution may or may
-   not continue depending on the interrupt's outcome (an AoO that
-   kills the caster aborts the cast).
-5. **End-of-turn** — auras, ongoing-effect ticks, and aura-cooldown
-   resets fire automatically here; no picker needed. The next actor
-   in initiative becomes the decision owner.
+The five kinds:
 
-The DSL is dispatched per kind: a picker can register different rules
-for `active` vs `interrupt` decisions, since the natural answers
-differ. (Most patrons want "always take the AoO unless I'm low HP";
-that's a default the sugar layer applies.)
+1. **Active** — it's the actor's normal turn-step; the legal list
+   covers their full action vocabulary (move/standard/swift/free/
+   end_turn).
+2. **Forced-substituted** — a condition substitutes the legal list.
+   Confusion d% rerolls into one of {act normally, babble,
+   self-attack, attack nearest} as the legal set. Panicked excludes
+   offensive actions. Cowering legal list = {EndTurn} only.
+3. **Sub-action** — a multi-step action surfaces an intermediate
+   choice. Between iteratives in a full attack, the actor picks
+   `ContinueIterative / RetargetIterative / EndFullAttack`. After
+   a charge attack, a pouncer picks the next natural-attack target.
+   On a successful cleave, the cleaver picks the secondary target.
+4. **Reactive interrupt** — another actor's action triggered a
+   reaction this actor owns: AoO, brace vs. charge, readied-action
+   trigger, immediate-action interrupt. The active actor's loop
+   pauses; the interrupter's picker fires; then control returns.
+   The interrupted action's resolution may or may not continue
+   depending on the interrupt's outcome (an AoO that kills the
+   caster aborts the cast).
+5. **End-of-turn** — auras, ongoing-effect ticks (poison, bleed,
+   regen), and aura-cooldown resets fire automatically; no picker
+   call. The next actor in initiative becomes the decision owner.
+
+This taxonomy is **not** an established Pathfinder framework. PF1
+RAW describes individual rules (action types, the confusion table,
+AoO triggers, cleave-on-hit) without a unifying schema. The five
+kinds are a synthesis: PF1's natural mechanic clusters mapped onto
+sequential-game-theory decision nodes (the same shape a chess
+engine, MTG priority system, or MCTS framework uses). Rough mapping
+to RAW:
+
+| Kind | RAW source material |
+|---|---|
+| active | Action types chapter (PHB Ch. 8). |
+| forced-substituted | Confusion d% table; panicked offensive ban; cowering "no actions"; nauseated "move only". |
+| sub-action | Cleave's "if hit" clause; full-attack iteratives; pounce's natural-attack chain. |
+| reactive interrupt | AoO triggers; brace vs. charge; readied actions; immediate actions; counterspell. |
+| end-of-turn | Ongoing-effect ticks; aura cooldown resets. |
+
+Edge cases the taxonomy will probably need to refine as we hit them:
+casting defensively (parameter on Cast vs. its own sub-action point);
+ready-action declaration vs. fire (active vs. interrupt — currently
+treated as one of each); readied-counterspell with Spellcraft-to-
+identify (a sub-action chain inside an interrupt). Refine the
+schema before any phase that depends on a fix.
 
 ### 2.5 Action enumeration: templates vs. enumerations
 
@@ -370,18 +397,37 @@ class Picker:
         actor: Combatant,
         state: GameState,
         actions: list[Action | ActionTemplate],
-        ctx: DecisionContext,
     ) -> Action:
         """Select one Action from ``actions``.
 
-        ``ctx.kind`` is one of "active" / "forced_substituted" /
-        "sub_action" / "interrupt"; pickers may dispatch on it.
+        ``state`` is read-only — pickers don't mutate.
 
-        ``state`` is read-only — pickers don't mutate."""
+        Pickers are *kind-blind*: the engine's decision-point kind
+        (§2.4) is not exposed. The kind is implicit in the legal-
+        actions list — an AoO opportunity surfaces as TakeAoO /
+        PassAoO entries; a cleave continuation surfaces as CleaveTo;
+        a confused-actor decision surfaces as the substituted four
+        choices. A picker that wants kind-shaped logic pattern-matches
+        on action shape (e.g., 'if any TakeAoO in actions then ...')."""
 ```
 
 The default monster AI is a `Picker` subclass. Patron-authored DSL
 scripts compile to a `Picker`. An RL agent's policy is a `Picker`.
+
+Why kind-blind:
+
+- **Smaller surface.** No ``DecisionContext`` to spec, version, or
+  document. Three arguments instead of four.
+- **The actions encode the context.** Anything the picker would want
+  from the kind is already in the action shape (an AoO has a
+  ``provoker_id``; a cleave has a ``primary_target_id``; a
+  confused-actor's choices have their own labels).
+- **Future-proof.** Adding a new decision-point kind doesn't break
+  existing pickers; they just see new Action subclasses they can
+  ignore (or pattern-match on if they care).
+- **The DSL keywords compile to action-shape matches.** ``react: aoo``
+  in §4.3 is sugar for "fire when TakeAoO is in legal_actions" — not
+  for "check ctx.kind".
 
 ### 4.2 Compiled-from-rules sugar
 
