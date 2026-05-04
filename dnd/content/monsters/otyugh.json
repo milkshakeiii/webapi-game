@@ -1,0 +1,36 @@
+{
+  "id": "otyugh",
+  "name": "Otyugh",
+  "summary": "Three-tentacled refuse-eater that lurks in dungeons and middens. Bites carry filth fever.",
+  "cr": "4",
+  "xp": 1200,
+  "race": "otyugh",
+  "alignment": "neutral",
+  "size": "large",
+  "type": "aberration",
+  "subtypes": [],
+  "ability_scores": {"str": 17, "dex": 11, "con": 17, "int": 5, "wis": 12, "cha": 6},
+  "hit_dice": "5d8+15",
+  "hp": 37,
+  "init": 0,
+  "senses": ["darkvision_60", "scent"],
+  "speed": 20,
+  "ac": {"total": 17, "touch": 9, "flat_footed": 17, "natural": 8, "size": -1},
+  "saves": {"fort": 7, "ref": 1, "will": 5},
+  "bab": 3,
+  "cmb": 7,
+  "cmd": 17,
+  "attacks": [
+    {"type": "melee", "name": "tentacle", "attack_bonus": 7, "damage": "1d8+4", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2, "is_natural": true},
+    {"type": "melee", "name": "tentacle_off", "attack_bonus": 7, "damage": "1d8+4", "damage_type": "B", "crit_range": [20, 20], "crit_multiplier": 2, "is_natural": true},
+    {"type": "melee", "name": "bite", "attack_bonus": 7, "damage": "1d6+4", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2, "is_natural": true}
+  ],
+  "feats": ["alertness", "weapon_focus_tentacle"],
+  "skills": {"perception": 11, "stealth": 4},
+  "languages": ["common"],
+  "racial_traits": [
+    {"id": "filth_fever", "name": "Filth Fever (Disease)", "summary": "Bite — Fort DC 14 — onset 1d3 days, frequency 1/day, 1d3 Dex + 1d3 Con damage, cure 2 consecutive saves."},
+    {"id": "grab", "name": "Grab", "summary": "On a tentacle hit, free CMB attempt to grapple."}
+  ],
+  "equipment": []
+}

@@ -1,0 +1,33 @@
+{
+  "id": "viper",
+  "name": "Viper",
+  "summary": "Small venomous snake. Quick Reflexes, weak bite, dangerous Con-damaging poison.",
+  "cr": "1/2",
+  "xp": 200,
+  "race": "viper",
+  "alignment": "neutral",
+  "size": "small",
+  "type": "animal",
+  "subtypes": [],
+  "ability_scores": {"str": 4, "dex": 17, "con": 8, "int": 1, "wis": 13, "cha": 2},
+  "hit_dice": "1d8",
+  "hp": 4,
+  "init": 3,
+  "senses": ["low_light_vision", "scent"],
+  "speed": 20,
+  "ac": {"total": 17, "touch": 14, "flat_footed": 14, "natural": 2, "size": 1, "dex": 3},
+  "saves": {"fort": 0, "ref": 6, "will": 1},
+  "bab": 0,
+  "cmb": -3,
+  "cmd": 10,
+  "attacks": [
+    {"type": "melee", "name": "bite", "attack_bonus": 5, "damage": "1d3-2", "damage_type": "P", "crit_range": [20, 20], "crit_multiplier": 2, "is_natural": true}
+  ],
+  "feats": ["weapon_finesse"],
+  "skills": {"acrobatics": 7, "perception": 5, "stealth": 11, "swim": 7},
+  "languages": [],
+  "racial_traits": [
+    {"id": "poison_viper", "name": "Poison (bite)", "summary": "Fort DC 9 (Con-based) or 1d2 Con damage; cure 1 save."}
+  ],
+  "equipment": []
+}

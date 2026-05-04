@@ -2471,15 +2471,19 @@ def _do_attack(
         paralysis_event = _resolve_paralysis_rider(
             actor, target, roller,
         )
-    # Ghoul fever: bite-on-hit secondary disease (Fort save). The daily
-    # 1d3 Con + 1d3 Dex damage cycle isn't simulated (no long-rest tick
-    # in v1); the encounter-time effect is just the marker "diseased".
+    # Disease on bite (ghoul fever, filth fever, etc.): the entry
+    # Fort save fires; failure queues an ongoing-effect ticker that
+    # re-rolls per the disease's period (typically 1 day = 14400
+    # rounds at 1-round-per-6-seconds).
     disease_event: dict | None = None
-    if (
-        outcome.hit and not is_ranged
-        and _has_racial_trait(actor, "diseased_bite")
-    ):
-        disease_event = _resolve_disease_rider(actor, target, roller)
+    if outcome.hit and not is_ranged:
+        disease_match = _matching_disease_trait(actor)
+        if disease_match is not None:
+            d_trait_id, d_data = disease_match
+            disease_event = _resolve_disease_rider(
+                actor, target, roller, d_trait_id, d_data,
+                encounter=encounter,
+            )
     # Grab: free grapple attempt after a successful natural-weapon hit
     # (owlbear, stirge, etc.). Stirge's blood_drain auto-grabs without
     # an opposed roll; other grabbers do an opposed CMB.
@@ -2492,13 +2496,18 @@ def _do_attack(
         )
     ):
         grab_event = _resolve_grab_rider(actor, target, roller)
-    # Giant spider poison: bite-on-hit Fort save vs Str damage.
+    # Poison on bite (giant spider, viper, etc.): entry Fort save
+    # fires; failure queues an ongoing poison ticker per the trait's
+    # cadence.
     poison_event: dict | None = None
-    if (
-        outcome.hit and not is_ranged
-        and _has_racial_trait(actor, "poison_giant_spider")
-    ):
-        poison_event = _resolve_giant_spider_poison(actor, target, roller)
+    if outcome.hit and not is_ranged:
+        poison_match = _matching_poison_trait(actor)
+        if poison_match is not None:
+            p_trait_id, p_data = poison_match
+            poison_event = _resolve_poison_rider(
+                actor, target, roller, p_trait_id, p_data,
+                encounter=encounter,
+            )
     events.append(TurnEvent(actor.id, label, {
         "target_id": target.id,
         "weapon": profile.name,
@@ -3210,53 +3219,136 @@ def _resolve_grab_rider(
 
 def _resolve_disease_rider(
     attacker: Combatant, target: Combatant, roller: Roller,
+    trait_id: str, data: dict, *, encounter=None,
 ) -> dict:
-    """Generic disease-on-bite save rider (ghoul fever, etc.).
-
-    Applies a short-term ``diseased`` marker on save failure. The
-    daily ability-damage cycle (1d3 Con + 1d3 Dex per RAW for ghoul
-    fever) isn't simulated yet — it requires a long-rest hook the
-    engine doesn't have. Marked accordingly in coverage.
+    """Generic disease-on-bite rider. The bite-Fort save is the entry
+    check. Failure: applies the ``diseased`` marker AND queues an
+    ongoing ticker that re-rolls every ``period_rounds`` (default
+    14400 = 1 day). PF1 RAW: 2 consecutive successful saves cure.
+    Undead / constructs / oozes / plants are disease-immune.
     """
+    if target.is_immune_to_disease():
+        return {"target_id": target.id, "immune": True, "trait": trait_id}
     from .spells import roll_save
     hd = _monster_hd(attacker)
-    cha_mod = _ability_modifier(attacker, "cha")
-    dc = 10 + hd // 2 + cha_mod
-    passed, nat, total = roll_save(target, "fort", dc, roller)
-    if not passed:
-        target.add_condition("diseased")
-    return {
-        "target_id": target.id, "dc": dc,
-        "save_natural": nat, "save_total": total,
-        "passed": passed,
-    }
-
-
-def _resolve_giant_spider_poison(
-    attacker: Combatant, target: Combatant, roller: Roller,
-) -> dict:
-    """Giant-spider bite poison: Fort save or 1d2 Str damage.
-
-    PF1 RAW: DC 14 (small spider) or 17 (large) Fort save; failure
-    deals 1d2 Str damage per round for 4 rounds. v1 simplifies to a
-    single 1d2 Str damage hit on save fail; the recurring rounds and
-    multi-save cure aren't yet modeled.
-    """
-    from .spells import roll_save
-    hd = _monster_hd(attacker)
-    con_mod = _ability_modifier(attacker, "con")
-    dc = 10 + hd // 2 + con_mod
+    save_ability = data.get("save_ability", "cha")
+    dc = 10 + hd // 2 + _ability_modifier(attacker, save_ability)
     passed, nat, total = roll_save(target, "fort", dc, roller)
     detail: dict = {
+        "trait": trait_id,
         "target_id": target.id, "dc": dc,
         "save_natural": nat, "save_total": total,
         "passed": passed,
     }
     if not passed:
-        dmg_roll = roller.roll("1d2")
-        amount = int(dmg_roll.total)
-        target.apply_ability_damage("str", amount)
-        detail["str_damage"] = amount
+        target.add_condition("diseased")
+        cur_round = encounter.round_number if encounter else 0
+        target.queue_ongoing_effect(
+            id=trait_id,
+            type="disease",
+            period_rounds=int(data.get("period_rounds", 14400)),
+            onset_rounds=int(data.get("onset_rounds", 14400)),
+            remaining_ticks=data.get("remaining_ticks"),
+            save_kind="fort", save_dc=dc,
+            ability_damage=list(data.get("ability_damage", [])),
+            cure_consec=int(data.get("cure_consec", 2)),
+            current_round=cur_round,
+        )
+        detail["ongoing_queued"] = True
+    return detail
+
+
+_POISON_TRAITS: dict[str, dict] = {
+    "poison_giant_spider": {
+        "save_ability": "con",
+        "ability_damage": [("str", "1d2")],
+        "period_rounds": 1,
+        "remaining_ticks": 4,
+        "cure_consec": 1,
+    },
+    "poison_viper": {
+        # Small viper: 1 round / 1d2 Con / cure 1 save.
+        "save_ability": "con",
+        "ability_damage": [("con", "1d2")],
+        "period_rounds": 1,
+        "remaining_ticks": 1,
+        "cure_consec": 1,
+    },
+}
+
+
+_DISEASE_TRAITS: dict[str, dict] = {
+    "diseased_bite": {
+        # Ghoul fever (RAW DC 13 for a 2-HD ghoul; computed via the
+        # standard 10 + 1/2 HD + Cha mod formula here).
+        "save_ability": "cha",
+        "ability_damage": [("con", "1d3"), ("dex", "1d3")],
+        "period_rounds": 14400,   # 1 day at 1 round / 6 seconds
+        "onset_rounds": 14400,    # PF1 onset 1 day
+        "cure_consec": 2,
+    },
+    "filth_fever": {
+        # Otyugh / dire-rat-style filth fever: Con-based DC, Dex+Con
+        # damage, same day cadence.
+        "save_ability": "con",
+        "ability_damage": [("dex", "1d3"), ("con", "1d3")],
+        "period_rounds": 14400,
+        "onset_rounds": 14400,
+        "cure_consec": 2,
+    },
+}
+
+
+def _matching_poison_trait(actor: Combatant) -> tuple[str, dict] | None:
+    for trait_id, data in _POISON_TRAITS.items():
+        if _has_racial_trait(actor, trait_id):
+            return trait_id, data
+    return None
+
+
+def _matching_disease_trait(actor: Combatant) -> tuple[str, dict] | None:
+    for trait_id, data in _DISEASE_TRAITS.items():
+        if _has_racial_trait(actor, trait_id):
+            return trait_id, data
+    return None
+
+
+def _resolve_poison_rider(
+    attacker: Combatant, target: Combatant, roller: Roller,
+    trait_id: str, data: dict, *, encounter=None,
+) -> dict:
+    """Generic poison-on-bite rider. The initial Fort save is the entry
+    check; failure queues an ongoing-effect ticker per ``data``.
+    Poison-immune targets (vermin / undead / construct / ooze / plant)
+    skip the entry entirely.
+    """
+    if target.is_immune_to_poison():
+        return {"target_id": target.id, "immune": True, "trait": trait_id}
+    from .spells import roll_save
+    hd = _monster_hd(attacker)
+    save_ability = data.get("save_ability", "con")
+    dc = 10 + hd // 2 + _ability_modifier(attacker, save_ability)
+    passed, nat, total = roll_save(target, "fort", dc, roller)
+    detail: dict = {
+        "trait": trait_id,
+        "target_id": target.id, "dc": dc,
+        "save_natural": nat, "save_total": total,
+        "passed": passed,
+    }
+    if not passed:
+        cur_round = encounter.round_number if encounter else 0
+        target.queue_ongoing_effect(
+            id=trait_id,
+            type="poison",
+            period_rounds=int(data.get("period_rounds", 1)),
+            remaining_ticks=data.get("remaining_ticks"),
+            save_kind="fort", save_dc=dc,
+            ability_damage=list(data.get("ability_damage", [])),
+            cure_consec=int(data.get("cure_consec", 1)),
+            current_round=cur_round,
+            onset_rounds=int(data.get("onset_rounds", 1)),
+        )
+        detail["ongoing_queued"] = True
     return detail
 
 

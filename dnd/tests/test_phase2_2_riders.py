@@ -197,7 +197,9 @@ class TestBloodDrain(unittest.TestCase):
 
 
 class TestGiantSpiderPoison(unittest.TestCase):
-    def test_poison_on_hit_can_apply_str_damage(self):
+    def test_poison_on_hit_queues_ongoing_effect(self):
+        # The bite-Fort save can fail; on fail an ongoing 'giant_spider_poison'
+        # effect is queued. Find a seed where it queues.
         for seed in range(1, 50):
             a = combatant_from_monster(REGISTRY.get_monster("giant_spider"),
                                        (5, 5), "x")
@@ -213,9 +215,38 @@ class TestGiantSpiderPoison(unittest.TestCase):
             enc = Encounter.begin(grid, [a, b], Roller(seed=seed))
             intent = Interpreter(_full_attack_intent()).pick_turn(a, enc, grid)
             execute_turn(a, intent, enc, grid, Roller(seed=seed))
-            if b.ability_damage.get("str", 0) > 0:
+            if any(e.get("id") == "poison_giant_spider"
+                   for e in b.ongoing_effects):
                 return
-        self.fail("no seed in 1..49 applied Str damage from spider poison")
+        self.fail("no seed in 1..49 queued spider poison ongoing effect")
+
+    def test_poison_ticks_apply_str_damage(self):
+        # Once queued, ticking the rounds applies Str damage (failed
+        # tick saves) until cured (one successful save) or the 4-tick
+        # window runs out.
+        b = combatant_from_monster(REGISTRY.get_monster("goblin"),
+                                   (0, 0), "x")
+        b.queue_ongoing_effect(
+            id="poison_giant_spider", type="poison",
+            period_rounds=1, remaining_ticks=4,
+            save_kind="fort", save_dc=14,
+            ability_damage=[("str", "1d2")],
+            cure_consec=1,
+            current_round=0, onset_rounds=1,
+        )
+        roller = Roller(seed=1)
+        for r in range(1, 6):
+            b.tick_round(current_round=r, roller=roller)
+        # Either some Str damage has been applied or the effect was
+        # cured / expired.
+        # Acceptable outcomes: positive Str damage, or no remaining
+        # poison entry.
+        active = [e for e in b.ongoing_effects
+                  if e.get("id") == "poison_giant_spider"]
+        self.assertTrue(
+            b.ability_damage.get("str", 0) > 0 or not active,
+            "expected str damage applied or effect cleared",
+        )
 
 
 # ---------------------------------------------------------------------------

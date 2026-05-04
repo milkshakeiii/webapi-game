@@ -39,6 +39,8 @@
   "feats": ["weapon_finesse"],
   "skills": {"acrobatics": 11, "climb": 11, "perception": 4, "stealth": 11, "swim": 11},
   "languages": [],
-  "racial_traits": [],
+  "racial_traits": [
+    {"id": "filth_fever", "name": "Filth Fever (Disease)", "summary": "Bite — Fort DC 11 — onset 1d3 days, 1d3 Dex + 1d3 Con damage daily, cure 2 consecutive saves."}
+  ],
   "equipment": []
 }

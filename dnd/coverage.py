@@ -107,7 +107,7 @@ MONSTER_RACIAL_TRAITS: dict[str, Entry] = {
     "light_sensitivity_orc": (IMPLEMENTED,    "same plumbing as light_sensitivity (kobold) — has_racial_trait('light_sensitivity_orc') triggers the same dazzled toggle"),
 
     # Skeleton
-    "undead_traits":         (PARTIAL,         "type='undead' recognized for channel; bleed immunity wired in tick_round; condition immunities (mind-affecting / paralysis / sleep / stun / fatigue / nausea / fear / etc.) wired via Combatant.add_condition immunity check; disease/poison effect-types not yet modeled (no consumers)"),
+    "undead_traits":         (IMPLEMENTED,    "Full undead immunity package: bleed (tick_round skip), all mind-affecting / paralysis / sleep / stun / fatigue / nausea / fear / sickened / energy-drained conditions (UNDEAD_CONDITION_IMMUNITIES), poison + disease entry rejected at the rider, ability damage no-op'd via is_immune_to_ability_damage. Channel energy targeting recognizes type='undead'."),
     "dr_5_bludgeoning":      (IMPLEMENTED,     "wired via _parse_dr_trait + Combatant.damage_reduction; resolve_attack honors it"),
     "cold_immunity":         (IMPLEMENTED,    "_apply_monster_racial_traits adds 'cold' to energy_immunity for any monster with the trait; apply_typed_damage short-circuits to 'immune' for cold damage; fully wired alongside cold-damage spells (cone of cold, ice storm, cold magic missile)"),
 
@@ -115,13 +115,14 @@ MONSTER_RACIAL_TRAITS: dict[str, Entry] = {
     "trip_attack":           (IMPLEMENTED,     "free trip CMB after successful melee hit; wired in _do_attack via _has_racial_trait + _resolve_maneuver"),
 
     # Zombie
-    "undead_traits_zombie":  (PARTIAL,         "same as undead_traits — same immunity set wired"),
+    "undead_traits_zombie":  (IMPLEMENTED,    "Same as undead_traits — undead type drives the full immunity package."),
     "dr_5_slashing":         (IMPLEMENTED,     "wired via _parse_dr_trait; resolve_attack honors it"),
 
     # Bestiary 1 additions
     "paralysis_ghoul":       (IMPLEMENTED,    "_resolve_paralysis_rider fires after a successful melee hit by a creature with the trait. DC = 10 + 1/2 HD + Cha mod. Fort save negates; failure → paralyzed for 1d4+1 rounds (cascades to helpless via _IMPLIES_HELPLESS). RAW elf immunity is NOT enforced in v1."),
     "channel_resistance_2":  (IMPLEMENTED,    "_apply_monster_racial_traits adds qualifier-based +N to fort/ref/will saves with qualifier {'effect_type': 'channel_energy'}; _do_channel_energy passes context={'effect_type': 'channel_energy'} to roll_save so the bonus applies. Generalizes via channel_resistance_<N> trait id."),
-    "diseased_bite":         (PARTIAL,        "Fort save vs DC 10 + 1/2 HD + Cha mod fires on hit; failure applies the 'diseased' marker condition. The daily ability-damage cycle (1d3 Con + 1d3 Dex per day for ghoul fever, etc.) is NOT simulated — needs a long-rest tick that v1 doesn't have."),
+    "diseased_bite":         (IMPLEMENTED,    "Ghoul fever via the generic disease-rider + ongoing-effects pipeline. Entry Fort save vs DC 10 + 1/2 HD + Cha mod; on fail, queues an ongoing 'diseased_bite' ticker (period 14400 rounds = 1 day, 1d3 Con + 1d3 Dex, 2 consecutive saves to cure). Adds the 'diseased' marker condition. Translation: 1 round = 6 seconds of in-game time."),
+    "filth_fever":           (IMPLEMENTED,    "Otyugh / dire-rat-style filth fever. Same pipeline as diseased_bite but Con-based DC and Dex+Con damage profile. Day cadence (14400 rounds onset / period). Cures on 2 consecutive saves."),
     "stalker_bugbear":       (IMPLEMENTED,    "Perception/Stealth class-skill bonus is already baked into bugbear.skills totals in the JSON; no per-trait wiring needed (monsters use pre-computed skill totals, so the class-skill +3 is in the number)"),
     "hold_breath":           (OUT_OF_SCOPE,   "Aquatic mechanic (Con × 4 rounds underwater). The engine doesn't model underwater combat or drowning — out-of-scope per the verticality-adjacent rule (water as an environmental dimension we don't simulate). Defer indefinitely."),
     "stench":                (IMPLEMENTED,    "Aura framework in _apply_aura_exposure: 30-ft Fort save vs DC 10 + 1/2 HD + Con mod, fail → sickened for 1d6 rounds. Cooldown=encounter (one save per source). Other troglodytes immune by template id. Saves stored in Combatant.aura_saves_taken."),
@@ -138,7 +139,8 @@ MONSTER_RACIAL_TRAITS: dict[str, Entry] = {
     "tail_spikes":           (PARTIAL,        "Manticore 'spikes' is a standard ranged attack with range_increment=180 and resolves through resolve_attack. The 6-spike-volley-as-standard-action and 24/day cap are NOT modeled (no daily-uses framework for monster ranged attacks yet)."),
     "displacement":          (IMPLEMENTED,    "_apply_monster_racial_traits sets concealment=50 on any monster with the trait. _do_attack honors concealment with a 1d100 ≤ 50 miss roll on every hit"),
     "resistance_save":       (IMPLEMENTED,    "+2 racial saves vs spells via qualifier-based modifiers (qualifier {'effect_tags': ['spell']}). Spell-resolved saves pass the effect_tags context so the bonus applies"),
-    "poison_giant_spider":   (PARTIAL,        "_resolve_giant_spider_poison fires Fort save vs DC 10 + 1/2 HD + Con mod after a successful bite; failure applies 1d2 Str ability damage IMMEDIATELY (one tick). RAW says 1d2 Str / round for 4 rounds — the recurring rounds and dual-save cure are NOT modeled (no poison framework yet)."),
+    "poison_giant_spider":   (IMPLEMENTED,    "Generic poison-rider + ongoing-effects pipeline. Entry Fort DC 10 + 1/2 HD + Con mod on a successful bite; failure queues 'poison_giant_spider' ongoing effect (period 1 round, 4 ticks, 1d2 Str per fail, cure 1 save). Vermin / undead / construct / ooze / plant targets are skipped at the entry."),
+    "poison_viper":          (IMPLEMENTED,    "Small-viper Con-damage poison. Same pipeline: entry Fort save; failure queues 'poison_viper' ongoing effect (period 1 round, 1 tick, 1d2 Con per fail, cure 1 save)."),
     "web_giant_spider":      (IMPLEMENTED,    "'web' composite action: targets a creature within 50ft (10 squares); Reflex save vs DC 10 + 1/2 HD + Con mod or entangled (sourced under 'web:<actor.id>'). The 8/day cap and STR/EA escape DC 16 from web aren't modeled in v1."),
     "constrict_strangle":    (IMPLEMENTED,    "_apply_end_of_turn_racial_effects: while grappling, deals 1d4+3 bludgeoning damage and applies 'silenced' (registered to source 'constrict_strangle:<actor.id>'). The silenced condition blocks V-component spells via the existing _do_cast check."),
     "quickness":             (PARTIAL,        "_apply_monster_racial_traits adds +1 enhancement to initiative for any actor with the 'quickness' trait. The +10ft first-round-move clause is NOT modeled (no round-1 movement-bonus path yet)."),
@@ -260,7 +262,7 @@ CONDITIONS: dict[str, Entry] = {
     "unconscious":     (IMPLEMENTED,    "is_unconscious checks the condition; turn validation prevents acts; applying 'unconscious' adds 'helpless' (tracked under 'implied_by_unconscious' source)"),
     "silenced":        (IMPLEMENTED,    "applied by the Silence spell. Read by _do_cast: V-component spells from a silenced caster fail with reason='verbal_component_blocked'"),
     "bracing":         (IMPLEMENTED,    "set by ready_brace composite for one round; consumed by the brace-attack trigger in _do_charge (×2 damage on the bracing wielder's first hit against the charger)"),
-    "diseased":        (PARTIAL,        "marker condition applied by diseased_bite (ghoul fever) on a failed Fort save. Daily ability-damage onset cycle (1d3 Con + 1d3 Dex / day for ghoul fever) NOT modeled — needs a long-rest tick."),
+    "diseased":        (IMPLEMENTED,    "Marker condition applied alongside an ongoing-effect entry on the target's ongoing_effects list. tick_round processes each ongoing disease (period 14400 rounds = 1 day at 1 round / 6 seconds) — re-rolls Fort save, applies ability damage on fail, advances cure-counter on save success. Removed automatically after 2 consecutive successful saves (PF1 RAW)."),
 }
 
 

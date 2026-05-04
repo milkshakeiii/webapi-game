@@ -232,6 +232,22 @@ class Combatant:
     # aura per encounter" which mirrors the most common sub-cases.
     aura_saves_taken: set[str] = field(default_factory=set)
 
+    # PF1 ongoing effects (poisons, diseases, ongoing damage). Each
+    # entry is a dict with these fields:
+    #   id              — short label (e.g. "spider_poison", "ghoul_fever")
+    #   type            — "poison" or "disease" (drives event kind)
+    #   next_tick       — absolute round number for the next save/effect
+    #   period          — rounds between ticks (1 round, 14400 = 1 day, etc.)
+    #   remaining_ticks — None for open-ended (disease until cured); int
+    #                     for fixed-duration effects (poison: 4 ticks)
+    #   save_kind       — "fort"/"ref"/"will"
+    #   save_dc         — int
+    #   ability_damage  — list of (ability, dice_str) tuples to apply on save fail
+    #   cure_consec     — number of consecutive successful saves to cure
+    #   consec_count    — running count of consecutive saves so far
+    # Processed by ``tick_round`` whenever a roller is provided.
+    ongoing_effects: list[dict] = field(default_factory=list)
+
     # PF1 ability damage (poison, blood drain, etc.). Each point of
     # damage lowers the effective ability score by 1; the mod-step
     # approximation here is `-(dmg // 2)` per ability, applied as
@@ -681,8 +697,11 @@ class Combatant:
         Updates a single source-tracked modifier per ability so
         repeated damage stacks cleanly. Drops the matching skill /
         save / attack / AC / init modifier alongside.
+        Undead and constructs are immune (no metabolism).
         """
         if amount <= 0:
+            return
+        if self.is_immune_to_ability_damage():
             return
         self.ability_damage[ability] = (
             self.ability_damage.get(ability, 0) + amount
@@ -722,6 +741,66 @@ class Combatant:
             value=delta, type="untyped",
             target=f"ability:{ability}", source=src,
         ))
+
+    def queue_ongoing_effect(
+        self, *,
+        id: str, type: str,
+        period_rounds: int,
+        save_kind: str, save_dc: int,
+        ability_damage: list,
+        current_round: int,
+        onset_rounds: int = 0,
+        remaining_ticks: int | None = None,
+        cure_consec: int = 1,
+    ) -> None:
+        """Queue a poison- or disease-style ongoing effect.
+
+        ``onset_rounds`` defers the first save by that many rounds
+        (PF1 disease "onset 1 day" → onset_rounds=14400). After onset,
+        the effect ticks every ``period_rounds`` rounds (1 = poison
+        per-round, 14400 = disease per-day). On save fail, applies
+        ``ability_damage`` (a list of ``(ability, dice_str)`` tuples).
+        On save success, advances ``consec_count`` toward
+        ``cure_consec`` — when reached, the effect is removed; a fail
+        resets the count. ``remaining_ticks`` (if not None) is a hard
+        cap regardless of saves (poisons typically use 4 ticks).
+
+        Idempotent on (target, id): re-queuing the same effect id
+        replaces the existing entry (a new exposure resets the cycle).
+        """
+        # Replace any existing effect of the same id (re-exposure).
+        self.ongoing_effects = [
+            e for e in self.ongoing_effects if e.get("id") != id
+        ]
+        self.ongoing_effects.append({
+            "id": id, "type": type,
+            "next_tick": current_round + max(0, onset_rounds),
+            "period": period_rounds,
+            "remaining_ticks": remaining_ticks,
+            "save_kind": save_kind, "save_dc": save_dc,
+            "ability_damage": list(ability_damage),
+            "cure_consec": cure_consec,
+            "consec_count": 0,
+        })
+
+    def is_immune_to_poison(self) -> bool:
+        if self.template_kind != "monster" or self.template is None:
+            return False
+        mtype = (getattr(self.template, "type", "") or "").lower()
+        return mtype in ("undead", "construct", "ooze", "vermin", "plant")
+
+    def is_immune_to_disease(self) -> bool:
+        if self.template_kind != "monster" or self.template is None:
+            return False
+        mtype = (getattr(self.template, "type", "") or "").lower()
+        return mtype in ("undead", "construct", "ooze", "plant")
+
+    def is_immune_to_ability_damage(self) -> bool:
+        """Undead and constructs ignore ability damage (no metabolism)."""
+        if self.template_kind != "monster" or self.template is None:
+            return False
+        mtype = (getattr(self.template, "type", "") or "").lower()
+        return mtype in ("undead", "construct")
 
     def has_racial_trait(self, trait_id: str) -> bool:
         """Return True if the underlying monster template carries
@@ -871,6 +950,14 @@ class Combatant:
             if self.current_hp <= self.death_threshold:
                 self.add_condition("dead")
                 self.stop_bleed()
+        # Ongoing poisons / diseases. Process before healing so the
+        # tick this round can be cured by a heal applied later.
+        if (
+            roller is not None
+            and self.ongoing_effects
+            and "dead" not in self.conditions
+        ):
+            self._tick_ongoing_effects(current_round, roller)
         # Per-round healing.
         if "dead" not in self.conditions and self.current_hp < self.max_hp:
             heal = self.fast_healing + self.regeneration
@@ -880,6 +967,62 @@ class Combatant:
                 if self.bleed > 0:
                     self.stop_bleed()
         return expired
+
+    def _tick_ongoing_effects(self, current_round: int, roller) -> None:
+        """Process pending poison / disease ticks.
+
+        For each effect whose ``next_tick`` has come due:
+          1. Roll the save (Fort/Ref/Will) vs ``save_dc``.
+          2. On fail: apply ``ability_damage``, reset consecutive
+             counter.
+          3. On success: increment consecutive counter; if it reaches
+             ``cure_consec``, remove the effect (and clear marker).
+          4. Decrement ``remaining_ticks`` if non-None; remove on
+             reaching 0.
+          5. Schedule next_tick = current_round + period.
+        """
+        if not self.ongoing_effects:
+            return
+        kept: list[dict] = []
+        for eff in self.ongoing_effects:
+            if current_round < int(eff.get("next_tick", 0)):
+                kept.append(eff)
+                continue
+            save_kind = eff.get("save_kind", "fort")
+            save_dc = int(eff.get("save_dc", 10))
+            r = roller.roll("1d20")
+            nat = r.terms[0].rolls[0]
+            save_total = nat + self.save(save_kind)
+            passed = save_total >= save_dc
+            if passed:
+                eff["consec_count"] = int(eff.get("consec_count", 0)) + 1
+                if eff["consec_count"] >= int(eff.get("cure_consec", 1)):
+                    # Cured. Drop the marker condition that paired
+                    # with this id (e.g., "diseased" for ghoul fever).
+                    eff_type = eff.get("type")
+                    if eff_type == "disease" and "diseased" in self.conditions:
+                        # Only remove if no other disease is active.
+                        other_disease = any(
+                            e.get("type") == "disease" and e is not eff
+                            for e in self.ongoing_effects
+                        )
+                        if not other_disease:
+                            self.remove_condition("diseased")
+                    continue  # do not keep this effect
+            else:
+                eff["consec_count"] = 0
+                for ability, dice_str in eff.get("ability_damage", []):
+                    dmg_roll = roller.roll(str(dice_str))
+                    self.apply_ability_damage(ability, int(dmg_roll.total))
+            # Cap by remaining_ticks if set.
+            if eff.get("remaining_ticks") is not None:
+                eff["remaining_ticks"] = int(eff["remaining_ticks"]) - 1
+                if eff["remaining_ticks"] <= 0:
+                    continue  # spent
+            # Schedule next tick.
+            eff["next_tick"] = current_round + int(eff.get("period", 1))
+            kept.append(eff)
+        self.ongoing_effects = kept
 
     def _read_con_score(self) -> int:
         """Read the combatant's effective Constitution score.
