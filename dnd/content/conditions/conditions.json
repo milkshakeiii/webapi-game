@@ -36,5 +36,6 @@
   {"id": "unconscious", "name": "Unconscious", "summary": "Helpless and unaware."},
   {"id": "silenced", "name": "Silenced", "summary": "Cannot cast V-component spells, command words, or speak."},
   {"id": "bracing", "name": "Bracing", "summary": "Weapon set vs charge; deals double damage on first hit against a charging foe before it acts."},
-  {"id": "pinned", "name": "Pinned", "summary": "Helpless; immobilized in a grapple. Pin is broken when grappler stops maintaining it."}
+  {"id": "pinned", "name": "Pinned", "summary": "Helpless; immobilized in a grapple. Pin is broken when grappler stops maintaining it."},
+  {"id": "diseased", "name": "Diseased", "summary": "Carrying a disease. RAW: each disease has its own onset, frequency, and effect (often ability damage). Tracked as a marker; per-disease daily checks are out of v1 scope."}
 ]

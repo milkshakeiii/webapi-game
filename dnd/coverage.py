@@ -100,16 +100,16 @@ MONSTER_RACIAL_TRAITS: dict[str, Entry] = {
     "skilled_rider":         (OUT_OF_SCOPE,    "+4 Ride on goblin dogs; no Ride/mounted-combat subgame in v1"),
 
     # Kobold
-    "light_sensitivity":     (PARTIAL,         "trait declared; no daylight context in encounters yet, so dormant"),
+    "light_sensitivity":     (IMPLEMENTED,    "Combatant.in_bright_light flag + update_light_sensitivity_state() applies/removes dazzled when sensitivity racial trait is present. Engine-wide daylight context is opt-in (callers flip the flag); the standard dazzled condition then drops attack/perception"),
 
     # Orc
     "ferocity":              (IMPLEMENTED,     "stay conscious below 0 HP; 1 HP/round bleed; via _apply_post_damage_state"),
-    "light_sensitivity_orc": (PARTIAL,         "same as light_sensitivity"),
+    "light_sensitivity_orc": (IMPLEMENTED,    "same plumbing as light_sensitivity (kobold) — has_racial_trait('light_sensitivity_orc') triggers the same dazzled toggle"),
 
     # Skeleton
     "undead_traits":         (PARTIAL,         "type='undead' recognized for channel; bleed immunity wired in tick_round; condition immunities (mind-affecting / paralysis / sleep / stun / fatigue / nausea / fear / etc.) wired via Combatant.add_condition immunity check; disease/poison effect-types not yet modeled (no consumers)"),
     "dr_5_bludgeoning":      (IMPLEMENTED,     "wired via _parse_dr_trait + Combatant.damage_reduction; resolve_attack honors it"),
-    "cold_immunity":         (NOT_IMPLEMENTED, "no engine source of cold damage yet; build immunity infra alongside the first cold-damage spell"),
+    "cold_immunity":         (IMPLEMENTED,    "_apply_monster_racial_traits adds 'cold' to energy_immunity for any monster with the trait; apply_typed_damage short-circuits to 'immune' for cold damage; fully wired alongside cold-damage spells (cone of cold, ice storm, cold magic missile)"),
 
     # Wolf
     "trip_attack":           (IMPLEMENTED,     "free trip CMB after successful melee hit; wired in _do_attack via _has_racial_trait + _resolve_maneuver"),
@@ -119,36 +119,36 @@ MONSTER_RACIAL_TRAITS: dict[str, Entry] = {
     "dr_5_slashing":         (IMPLEMENTED,     "wired via _parse_dr_trait; resolve_attack honors it"),
 
     # Bestiary 1 additions
-    "paralysis_ghoul":       (NOT_IMPLEMENTED, "ghoul bite paralyzes (Fort negates); needs bite-rider hook"),
-    "channel_resistance_2":  (NOT_IMPLEMENTED, "+2 vs channel energy; channel-energy targeting infra needed"),
-    "diseased_bite":         (NOT_IMPLEMENTED, "ghoul fever Fort save; disease tracking system needed"),
-    "stalker_bugbear":       (NOT_IMPLEMENTED, "Perception/Stealth as class skills; cosmetic"),
+    "paralysis_ghoul":       (IMPLEMENTED,    "_resolve_paralysis_rider fires after a successful melee hit by a creature with the trait. DC = 10 + 1/2 HD + Cha mod. Fort save negates; failure → paralyzed for 1d4+1 rounds (cascades to helpless via _IMPLIES_HELPLESS). RAW elf immunity is NOT enforced in v1."),
+    "channel_resistance_2":  (IMPLEMENTED,    "_apply_monster_racial_traits adds qualifier-based +N to fort/ref/will saves with qualifier {'effect_type': 'channel_energy'}; _do_channel_energy passes context={'effect_type': 'channel_energy'} to roll_save so the bonus applies. Generalizes via channel_resistance_<N> trait id."),
+    "diseased_bite":         (PARTIAL,        "Fort save vs DC 10 + 1/2 HD + Cha mod fires on hit; failure applies the 'diseased' marker condition. The daily ability-damage cycle (1d3 Con + 1d3 Dex per day for ghoul fever, etc.) is NOT simulated — needs a long-rest tick that v1 doesn't have."),
+    "stalker_bugbear":       (IMPLEMENTED,    "Perception/Stealth class-skill bonus is already baked into bugbear.skills totals in the JSON; no per-trait wiring needed (monsters use pre-computed skill totals, so the class-skill +3 is in the number)"),
     "hold_breath":           (NOT_IMPLEMENTED, "lizardfolk Con × 4 rounds; underwater system needed"),
     "stench":                (NOT_IMPLEMENTED, "30-ft sickening aura; aura targeting + sickened condition wiring"),
     "regeneration_5_fire_acid": (IMPLEMENTED,  "regeneration field + bypass set populated; floors at -1 vs non-bypass via take_damage"),
-    "rend":                  (NOT_IMPLEMENTED, "extra damage if both claws hit; needs full-attack rider"),
-    "freeze_gargoyle":       (NOT_IMPLEMENTED, "stealth-as-statue special; cosmetic"),
+    "rend":                  (IMPLEMENTED,    "_do_full_attack tracks claw hits (attack-option name starting with 'claw') and on 2+ in a single full-attack, applies +1d6+1 untyped damage at the end of the routine. Wired with _has_racial_trait('rend')."),
+    "freeze_gargoyle":       (OUT_OF_SCOPE,   "stealth-as-statue is a non-combat ambush helper (gargoyles freeze before initiative is rolled, then attack on round 1). The engine starts encounters with combatants already revealed; freeze never triggers in our scope. Defer indefinitely."),
     "dr_10_magic":           (IMPLEMENTED,    "_parse_dr_trait wires it on the gargoyle; _bypass_dr now consults AttackProfile.attack_tags so magic-tagged weapons (enhancement_bonus>0 or any special_ability) bypass the DR. Mundane weapons remain blocked."),
-    "grab":                  (PARTIAL,         "owlbear free grapple on hit; full grapple action set is wired but the auto-grab rider on a normal attack isn't"),
+    "grab":                  (IMPLEMENTED,    "_resolve_grab_rider runs on a successful natural-weapon hit when actor has 'grab' (or 'blood_drain' as the auto-grab variant). Owlbear-style: opposed CMB; success links the pair (grappling_target_id / grappled_by_id) and applies grappled to both. Stirge-style auto-grab skips the roll."),
     "petrifying_gaze":       (NOT_IMPLEMENTED, "30-ft Fort-vs-petrified aura; needs gaze-attack subsystem"),
     "rock_throwing_120":     (NOT_IMPLEMENTED, "data declared; same as any thrown ranged attack"),
     "rock_catching":         (NOT_IMPLEMENTED, "Reflex to catch a thrown rock; needs incoming-projectile hook"),
     "natural_cunning":       (NOT_IMPLEMENTED, "minotaur immunity to maze; no maze spells yet"),
-    "powerful_charge":       (NOT_IMPLEMENTED, "doubled charge damage on gore; needs natural-attack-on-charge rider"),
+    "powerful_charge":       (IMPLEMENTED,    "_do_charge picks the gore attack (or attack option 0) and routes through charge_damage_multiplier=2 for any actor with the 'powerful_charge' trait."),
     "tail_spikes":           (NOT_IMPLEMENTED, "manticore 6 spikes/round, 24/day; usable as ranged_touch"),
-    "displacement":          (NOT_IMPLEMENTED, "50% miss chance — needs displacement flag (concealment value works at runtime)"),
-    "resistance_save":       (NOT_IMPLEMENTED, "+2 vs targeted spells; partial qualifier infra"),
-    "poison_giant_spider":   (NOT_IMPLEMENTED, "Fort or 1d2 Str dmg; ability damage tracking + poison framework"),
+    "displacement":          (IMPLEMENTED,    "_apply_monster_racial_traits sets concealment=50 on any monster with the trait. _do_attack honors concealment with a 1d100 ≤ 50 miss roll on every hit"),
+    "resistance_save":       (IMPLEMENTED,    "+2 racial saves vs spells via qualifier-based modifiers (qualifier {'effect_tags': ['spell']}). Spell-resolved saves pass the effect_tags context so the bonus applies"),
+    "poison_giant_spider":   (PARTIAL,        "_resolve_giant_spider_poison fires Fort save vs DC 10 + 1/2 HD + Con mod after a successful bite; failure applies 1d2 Str ability damage IMMEDIATELY (one tick). RAW says 1d2 Str / round for 4 rounds — the recurring rounds and dual-save cure are NOT modeled (no poison framework yet)."),
     "web_giant_spider":      (NOT_IMPLEMENTED, "spider's web racial; conjuration trap mechanics"),
     "constrict_strangle":    (NOT_IMPLEMENTED, "choker grapple-into-strangle (suppresses V casting and breath)"),
-    "quickness":             (NOT_IMPLEMENTED, "+1 init enhancement, +10 ft to first round move; speed-burst mechanic"),
-    "rake_lion":             (NOT_IMPLEMENTED, "while grappling, two extra claws; needs grapple-attack rider"),
-    "pounce":                (NOT_IMPLEMENTED, "full attack on a charge; needs charge-rider hook"),
+    "quickness":             (PARTIAL,        "_apply_monster_racial_traits adds +1 enhancement to initiative for any actor with the 'quickness' trait. The +10ft first-round-move clause is NOT modeled (no round-1 movement-bonus path yet)."),
+    "rake_lion":             (IMPLEMENTED,    "_apply_end_of_turn_racial_effects executes 2 free claw attacks (the actor's first 2 'claw'-named attack options) against the grappled target each round."),
+    "pounce":                (IMPLEMENTED,    "_do_charge (after the standard charge attack) runs every remaining attack_option against the same target with the +2 charge bonus. Triggered by _has_racial_trait('pounce')."),
     "engulf":                (NOT_IMPLEMENTED, "ooze move-into-square + paralysis + acid drain; needs movement-trigger paralysis"),
     "transparent":           (NOT_IMPLEMENTED, "DC 15 Perception to spot ooze; needs perception-vs-stealth in encounters"),
-    "ooze_traits":           (PARTIAL,         "ooze type partially honored: condition immunities can be wired by setting Combatant.condition_immunities; full immunity set not yet declared"),
+    "ooze_traits":           (IMPLEMENTED,    "_apply_monster_racial_traits adds the full PF1 ooze immunity set to condition_immunities: charmed/fascinated/frightened/shaken/panicked/dazed/confused/sleeping/paralyzed/stunned/fatigued/exhausted/nauseated/sickened. Crit/precision-damage immunity isn't condition-shaped (needs an attack-resolution flag) — covered for the dnd sandbox by gel cube's hp/ac numbers"),
     "captivating_song":      (NOT_IMPLEMENTED, "harpy song fascinates; sonic mind-affecting aura"),
-    "blood_drain":           (NOT_IMPLEMENTED, "stirge attaches and drains 1d4 Con/round; needs ability-damage tracking"),
+    "blood_drain":           (IMPLEMENTED,    "_resolve_grab_rider auto-grabs on a successful touch (no opposed roll). _apply_end_of_turn_racial_effects then drains 1d4 Con damage per round via apply_ability_damage('con'), capped at 4 cumulative (stored in resources['blood_drain_dealt'])."),
 }
 
 
@@ -260,6 +260,7 @@ CONDITIONS: dict[str, Entry] = {
     "unconscious":     (IMPLEMENTED,    "is_unconscious checks the condition; turn validation prevents acts; applying 'unconscious' adds 'helpless' (tracked under 'implied_by_unconscious' source)"),
     "silenced":        (IMPLEMENTED,    "applied by the Silence spell. Read by _do_cast: V-component spells from a silenced caster fail with reason='verbal_component_blocked'"),
     "bracing":         (IMPLEMENTED,    "set by ready_brace composite for one round; consumed by the brace-attack trigger in _do_charge (×2 damage on the bracing wielder's first hit against the charger)"),
+    "diseased":        (PARTIAL,        "marker condition applied by diseased_bite (ghoul fever) on a failed Fort save. Daily ability-damage onset cycle (1d3 Con + 1d3 Dex / day for ghoul fever) NOT modeled — needs a long-rest tick."),
 }
 
 

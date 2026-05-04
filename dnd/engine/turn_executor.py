@@ -148,7 +148,59 @@ def execute_turn(
                 "amount": 1,
             }))
 
+    # End-of-turn racial-trait riders.
+    _apply_end_of_turn_racial_effects(actor, grid, roller, events)
+
     return TurnResult(actor.id, rule_index, events)
+
+
+def _apply_end_of_turn_racial_effects(
+    actor: Combatant, grid: Grid, roller: Roller,
+    events: list[TurnEvent],
+) -> None:
+    """Per-round racial effects that fire at the end of the actor's turn.
+
+    Currently:
+    - Stirge blood drain: while grappling a target, drain 1d4 Con.
+      Stops once the cumulative drain reaches 4 (RAW cap).
+    - Lion rake: while grappling, two free claw attacks against the
+      grapple target.
+    """
+    if (
+        _has_racial_trait(actor, "blood_drain")
+        and actor.grappling_target_id is not None
+        and grid is not None
+    ):
+        target = grid.combatants.get(actor.grappling_target_id)
+        if target is not None and "dead" not in target.conditions:
+            already = int(actor.resources.get("blood_drain_dealt", 0))
+            if already < 4:
+                r = roller.roll("1d4")
+                amount = min(int(r.total), 4 - already)
+                target.apply_ability_damage("con", amount)
+                actor.resources["blood_drain_dealt"] = already + amount
+                events.append(TurnEvent(actor.id, "blood_drain", {
+                    "target_id": target.id,
+                    "amount": amount,
+                    "cumulative": already + amount,
+                }))
+    if (
+        _has_racial_trait(actor, "rake_lion")
+        and actor.grappling_target_id is not None
+        and grid is not None
+    ):
+        target = grid.combatants.get(actor.grappling_target_id)
+        if target is not None and target.is_alive():
+            claw_indices = [
+                i for i, opt in enumerate(actor.attack_options or [])
+                if str(opt.get("name", "")).lower().startswith("claw")
+            ][:2]
+            for idx in claw_indices:
+                if not target.is_alive():
+                    break
+                _do_attack(actor, target, grid, roller, events,
+                           label="rake", encounter=None,
+                           attack_index=idx)
 
 
 _STANDARD_ACTION_EVENT_KINDS: frozenset[str] = frozenset({
@@ -899,10 +951,40 @@ def _do_charge(
     elif is_mounted and _has_feat(actor, "spirited_charge"):
         # Spirited Charge: ×2 on any charge weapon while mounted.
         options["charge_damage_multiplier"] = 2
+    # Powerful Charge: doubled damage on a designated natural attack
+    # (typically gore) when charging. Modeled by routing through the
+    # standard charge-damage-multiplier pathway.
+    if _has_racial_trait(actor, "powerful_charge"):
+        # Look for a "gore" attack or fall back to the first option.
+        gore_idx = next(
+            (i for i, o in enumerate(actor.attack_options or [])
+             if str(o.get("name", "")).lower() == "gore"),
+            0,
+        )
+        options.setdefault("charge_damage_multiplier", 2)
+        attack_index = gore_idx
+    else:
+        attack_index = 0
+    # Pounce: on a charge, the creature can make a full attack instead
+    # of a single attack. We resolve this by issuing a follow-up
+    # full_attack after the initial charge attack.
+    has_pounce = _has_racial_trait(actor, "pounce")
     _do_attack(actor, target, grid, roller, events,
                attack_bonus_delta=2, label="charge_attack",
                encounter=encounter,
-               script_options=options)
+               script_options=options,
+               attack_index=attack_index)
+    if has_pounce and target.is_alive() and len(actor.attack_options or []) > 1:
+        # Each remaining natural attack fires once on a charge with
+        # pounce (RAW: full attack on charge). +2 charge bonus applies.
+        for idx in range(1, len(actor.attack_options)):
+            if not target.is_alive():
+                break
+            _do_attack(actor, target, grid, roller, events,
+                       attack_bonus_delta=2, label="pounce_attack",
+                       encounter=encounter,
+                       script_options=options,
+                       attack_index=idx)
     # Ride-By Attack: if the actor is mounted and has the feat AND the
     # caller requested a ride-by, continue moving along the charge line
     # past the target for the remaining squares of the actor's charge
@@ -1123,23 +1205,51 @@ def _do_full_attack(
             twf_primary_pen = -6
             twf_offhand_pen = -10
 
-    schedule: list[tuple[int, int]] = [
-        (d + twf_primary_pen, 0) for d in primary_deltas
+    # Natural-attack chain: when every melee attack option is flagged
+    # is_natural, each one fires once (PF1 RAW: primary at full BAB,
+    # secondary at BAB-5; v1 simplification fires all at full BAB).
+    natural_indices = [
+        i for i, opt in enumerate(actor.attack_options or [])
+        if opt.get("type") == "melee" and opt.get("is_natural")
     ]
-    if twf_active:
-        # One off-hand attack at the top BAB (no -5 iterative for the
-        # off-hand without Improved/Greater TWF, both deferred to v2).
-        schedule.append((twf_offhand_pen, offhand_index))
+    if len(natural_indices) > 1:
+        schedule: list[tuple[int, int]] = [(0, i) for i in natural_indices]
+    else:
+        schedule = [(d + twf_primary_pen, 0) for d in primary_deltas]
+        if twf_active:
+            # One off-hand attack at the top BAB (no -5 iterative for the
+            # off-hand without Improved/Greater TWF, both deferred to v2).
+            schedule.append((twf_offhand_pen, offhand_index))
 
+    has_rend = _has_racial_trait(actor, "rend")
+    claw_hits = 0
     for i, (delta, idx) in enumerate(schedule):
         if not target.is_alive() or target.current_hp <= 0:
             break
+        hp_before = target.current_hp
         _do_attack(actor, target, grid, roller, events,
                    attack_bonus_delta=delta,
                    label=f"full_attack_{i+1}",
                    encounter=encounter,
                    script_options=options,
                    attack_index=idx)
+        # Track claw hits for the rend rider (troll, etc.). A claw is
+        # any attack option whose ``name`` starts with "claw".
+        if has_rend and idx < len(actor.attack_options):
+            attack_name = str(actor.attack_options[idx].get("name", "")).lower()
+            if attack_name.startswith("claw") and target.current_hp < hp_before:
+                claw_hits += 1
+    if has_rend and claw_hits >= 2 and target.is_alive():
+        # PF1 troll rend: +1d6+1 damage when both claws connect.
+        rend_roll = roller.roll("1d6")
+        rend_damage = int(rend_roll.total) + 1
+        target.take_damage(rend_damage)
+        _apply_post_damage_state(target)
+        events.append(TurnEvent(actor.id, "rend", {
+            "target_id": target.id,
+            "damage": rend_damage,
+            "die_roll": int(rend_roll.total),
+        }))
 
 
 _DIRECTION_DELTAS: dict[str, tuple[int, int]] = {
@@ -2149,6 +2259,43 @@ def _do_attack(
             "natural": nat, "total": total, "margin": margin,
             "passed": passed,
         }
+    # Ghoul paralysis: bite-on-hit Fort save vs paralysis (1d4+1 rounds).
+    paralysis_event: dict | None = None
+    if (
+        outcome.hit and not is_ranged
+        and _has_racial_trait(actor, "paralysis_ghoul")
+    ):
+        paralysis_event = _resolve_paralysis_rider(
+            actor, target, roller,
+        )
+    # Ghoul fever: bite-on-hit secondary disease (Fort save). The daily
+    # 1d3 Con + 1d3 Dex damage cycle isn't simulated (no long-rest tick
+    # in v1); the encounter-time effect is just the marker "diseased".
+    disease_event: dict | None = None
+    if (
+        outcome.hit and not is_ranged
+        and _has_racial_trait(actor, "diseased_bite")
+    ):
+        disease_event = _resolve_disease_rider(actor, target, roller)
+    # Grab: free grapple attempt after a successful natural-weapon hit
+    # (owlbear, stirge, etc.). Stirge's blood_drain auto-grabs without
+    # an opposed roll; other grabbers do an opposed CMB.
+    grab_event: dict | None = None
+    if (
+        outcome.hit and not is_ranged
+        and (
+            _has_racial_trait(actor, "grab")
+            or _has_racial_trait(actor, "blood_drain")
+        )
+    ):
+        grab_event = _resolve_grab_rider(actor, target, roller)
+    # Giant spider poison: bite-on-hit Fort save vs Str damage.
+    poison_event: dict | None = None
+    if (
+        outcome.hit and not is_ranged
+        and _has_racial_trait(actor, "poison_giant_spider")
+    ):
+        poison_event = _resolve_giant_spider_poison(actor, target, roller)
     events.append(TurnEvent(actor.id, label, {
         "target_id": target.id,
         "weapon": profile.name,
@@ -2162,6 +2309,14 @@ def _do_attack(
                                 stunning_fist_event))
     if trip_event is not None:
         events.append(TurnEvent(actor.id, "trip_on_hit", trip_event))
+    if paralysis_event is not None:
+        events.append(TurnEvent(actor.id, "paralysis_on_hit", paralysis_event))
+    if disease_event is not None:
+        events.append(TurnEvent(actor.id, "disease_on_hit", disease_event))
+    if grab_event is not None:
+        events.append(TurnEvent(actor.id, "grab_on_hit", grab_event))
+    if poison_event is not None:
+        events.append(TurnEvent(actor.id, "poison_on_hit", poison_event))
     if massive_damage_check is not None:
         events.append(TurnEvent(actor.id, "massive_damage",
                                 massive_damage_check[1]))
@@ -2582,7 +2737,10 @@ def _do_channel_energy(
                 # Damage undead, Will save halves.
                 amount = base_amount
                 from .spells import roll_save
-                passed, nat, total = roll_save(c, "will", dc, roller)
+                passed, nat, total = roll_save(
+                    c, "will", dc, roller,
+                    context={"effect_type": "channel_energy"},
+                )
                 if passed:
                     amount = base_amount // 2
                 c.take_damage(amount)
@@ -2605,7 +2763,10 @@ def _do_channel_energy(
                 continue
             from .spells import roll_save
             amount = base_amount
-            passed, nat, total = roll_save(c, "will", dc, roller)
+            passed, nat, total = roll_save(
+                c, "will", dc, roller,
+                context={"effect_type": "channel_energy"},
+            )
             if passed:
                 amount = base_amount // 2
             c.take_damage(amount)
@@ -2710,6 +2871,142 @@ def _character_level(actor: Combatant) -> int:
         return 1
     lvl = getattr(actor.template, "level", None)
     return int(lvl) if lvl else 1
+
+
+def _monster_hd(actor: Combatant) -> int:
+    """Parse the monster's hit-dice count (e.g. '2d8+4' → 2)."""
+    if actor.template_kind != "monster" or actor.template is None:
+        return 1
+    hd_str = str(getattr(actor.template, "hit_dice", "") or "1")
+    if "d" in hd_str:
+        try:
+            return int(hd_str.split("d", 1)[0])
+        except ValueError:
+            return 1
+    try:
+        return int(hd_str)
+    except ValueError:
+        return 1
+
+
+def _resolve_paralysis_rider(
+    attacker: Combatant, target: Combatant, roller: Roller,
+) -> dict:
+    """Ghoul-bite paralysis: target Fort save vs DC 10 + 1/2 HD + Cha mod.
+
+    Failure → paralyzed for 1d4+1 rounds. Elves are RAW-immune to ghoul
+    paralysis specifically; v1 doesn't enforce that exception. The
+    paralyzed condition cascades to helpless via _IMPLIES_HELPLESS.
+    """
+    from .spells import roll_save
+    hd = _monster_hd(attacker)
+    cha_mod = _ability_modifier(attacker, "cha")
+    dc = 10 + hd // 2 + cha_mod
+    passed, nat, total = roll_save(target, "fort", dc, roller)
+    if passed:
+        return {
+            "target_id": target.id, "dc": dc,
+            "save_natural": nat, "save_total": total,
+            "passed": True,
+        }
+    rounds_roll = roller.roll("1d4")
+    duration = int(rounds_roll.total) + 1
+    target.add_condition("paralyzed")
+    return {
+        "target_id": target.id, "dc": dc,
+        "save_natural": nat, "save_total": total,
+        "passed": False, "duration": duration,
+    }
+
+
+def _resolve_grab_rider(
+    attacker: Combatant, target: Combatant, roller: Roller,
+) -> dict:
+    """Free grapple attempt after a successful natural-weapon hit.
+
+    Stirges with ``blood_drain`` auto-grab without an opposed roll
+    (RAW: stirge attaches automatically on a successful touch).
+    Other grabbers (owlbear) roll an opposed CMB vs the target's CMD.
+    On success, both creatures gain the ``grappled`` condition; the
+    attacker's ``grappling_target_id`` and target's ``grappled_by_id``
+    link the pair (consumed by grapple-action handlers).
+    """
+    auto_grab = _has_racial_trait(attacker, "blood_drain")
+    if auto_grab:
+        attacker.add_condition("grappled")
+        target.add_condition("grappled")
+        attacker.grappling_target_id = target.id
+        target.grappled_by_id = attacker.id
+        return {
+            "target_id": target.id,
+            "passed": True,
+            "auto_grab": True,
+        }
+    passed, nat, total, margin = _resolve_maneuver(
+        attacker, target, "grapple", roller,
+    )
+    if passed:
+        attacker.add_condition("grappled")
+        target.add_condition("grappled")
+        attacker.grappling_target_id = target.id
+        target.grappled_by_id = attacker.id
+    return {
+        "target_id": target.id,
+        "natural": nat, "total": total, "margin": margin,
+        "passed": passed,
+    }
+
+
+def _resolve_disease_rider(
+    attacker: Combatant, target: Combatant, roller: Roller,
+) -> dict:
+    """Generic disease-on-bite save rider (ghoul fever, etc.).
+
+    Applies a short-term ``diseased`` marker on save failure. The
+    daily ability-damage cycle (1d3 Con + 1d3 Dex per RAW for ghoul
+    fever) isn't simulated yet — it requires a long-rest hook the
+    engine doesn't have. Marked accordingly in coverage.
+    """
+    from .spells import roll_save
+    hd = _monster_hd(attacker)
+    cha_mod = _ability_modifier(attacker, "cha")
+    dc = 10 + hd // 2 + cha_mod
+    passed, nat, total = roll_save(target, "fort", dc, roller)
+    if not passed:
+        target.add_condition("diseased")
+    return {
+        "target_id": target.id, "dc": dc,
+        "save_natural": nat, "save_total": total,
+        "passed": passed,
+    }
+
+
+def _resolve_giant_spider_poison(
+    attacker: Combatant, target: Combatant, roller: Roller,
+) -> dict:
+    """Giant-spider bite poison: Fort save or 1d2 Str damage.
+
+    PF1 RAW: DC 14 (small spider) or 17 (large) Fort save; failure
+    deals 1d2 Str damage per round for 4 rounds. v1 simplifies to a
+    single 1d2 Str damage hit on save fail; the recurring rounds and
+    multi-save cure aren't yet modeled.
+    """
+    from .spells import roll_save
+    hd = _monster_hd(attacker)
+    con_mod = _ability_modifier(attacker, "con")
+    dc = 10 + hd // 2 + con_mod
+    passed, nat, total = roll_save(target, "fort", dc, roller)
+    detail: dict = {
+        "target_id": target.id, "dc": dc,
+        "save_natural": nat, "save_total": total,
+        "passed": passed,
+    }
+    if not passed:
+        dmg_roll = roller.roll("1d2")
+        amount = int(dmg_roll.total)
+        target.apply_ability_damage("str", amount)
+        detail["str_damage"] = amount
+    return detail
 
 
 def _resolve_stunning_fist(

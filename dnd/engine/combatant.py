@@ -224,6 +224,22 @@ class Combatant:
     # Set at construction from ``monster.subtypes``.
     incorporeal: bool = False
 
+    # PF1 ability damage (poison, blood drain, etc.). Each point of
+    # damage lowers the effective ability score by 1; the mod-step
+    # approximation here is `-(dmg // 2)` per ability, applied as
+    # an untyped modifier on the ability:X target plus on ability-
+    # derived stats (attack/damage/saves/init/AC). Restored via
+    # ``heal_ability_damage`` (Restoration / Lesser Restoration / rest).
+    ability_damage: dict[str, int] = field(default_factory=dict)
+
+    # Whether the combatant is currently in an area of bright sunlight
+    # or a Daylight spell. Drives the light_sensitivity racial trait
+    # (kobold, orc, drow): when True AND the trait is present, the
+    # creature is dazzled. Updated externally when light state changes
+    # (the encounter setup, daylight cast, etc.) by calling
+    # ``update_light_sensitivity_state``.
+    in_bright_light: bool = False
+
     # PF1 energy drain (negative levels). Each negative level applies
     # -1 to attack rolls, all saves, skill/ability checks, plus -5 max
     # HP. Restoration removes them one at a time. ``apply_negative_levels``
@@ -648,6 +664,85 @@ class Combatant:
             prev = self.resources.pop("pre_invisible_concealment", 0)
             self.concealment = prev
 
+    def apply_ability_damage(self, ability: str, amount: int) -> None:
+        """Apply ``amount`` PF1 ability damage to ``ability``.
+
+        Each cumulative point shifts derived stats by -1 per 2 points
+        (a coarse approximation of the score → modifier transform,
+        since odd starting scores otherwise need parity-tracking).
+        Updates a single source-tracked modifier per ability so
+        repeated damage stacks cleanly. Drops the matching skill /
+        save / attack / AC / init modifier alongside.
+        """
+        if amount <= 0:
+            return
+        self.ability_damage[ability] = (
+            self.ability_damage.get(ability, 0) + amount
+        )
+        self._refresh_ability_damage(ability)
+
+    def heal_ability_damage(self, ability: str, amount: int) -> None:
+        """Restore up to ``amount`` ability damage on ``ability``.
+
+        Lesser Restoration heals 1d4 of one ability's damage;
+        Restoration heals all damage to one ability + 1 negative
+        level. Healing dropping to 0 clears the entry entirely.
+        """
+        cur = self.ability_damage.get(ability, 0)
+        new = max(0, cur - amount)
+        if new == 0:
+            self.ability_damage.pop(ability, None)
+        else:
+            self.ability_damage[ability] = new
+        self._refresh_ability_damage(ability)
+
+    def _refresh_ability_damage(self, ability: str) -> None:
+        src = f"ability_damage:{ability}"
+        self.modifiers.remove_by_source(src)
+        dmg = self.ability_damage.get(ability, 0)
+        if dmg <= 0:
+            return
+        delta = -(dmg // 2)
+        if delta == 0:
+            return
+        targets = _ABILITY_DAMAGE_DERIVED.get(ability, ())
+        for tgt in targets:
+            self.modifiers.add(Modifier(
+                value=delta, type="untyped", target=tgt, source=src,
+            ))
+        self.modifiers.add(Modifier(
+            value=delta, type="untyped",
+            target=f"ability:{ability}", source=src,
+        ))
+
+    def has_racial_trait(self, trait_id: str) -> bool:
+        """Return True if the underlying monster template carries
+        ``trait_id``. Always False for character templates."""
+        if self.template_kind != "monster" or self.template is None:
+            return False
+        for t in (getattr(self.template, "racial_traits", None) or []):
+            if isinstance(t, dict) and t.get("id") == trait_id:
+                return True
+        return False
+
+    def update_light_sensitivity_state(self) -> None:
+        """Apply or remove the dazzled condition based on the
+        ``in_bright_light`` flag and the presence of a
+        ``light_sensitivity`` / ``light_sensitivity_orc`` racial trait.
+
+        Call this after flipping ``in_bright_light`` (encounter setup,
+        Daylight spell area, scene transition) so the dazzled condition
+        re-syncs.
+        """
+        sensitive = (
+            self.has_racial_trait("light_sensitivity")
+            or self.has_racial_trait("light_sensitivity_orc")
+        )
+        if sensitive and self.in_bright_light:
+            self.add_condition("dazzled")
+        elif sensitive and not self.in_bright_light:
+            self.remove_condition("dazzled")
+
     def apply_negative_levels(self, n: int = 1) -> None:
         """Add ``n`` negative levels (PF1 energy drain).
 
@@ -843,6 +938,74 @@ def _monster_damage_reduction(
     return None
 
 
+def _apply_monster_racial_traits(
+    monster: Monster, coll: ModifierCollection,
+) -> dict:
+    """Walk ``monster.racial_traits`` and contribute passive effects.
+
+    Modifiers (qualifier-based) are appended to ``coll`` directly.
+    Flag-shaped effects (immunities, concealment, etc.) are returned
+    as a dict for the Combatant constructor to thread into its
+    fields. Unknown trait ids are silently passed through — riders
+    that need attack-time wiring (paralysis_ghoul, grab, pounce,
+    etc.) are handled in turn_executor; this helper covers only the
+    passive / data-shaped traits.
+    """
+    extras: dict = {
+        "condition_immunities": set(),
+        "energy_immunity": set(),
+        "energy_resistance": {},
+        "concealment": 0,
+    }
+    src_prefix = f"monster:{monster.id}"
+    for t in monster.racial_traits or []:
+        if not isinstance(t, dict):
+            continue
+        tid = t.get("id", "")
+        if tid.startswith("channel_resistance_"):
+            try:
+                n = int(tid.rsplit("_", 1)[-1])
+            except ValueError:
+                continue
+            for save_target in ("fort_save", "ref_save", "will_save"):
+                coll.add(Modifier(
+                    value=n, type="racial", target=save_target,
+                    source=f"{src_prefix}:{tid}",
+                    qualifier=(("effect_type", ("channel_energy",)),),
+                ))
+        elif tid == "cold_immunity":
+            extras["energy_immunity"].add("cold")
+        elif tid == "displacement":
+            extras["concealment"] = max(extras["concealment"], 50)
+        elif tid == "resistance_save":
+            for save_target in ("fort_save", "ref_save", "will_save"):
+                coll.add(Modifier(
+                    value=2, type="racial", target=save_target,
+                    source=f"{src_prefix}:{tid}",
+                    qualifier=(("effect_tags", ("spell",)),),
+                ))
+        elif tid == "ooze_traits":
+            # Oozes' full PF1 immunity set: mind-affecting, paralysis,
+            # poison, sleep, polymorph, stun, ability damage/drain (we
+            # don't model damage/drain), critical hits and precision
+            # damage (also not yet condition-shaped).
+            extras["condition_immunities"].update({
+                "charmed", "fascinated", "frightened", "shaken",
+                "panicked", "dazed", "confused", "sleeping",
+                "paralyzed", "stunned", "fatigued", "exhausted",
+                "nauseated", "sickened",
+            })
+        elif tid == "quickness":
+            # Choker quickness: +1 enhancement to initiative. The
+            # "+10 ft to first-round move" piece is deferred (no
+            # round-1 movement-bonus path in the engine yet).
+            coll.add(Modifier(
+                value=1, type="enhancement", target="initiative",
+                source=f"{src_prefix}:{tid}",
+            ))
+    return extras
+
+
 def _monster_death_threshold(monster: Monster) -> int:
     """PF1 RAW: HP <= -CON kills a living creature.
 
@@ -888,6 +1051,20 @@ UNDEAD_CONDITION_IMMUNITIES: frozenset[str] = frozenset({
 _IMPLIES_HELPLESS: frozenset[str] = frozenset({
     "unconscious", "sleeping", "paralyzed", "petrified",
 })
+
+# Per-ability list of derived stat targets that should drop alongside
+# ability damage. The ``ability:X`` target is added separately (so
+# skill_total picks up the change). Saves are recomputed via the
+# matching save-stat target; AC/init/attack/damage track the score
+# changes for melee/ranged/Dex-shaped behaviors.
+_ABILITY_DAMAGE_DERIVED: dict[str, tuple[str, ...]] = {
+    "str": ("attack", "damage"),
+    "dex": ("ac", "ref_save", "initiative"),
+    "con": ("fort_save",),
+    "int": (),
+    "wis": ("will_save",),
+    "cha": (),
+}
 
 # Constructs share most undead immunities (no metabolism either).
 CONSTRUCT_CONDITION_IMMUNITIES: frozenset[str] = UNDEAD_CONDITION_IMMUNITIES
@@ -1081,6 +1258,12 @@ def combatant_from_monster(
     subtypes = [s.lower() for s in (monster.subtypes or [])]
     is_incorporeal = "incorporeal" in subtypes
 
+    # Walk racial_traits for passive effects: channel_resistance,
+    # cold_immunity, displacement, resistance_save, ooze_traits, etc.
+    racial_extras = _apply_monster_racial_traits(monster, coll)
+    base_condition_immunities = _monster_condition_immunities(monster)
+    base_condition_immunities.update(racial_extras["condition_immunities"])
+
     return Combatant(
         id=_new_id(),
         name=name or monster.name,
@@ -1109,7 +1292,10 @@ def combatant_from_monster(
         template=monster,
         damage_reduction=_monster_damage_reduction(monster),
         death_threshold=_monster_death_threshold(monster),
-        condition_immunities=_monster_condition_immunities(monster),
+        condition_immunities=base_condition_immunities,
+        energy_immunity=racial_extras["energy_immunity"],
+        energy_resistance=racial_extras["energy_resistance"],
+        concealment=racial_extras["concealment"],
         incorporeal=is_incorporeal,
     )
 
