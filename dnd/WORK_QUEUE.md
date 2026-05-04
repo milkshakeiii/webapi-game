@@ -35,6 +35,88 @@ deleting in the next cleanup pass.
 
 ---
 
+## Audit follow-ups (2026-05-04)
+
+Five-slice audit against the d20pfsrd dumps in `dnd/checklist/rules/`
+landed the four high-severity fixes (defensive cast DC, validate_turn
+wiring, ranged AoO, casting_time, plus the batch-A six). The
+remaining medium/low findings below are all tracked in `coverage.py`
+as `PARTIAL` or `NOT_IMPLEMENTED` with explicit gap notes — this list
+is just the prioritized roll-up.
+
+### P0 — small numeric fixes (each ~30 min with a test)
+
+- Stunned: add -2 AC modifier; drop held items on apply; +4 to attacker's
+  CMB vs stunned target. `coverage.CONDITIONS["stunned"]`.
+- Cowering: add -2 AC modifier. `coverage.CONDITIONS["cowering"]`.
+- Pinned: add -4 AC modifier. `coverage.CONDITIONS["pinned"]`.
+- Stunned action ban also via validate_turn (not just the
+  stunned_until_round rider). Externally-applied stun currently
+  doesn't block actions.
+- Combat maneuver: Tiny-or-smaller use Dex (not Str) for CMB.
+  `coverage.combat_mechanics["combat.combat_maneuver_basic"]`.
+- Combat maneuver: auto-success vs immobilized/unconscious/helpless;
+  +4 vs stunned. Same coverage entry.
+- Bull rush: enforce one-size-larger restriction; "move with target"
+  option. `coverage["combat.bull_rush"]`.
+- Trip: fail-by-10 self-prone path (currently unreachable);
+  flying/legless/ooze immunity. `coverage["combat.trip"]`.
+- Disarm: fail-by-10 self-drop; -4 unarmed-disarm penalty.
+  `coverage["combat.disarm"]`.
+- Overrun: target's "avoid" choice. `coverage["combat.overrun"]`.
+- 5-foot step: reject in difficult terrain.
+  `coverage["combat.5_foot_step"]`.
+- Charge: -2 AC penalty until next turn. `coverage["combat.charge"]`.
+- Flat-footed: block AoOs unless Combat Reflexes. `coverage["combat.aoo"]`.
+- Threatened squares: unarmed without Improved Unarmed Strike doesn't
+  threaten. `coverage["combat.threatened_squares"]`.
+- AoO trigger: unarmed-strike-vs-armed provokes from the armed
+  target. `coverage["combat.aoo_provoking_actions"]`.
+- Grapple: humanoid-without-2-free-hands -4 CMB.
+  `coverage.CONDITIONS["grappled"]`.
+
+### P1 — coherent batches
+
+- **Spell Resistance for non-monsters.** Currently scoped to
+  `target.template_kind == "monster"`. Drow racial SR, SR-granting
+  items, and the SR buff spell are silently SR 0. Generalize the
+  lookup. `coverage["magic.spell_resistance"]`.
+- **Evasion / Improved Evasion / Mettle.** Class features absent
+  entirely. Rogue/monk Reflex-half saves should deal zero on success
+  (evasion); Improved Evasion adds half-on-fail. Mettle is the
+  Fort/Will analogue. `coverage["combat.evasion"|"...improved..."|
+  "...mettle"]`.
+- **Broken-item penalties.** `InventoryItem.broken` flag is set but
+  never consulted in attack/AC/Wand-charge math. Wire the four
+  RAW-prescribed penalty paths. `coverage["combat.broken_item_penalties"]`.
+- **Concentration-check broadening.** RAW-prescribed triggers
+  beyond the grappled / damage-from-AoO paths: entangled cast, pinned
+  cast, vigorous/violent motion, severe weather, continuous damage
+  during cast. `coverage["magic.concentration_*"]`.
+- **Fear behaviors.** Frightened "must flee from source"; Panicked
+  "drop items + flee + cornered defaults to total defense"; Fascinated
+  "obvious threat breaks effect". All currently bypassed.
+  `coverage.CONDITIONS["frightened"|"panicked"|"fascinated"]`.
+
+### P2 — structural
+
+- **Multi-round cast deferred resolution.** Spells with casting_time
+  >= 1 round currently resolve on the same turn; RAW says they
+  complete "just before the caster's next turn" (or N rounds later
+  for multi-round) with concentration checks on any interruption
+  during the wait. `coverage["magic.cast_in_progress"]`.
+- **Material / focus / divine-focus components.** Eschew Materials
+  is a no-op marker today. Pouch / spellbook / holy symbol tracking,
+  loss-on-disarm, etc. `coverage["magic.casting_components_m|f|df"]`.
+- **Immediate actions.** No model exists. Consumes next round's swift
+  per RAW. Driver: counterspells will need this; some defensive
+  metamagic too. `coverage["combat.immediate_action"]`.
+- **Standard-as-move substitution.** "Instead of taking a standard
+  action, you may take a move action." Engine doesn't model the
+  swap. `coverage["combat.action_swap_standard_to_move"]`.
+
+---
+
 ## P0 — snackable wins
 
 ### Iterative-attack BAB sanity check
