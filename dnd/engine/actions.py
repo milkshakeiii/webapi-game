@@ -1227,6 +1227,368 @@ def _chargeable_targets(
 
 
 # ---------------------------------------------------------------------------
+# Phase 2 parity harness: translate v1 TurnIntent into substrate Actions
+# and run them. Drop-in replacement for ``execute_turn``.
+# ---------------------------------------------------------------------------
+
+
+def translate_intent(
+    do: dict,
+    actor: Combatant,
+    encounter,
+    grid: Grid,
+) -> list[Action]:
+    """Convert a v1 ``TurnIntent.do`` dict into a list of substrate
+    Actions that produce equivalent behavior when applied in order.
+
+    Mirrors ``execute_turn``'s slot walk: free → swift → composite OR
+    (move + 5ft + standard). Each slot's intent dict is compiled into
+    the matching Action subclass.
+
+    Returns ``[..., EndTurn]`` always — the final EndTurn closes the
+    turn so the substrate's slot accounting wraps cleanly."""
+    actions: list[Action] = []
+
+    # Swift slot — currently only ``cast`` is supported here in v1.
+    swift = do.get("swift")
+    if swift is not None and swift.get("type") == "cast":
+        compiled = _compile_cast_intent(swift, actor, grid)
+        if compiled is not None:
+            actions.append(compiled)
+
+    # Composite or slot form.
+    if "composite" in do:
+        compiled = _compile_composite_intent(
+            do["composite"], do.get("args") or {}, actor, encounter, grid,
+        )
+        if compiled is not None:
+            actions.append(compiled)
+    else:
+        slots = do.get("slots") or do
+        if slots.get("move") is not None:
+            compiled = _compile_move_slot_intent(
+                slots["move"], actor, encounter, grid,
+            )
+            if compiled is not None:
+                actions.append(compiled)
+        five = slots.get("five_foot_step")
+        if five is not None:
+            actions.append(FiveFootStep(
+                actor_id=actor.id, destination=tuple(five),
+            ))
+        if slots.get("standard") is not None:
+            compiled = _compile_standard_slot_intent(
+                slots["standard"], actor, encounter, grid,
+            )
+            if compiled is not None:
+                actions.append(compiled)
+
+    actions.append(EndTurn(actor_id=actor.id))
+    return actions
+
+
+def _resolve_intent_target(
+    target_value, actor: Combatant, grid: Grid,
+) -> Combatant | None:
+    """Resolve a target value from a v1 intent into a live Combatant.
+
+    The Interpreter usually pre-resolves expressions, so the value is
+    typically already a Combatant. Strings (unresolved expressions) get
+    a best-effort lookup via the grid; failure returns None."""
+    if target_value is None:
+        return None
+    if isinstance(target_value, Combatant):
+        return target_value
+    if isinstance(target_value, str):
+        return grid.combatants.get(target_value)
+    return None
+
+
+def _compile_cast_intent(
+    args: dict, actor: Combatant, grid: Grid,
+) -> Action | None:
+    """Compile a cast-shaped intent dict into a Cast action."""
+    spell_id = args.get("spell")
+    if not spell_id:
+        return None
+    target = _resolve_intent_target(args.get("target"), actor, grid)
+    target_id = target.id if target is not None else actor.id
+    return Cast(
+        actor_id=actor.id, spell_id=spell_id, target_id=target_id,
+        spell_level=int(args.get("spell_level", 0)),
+        defensive=bool(args.get("defensive", False)),
+        metamagic=tuple(args.get("metamagic") or ()),
+    )
+
+
+def _compile_move_slot_intent(
+    move: dict, actor: Combatant, encounter, grid: Grid,
+) -> Action | None:
+    """Compile a move-slot intent into a substrate Action."""
+    mtype = move.get("type")
+    if mtype == "move_to":
+        dest = move.get("target")
+        if isinstance(dest, tuple) and len(dest) == 2:
+            return Move(actor_id=actor.id, destination=dest)
+        return None
+    if mtype in ("move_toward", "move_away"):
+        target_value = move.get("target")
+        target = _resolve_intent_target(target_value, actor, grid)
+        if target is None:
+            return None
+        from .turn_executor import (
+            _movement_squares, _square_toward, _square_away,
+        )
+        speed = _movement_squares(actor, encounter)
+        if mtype == "move_toward":
+            dest = _square_toward(actor, target, speed, grid)
+        else:
+            dest = _square_away(actor, target, speed, grid)
+        if dest is None:
+            return None
+        return Move(actor_id=actor.id, destination=dest)
+    if mtype == "stand_up":
+        return StandUp(actor_id=actor.id)
+    if mtype == "draw_weapon":
+        return DrawWeapon(
+            actor_id=actor.id, weapon_id=str(move.get("weapon", "")),
+        )
+    if mtype == "drink_potion":
+        return DrinkPotion(
+            actor_id=actor.id, potion_id=str(move.get("potion", "")),
+        )
+    # retrieve_stowed_item: no substrate Action yet; skip.
+    return None
+
+
+def _compile_standard_slot_intent(
+    std: dict, actor: Combatant, encounter, grid: Grid,
+) -> Action | None:
+    """Compile a standard-slot intent into a substrate Action."""
+    stype = std.get("type")
+    if stype == "attack":
+        target = _resolve_intent_target(std.get("target"), actor, grid)
+        if target is None:
+            return None
+        return Attack(actor_id=actor.id, target_id=target.id)
+    if stype == "total_defense":
+        return TotalDefense(actor_id=actor.id)
+    if stype == "cast":
+        return _compile_cast_intent(std, actor, grid)
+    return None
+
+
+def _compile_composite_intent(
+    name: str, args: dict, actor: Combatant, encounter, grid: Grid,
+) -> Action | None:
+    """Compile a composite intent into a substrate Action.
+
+    Returns None for ``hold`` (which becomes pure EndTurn) and for
+    composites that don't yet have a substrate Action (e.g.,
+    ``ready_brace``, ``web``, ``partial_charge``); the caller drops
+    the unhandled action and falls through to EndTurn so the turn
+    still closes cleanly."""
+    target = _resolve_intent_target(args.get("target"), actor, grid)
+    tid = target.id if target is not None else actor.id
+
+    if name == "hold":
+        return None
+    if name == "charge":
+        return Charge(actor_id=actor.id, target_id=tid)
+    if name == "full_attack":
+        return FullAttack(actor_id=actor.id, target_id=tid)
+    if name == "withdraw":
+        return Withdraw(actor_id=actor.id,
+                        direction=args.get("direction", "south"))
+    if name == "run":
+        return Run(actor_id=actor.id,
+                   direction=args.get("direction", "south"))
+    if name == "trample":
+        return Trample(actor_id=actor.id,
+                       direction=args.get("direction", "south"))
+    if name == "coup_de_grace":
+        return CoupDeGrace(actor_id=actor.id, target_id=tid)
+    if name == "fight_defensively":
+        return FightDefensively(actor_id=actor.id, target_id=tid)
+    if name == "cleave":
+        return Cleave(actor_id=actor.id, target_id=tid)
+    if name == "cast":
+        return _compile_cast_intent(args, actor, grid)
+    if name == "smite_evil":
+        return SmiteEvil(actor_id=actor.id, target_id=tid)
+    if name == "channel_energy":
+        return ChannelEnergy(actor_id=actor.id,
+                             mode=args.get("mode", "heal_living"))
+    if name == "bardic_performance":
+        return BardicPerformance(
+            actor_id=actor.id,
+            kind=args.get("kind", "inspire_courage"),
+        )
+    if name == "stunning_fist":
+        return StunningFist(actor_id=actor.id, target_id=tid)
+    if name == "detect_evil":
+        return DetectEvil(actor_id=actor.id)
+    if name == "domain_power":
+        return DomainPower(actor_id=actor.id,
+                           power=str(args.get("power", "")))
+    if name == "tail_spike_volley":
+        return TailSpikeVolley(actor_id=actor.id, target_id=tid)
+    if name == "escape_web":
+        return EscapeWeb(actor_id=actor.id)
+    if name == "aid_another":
+        return AidAnother(actor_id=actor.id, ally_id=tid,
+                          mode=args.get("mode", "attack"))
+    if name == "mount":
+        return Mount(actor_id=actor.id, steed_id=tid)
+    if name == "dismount":
+        return Dismount(actor_id=actor.id)
+    if name == "rage_start":
+        return RageStart(actor_id=actor.id)
+    if name == "rage_end":
+        return RageEnd(actor_id=actor.id)
+    if name == "grapple_damage":
+        return GrappleDamage(actor_id=actor.id)
+    if name == "grapple_move":
+        return GrappleMove(actor_id=actor.id,
+                           direction=args.get("direction", "north"))
+    if name == "grapple_pin":
+        return GrapplePin(actor_id=actor.id)
+    if name == "grapple_break_free":
+        return GrappleBreakFree(actor_id=actor.id,
+                                use_skill=bool(args.get("use_skill", False)))
+    if name in _MANEUVER_KINDS:
+        opts = {k: v for k, v in args.items() if k != "target"}
+        return Maneuver(actor_id=actor.id, kind=name,
+                        target_id=tid, options=opts)
+    # Unhandled composites: ``ready_brace``, ``web``, ``partial_charge``,
+    # and any future composite without a substrate Action yet. Phase 2
+    # will fill these in as parity tests surface them.
+    return None
+
+
+def run_intent_via_substrate(
+    actor: Combatant,
+    intent,  # TurnIntent | None
+    encounter,
+    grid: Grid,
+    roller: Roller,
+):
+    """Drop-in substrate-based replacement for ``execute_turn``.
+
+    Takes the same arguments and produces an equivalent ``TurnResult``
+    by translating the intent into substrate Actions and applying
+    them. Behavior is intended to match ``execute_turn`` for every
+    intent shape the v1 dispatch supports — that's the parity
+    contract Phase 2 must achieve before Phase 5 can delete the v1
+    executor.
+
+    Mirrored from execute_turn:
+      - hold / no rule matched → skip with reason; still tick aura
+        end-of-turn riders.
+      - validate_turn before dispatch; on error skip with
+        ``invalid_turn`` reason.
+      - confusion d% substitutes the do-block.
+      - free actions emitted as ``free`` events (or ``fall_prone``).
+      - then the slot walk via ``translate_intent`` + ``apply_action``.
+      - end-of-turn racial-effect riders fired after.
+    """
+    from .turn_executor import (
+        TurnEvent,
+        _apply_end_of_turn_racial_effects,
+        _apply_post_damage_state,
+        _intent_to_turn,
+        _resolve_confusion,
+        _turn_used_standard_action,
+    )
+    from .dsl import TurnIntent  # noqa: F401 — typing only
+    from .encounter import (
+        Turn as _Turn,  # noqa: F401
+        TurnValidationError,
+        validate_turn,
+    )
+
+    # Local import of TurnResult to avoid a top-level cycle.
+    from .turn_executor import TurnResult
+
+    rule_index = intent.rule_index if intent else None
+    events: list = []
+
+    if intent is None or (
+        "composite" in intent.do
+        and intent.do["composite"] == "hold"
+    ):
+        events.append(TurnEvent(
+            actor.id, "skip",
+            {"reason": "no rule matched" if intent is None else "hold"},
+        ))
+        _apply_end_of_turn_racial_effects(
+            actor, grid, roller, events, encounter=encounter,
+        )
+        return TurnResult(actor.id, rule_index, events)
+
+    # Action-economy validation (same as execute_turn).
+    try:
+        validate_turn(_intent_to_turn(intent.do), actor, grid)
+    except TurnValidationError as exc:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "invalid_turn",
+            "detail": str(exc),
+        }))
+        _apply_end_of_turn_racial_effects(
+            actor, grid, roller, events, encounter=encounter,
+        )
+        return TurnResult(actor.id, rule_index, events)
+
+    do = intent.do
+
+    # Confusion d% (forced-substituted in v2 terms; v1 mutates do
+    # in-place — we mirror that here).
+    if "confused" in actor.conditions:
+        do = _resolve_confusion(actor, do, encounter, grid, roller, events)
+        if do is None:
+            return TurnResult(actor.id, rule_index, events)
+
+    # Free actions — these don't have substrate Actions yet, so we
+    # mirror execute_turn's emit-only handling.
+    for fa in do.get("free", []) or []:
+        fa_type = fa.get("type") if isinstance(fa, dict) else None
+        if fa_type == "fall_prone":
+            if "prone" not in actor.conditions:
+                actor.add_condition("prone")
+            events.append(TurnEvent(actor.id, "fall_prone", {}))
+        else:
+            events.append(TurnEvent(actor.id, "free",
+                                    {"action": fa}))
+
+    # Translate the rest of the intent into substrate Actions and run
+    # them via the substrate.
+    state = GameState(encounter=encounter, grid=grid)
+    state.reset_turn(actor)
+    actions_to_run = translate_intent(do, actor, encounter, grid)
+    for action in actions_to_run:
+        result = apply_action(action, state, roller)
+        events.extend(result.events)
+        if not actor.is_alive():
+            break
+
+    # Disabled self-damage (matches execute_turn).
+    if "disabled" in actor.conditions and actor.current_hp == 0:
+        if _turn_used_standard_action(events):
+            actor.take_damage(1)
+            _apply_post_damage_state(actor)
+            events.append(TurnEvent(actor.id, "disabled_self_damage", {
+                "amount": 1,
+            }))
+
+    # End-of-turn aura / ongoing-effect riders.
+    _apply_end_of_turn_racial_effects(
+        actor, grid, roller, events, encounter=encounter,
+    )
+
+    return TurnResult(actor.id, rule_index, events)
+
+
+# ---------------------------------------------------------------------------
 # Picker (patron-facing) and driver loop (engine-internal)
 #
 # These are demo-grade for Phase 1 — enough to run a small simulation

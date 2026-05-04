@@ -117,6 +117,14 @@ def _intent_to_turn(do: dict):
     )
 
 
+# Phase 2 feature flag. When True, ``execute_turn`` delegates to the
+# substrate-driven ``run_intent_via_substrate``. Default OFF — flip
+# locally to dogfood the substrate against the existing test suite.
+# Phase 2.3 will make the substrate the only path; this flag is then
+# removed alongside the v1 dispatch.
+EXECUTE_VIA_SUBSTRATE: bool = False
+
+
 def execute_turn(
     actor: Combatant,
     intent: TurnIntent | None,
@@ -124,7 +132,21 @@ def execute_turn(
     grid: Grid,
     roller: Roller,
 ) -> TurnResult:
-    """Execute the actor's turn against the encounter state."""
+    """Execute the actor's turn against the encounter state.
+
+    Phase 2 of the DSL v2 migration. When ``EXECUTE_VIA_SUBSTRATE`` is
+    True, delegates to ``run_intent_via_substrate`` (which translates
+    the intent into substrate Actions and runs them via apply_action).
+    The flag is OFF by default until parity is fully demonstrated;
+    flip to True to dogfood the substrate against the existing test
+    suite.
+    """
+    if EXECUTE_VIA_SUBSTRATE:
+        from .actions import run_intent_via_substrate
+        return run_intent_via_substrate(
+            actor, intent, encounter, grid, roller,
+        )
+
     rule_index = intent.rule_index if intent else None
     events: list[TurnEvent] = []
 
