@@ -548,6 +548,168 @@ def _chargeable_targets(
     return out
 
 
+# ---------------------------------------------------------------------------
+# Picker (patron-facing) and driver loop (engine-internal)
+#
+# These are demo-grade for Phase 1 — enough to run a small simulation
+# end-to-end and validate the substrate. The real picker compilation
+# from BehaviorScript / DSL lives in dsl.py and lands in Phase 4; the
+# real driver loop integrates with the sandbox tick worker in Phase 2.
+# ---------------------------------------------------------------------------
+
+
+class Picker:
+    """Patron-facing behavior interface. Replaces ``BehaviorScript`` /
+    ``TurnIntent`` in the v2 model.
+
+    A picker is called many times per turn — once per decision point.
+    Each call receives the actor, the read-only game state, and the
+    legal-actions list; it returns one chosen action. The picker is
+    *kind-blind*: see ``DECISION_POINT_DSL.md`` §4.1 for why."""
+
+    def pick(
+        self,
+        actor: Combatant,
+        state: GameState,
+        actions: list[Action],
+    ) -> Action:
+        raise NotImplementedError
+
+
+class ClosestEnemyPicker(Picker):
+    """Demo behavior: a melee fighter who walks toward the closest
+    enemy and attacks. Preference order:
+
+      1. FullAttack on the closest enemy if offered.
+      2. Charge to the closest enemy if offered.
+      3. Single Attack on the closest enemy if offered.
+      4. Move toward the closest enemy.
+      5. EndTurn.
+
+    Demonstrates the per-decision picker shape; not a real DSL-
+    compiled picker."""
+
+    def pick(
+        self,
+        actor: Combatant,
+        state: GameState,
+        actions: list[Action],
+    ) -> Action:
+        enemy = self._closest_enemy(actor, state)
+        if enemy is None:
+            return _first(actions, EndTurn)
+
+        for a in actions:
+            if isinstance(a, FullAttack) and a.target_id == enemy.id:
+                return a
+        for a in actions:
+            if isinstance(a, Charge) and a.target_id == enemy.id:
+                return a
+        for a in actions:
+            if isinstance(a, Attack) and a.target_id == enemy.id:
+                return a
+
+        moves = [a for a in actions if isinstance(a, Move)]
+        if moves:
+            return min(moves, key=lambda m: state.grid.distance_squares(
+                m.destination, enemy.position,
+            ))
+        return _first(actions, EndTurn)
+
+    @staticmethod
+    def _closest_enemy(
+        actor: Combatant, state: GameState,
+    ) -> Combatant | None:
+        candidates = [
+            o for o in state.grid.combatants.values()
+            if o.team != actor.team
+            and o.is_alive()
+            and "dead" not in o.conditions
+        ]
+        if not candidates:
+            return None
+        return min(
+            candidates,
+            key=lambda c: state.grid.distance_squares(
+                actor.position, c.position,
+            ),
+        )
+
+
+def _first(actions: list[Action], cls: type) -> Action:
+    for a in actions:
+        if isinstance(a, cls):
+            return a
+    raise RuntimeError(f"no {cls.__name__} in legal actions")
+
+
+def run_encounter(
+    state: GameState,
+    pickers: dict[str, Picker],
+    roller: Roller,
+    *,
+    max_rounds: int = 50,
+) -> list:
+    """Drive the encounter to completion (one team standing) or until
+    ``max_rounds`` is reached. Returns the flat event log.
+
+    Walks the existing ``Encounter`` initiative order, resets each
+    actor's slots at start-of-turn, and loops the picker → apply
+    cycle until the picker returns ``EndTurn`` (or the actor hits a
+    safety bound on decisions per turn).
+
+    Phase 1 demo. Phase 2 will replace ``execute_turn`` with this
+    loop; Phase 3 adds reactive-interrupt handling so the loop
+    coordinates B's picker when A's action provokes."""
+    from .turn_executor import _apply_end_of_turn_racial_effects
+    enc = state.encounter
+    log: list = []
+    decision_cap = 50  # safety bound per turn
+    for _ in range(max_rounds):
+        for ir in enc.initiative:
+            actor = ir.combatant
+            if not actor.is_alive() or "dead" in actor.conditions:
+                continue
+            picker = pickers.get(actor.id)
+            if picker is None:
+                continue
+            state.reset_turn(actor)
+            steps = 0
+            while not state.slots_for(actor).turn_ended:
+                steps += 1
+                if steps > decision_cap:
+                    raise RuntimeError(
+                        f"actor {actor.id} hit decision cap of "
+                        f"{decision_cap} — picker likely looping",
+                    )
+                actions = enumerate_legal_actions(actor, state)
+                chosen = picker.pick(actor, state, actions)
+                result = apply_action(chosen, state, roller)
+                log.extend(result.events)
+                if not actor.is_alive():
+                    break
+            # End-of-turn riders (auras, rake, etc.) — same pass the
+            # v1 executor makes.
+            if actor.is_alive() and "dead" not in actor.conditions:
+                _apply_end_of_turn_racial_effects(
+                    actor, state.grid, roller, log, encounter=enc,
+                )
+        # Round wrap: tick every combatant (ferocity bleed, dying
+        # 1-HP/round loss, ongoing effects, daily refresh, etc.).
+        enc.round_number += 1
+        for ir in enc.initiative:
+            ir.combatant.tick_round(enc.round_number, roller=enc.roller)
+        # Victory check.
+        teams_alive = {
+            ir.combatant.team for ir in enc.initiative
+            if ir.combatant.is_alive()
+            and "dead" not in ir.combatant.conditions
+        }
+        if len(teams_alive) <= 1:
+            return log
+    return log
+
+
 def _viable_withdraw_directions(
     actor: Combatant, grid: Grid,
 ) -> list[str]:
