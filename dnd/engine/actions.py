@@ -164,6 +164,31 @@ class GrappleBreakFree(Action):
     use_skill: bool = False
 
 
+# ── Spellcasting ──────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class Cast(Action):
+    """Cast a spell at a target combatant or self.
+
+    For AOE spells (fireball, sleep, etc.), the target's square is the
+    AOE center. For single-creature spells, the target is the affected
+    creature. For self-only spells (mage_armor, true_strike), target_id
+    is the actor's own id.
+
+    ``defensive`` triggers a concentration check (DC 15 + 2 * spell
+    level) when the actor is threatened; without it, the cast provokes
+    AoOs from threateners. ``metamagic`` is the list of metamagic
+    feats applied to this cast; raises the slot cost per the
+    metamagic_bumps table in turn_executor."""
+
+    spell_id: str
+    target_id: str
+    spell_level: int
+    defensive: bool = False
+    metamagic: tuple[str, ...] = ()
+
+
 # ---------------------------------------------------------------------------
 # Per-turn slot accounting and game-state wrapper
 # ---------------------------------------------------------------------------
@@ -329,6 +354,16 @@ def enumerate_legal_actions(
                 actions.append(Maneuver(
                     actor_id=actor.id, kind=kind, target_id=target.id,
                 ))
+
+    # Spellcasting — enumerated per spell × per target. Defensive
+    # variants are added when the actor is in a threatened square.
+    # Phase 1 simplifications: no metamagic combinations enumerated
+    # (patrons can construct Cast actions with metamagic manually);
+    # AOE spells use the target combatant's square as the AOE center
+    # rather than enumerating every reachable square.
+    if not slots.standard_used and not slots.full_round_used:
+        for cast in _enumerate_casts(actor, state):
+            actions.append(cast)
 
     # Grapple maintenance — usable only when the actor is currently
     # grappling someone (grappling_target_id set) or being grappled
@@ -499,6 +534,24 @@ def apply_action(
     if isinstance(action, GrapplePin):
         from .turn_executor import _do_grapple_pin
         _do_grapple_pin(actor, {}, encounter, grid, roller, {}, events)
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, Cast):
+        from .turn_executor import _do_cast
+        target = grid.combatants.get(action.target_id)
+        if target is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "cast: target gone"}))
+            return ApplyResult(events=events)
+        args = {
+            "spell": action.spell_id,
+            "target": target,
+            "spell_level": action.spell_level,
+            "defensive": action.defensive,
+            "metamagic": list(action.metamagic),
+        }
+        _do_cast(actor, args, encounter, grid, roller, {}, events)
         slots.standard_used = True
         return ApplyResult(events=events)
 
@@ -838,6 +891,95 @@ def run_encounter(
         if len(teams_alive) <= 1:
             return log
     return log
+
+
+# Spell.target prefixes that mean "self only". Anything starting with
+# any of these resolves to a Cast targeting the actor's own id, with
+# no enemy/ally enumeration. Other target shapes (creature_touched,
+# one_creature, area-shaped, etc.) enumerate per visible combatant.
+_SELF_TARGET_PREFIXES: tuple[str, ...] = ("self",)
+
+
+def _enumerate_casts(
+    actor: Combatant, state: GameState,
+) -> list[Cast]:
+    """Enumerate every (spell, target, defensive) Cast available to
+    ``actor`` right now.
+
+    Phase 1 scope:
+
+    - Spell pool comes from ``actor.castable_spells`` (set by both the
+      prepared and spontaneous casting models — prepared casters
+      populate it with their currently-prepared spells).
+    - For each spell, the level is read from ``spell.level_by_class``
+      using the actor's class id (when known); falls back to 0.
+    - Targets:
+        * spells whose ``target`` field starts with "self" → just
+          Cast(target=actor.id)
+        * everything else → one Cast(target=visible_combatant.id) per
+          visible combatant on the grid (allies and enemies both —
+          fireball / cure / etc. all share the same enumeration shape;
+          the picker chooses friend or foe)
+    - When the actor is in a threatened square (some hostile threatens
+      them), every Cast is also offered with ``defensive=True``.
+    - Metamagic combinations are not enumerated; patrons can construct
+      Cast actions with their own ``metamagic`` tuple.
+    """
+    if not actor.castable_spells:
+        return []
+
+    from .content import default_registry
+    registry = default_registry()
+
+    grid = state.grid
+    threatened = any(
+        other.team != actor.team
+        and other.is_alive()
+        and "dead" not in other.conditions
+        and grid.threatens(other, actor)
+        for other in grid.combatants.values()
+        if other.id != actor.id
+    )
+
+    class_id = None
+    if actor.template_kind == "character" and actor.template is not None:
+        class_id = getattr(actor.template, "class_id", None)
+
+    visible_targets = [
+        c for c in grid.combatants.values()
+        if c.is_alive() and "dead" not in c.conditions
+    ]
+
+    out: list[Cast] = []
+    for spell_id in sorted(actor.castable_spells):
+        try:
+            spell = registry.get_spell(spell_id)
+        except Exception:
+            continue
+        spell_level = 0
+        if class_id is not None and class_id in spell.level_by_class:
+            spell_level = int(spell.level_by_class[class_id])
+        target_field = (spell.target or "").lower()
+        is_self_only = any(
+            target_field.startswith(p) for p in _SELF_TARGET_PREFIXES
+        )
+        if is_self_only:
+            target_ids = [actor.id]
+        else:
+            target_ids = [c.id for c in visible_targets]
+        for target_id in target_ids:
+            out.append(Cast(
+                actor_id=actor.id, spell_id=spell_id,
+                target_id=target_id, spell_level=spell_level,
+                defensive=False,
+            ))
+            if threatened:
+                out.append(Cast(
+                    actor_id=actor.id, spell_id=spell_id,
+                    target_id=target_id, spell_level=spell_level,
+                    defensive=True,
+                ))
+    return out
 
 
 def _viable_withdraw_directions(
