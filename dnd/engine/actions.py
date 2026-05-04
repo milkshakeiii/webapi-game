@@ -164,6 +164,167 @@ class GrappleBreakFree(Action):
     use_skill: bool = False
 
 
+# ── Move-action grab bag ──────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class DrawWeapon(Action):
+    """Move action: draw a weapon. Does NOT provoke (RAW Action Table)."""
+
+    weapon_id: str
+
+
+@dataclass(frozen=True)
+class StandUp(Action):
+    """Move action: stand from prone. Provokes AoOs from threateners."""
+
+
+@dataclass(frozen=True)
+class Mount(Action):
+    """Move action: mount an adjacent steed."""
+
+    steed_id: str
+
+
+@dataclass(frozen=True)
+class Dismount(Action):
+    """Move action: dismount the current steed."""
+
+
+# ── Standard-action grab bag ──────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class DrinkPotion(Action):
+    """Standard action: drink a potion. Provokes."""
+
+    potion_id: str
+
+
+@dataclass(frozen=True)
+class AidAnother(Action):
+    """Standard action: aid an adjacent ally with attack or AC."""
+
+    ally_id: str
+    mode: str = "attack"  # "attack" or "ac"
+
+
+@dataclass(frozen=True)
+class FightDefensively(Action):
+    """Standard action: -4 attack / +2 dodge AC; single attack."""
+
+    target_id: str
+
+
+@dataclass(frozen=True)
+class Cleave(Action):
+    """Standard action: attack target; on hit, attack one adjacent foe.
+    Phase 1 picks the secondary target hardcoded per the v1 path; the
+    sub-action decision point for the secondary lands in Phase 3."""
+
+    target_id: str
+
+
+@dataclass(frozen=True)
+class ChannelEnergy(Action):
+    """Standard action: channel positive/negative energy in a 30-ft burst."""
+
+    mode: str = "heal_living"
+
+
+@dataclass(frozen=True)
+class StunningFist(Action):
+    """Standard action: declare and resolve an unarmed strike that stuns
+    on a failed Fort save."""
+
+    target_id: str
+
+
+@dataclass(frozen=True)
+class BardicPerformance(Action):
+    """Standard action (initial; later rounds maintain via free): start
+    a bardic performance. ``kind`` is the performance type."""
+
+    kind: str = "inspire_courage"
+
+
+@dataclass(frozen=True)
+class DetectEvil(Action):
+    """Standard action: detect alignment auras in a cone."""
+
+
+@dataclass(frozen=True)
+class DomainPower(Action):
+    """Standard action: cleric domain-granted active power. ``power``
+    selects which one (e.g., the Death domain's Bleeding Touch)."""
+
+    power: str
+
+
+@dataclass(frozen=True)
+class EscapeWeb(Action):
+    """Standard action while in webbing: Strength check or Escape
+    Artist to free yourself."""
+
+
+# ── Swift-action grab bag ─────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class SmiteEvil(Action):
+    """Swift action: declare a target; bonuses apply on attacks until
+    target dies or paladin rests."""
+
+    target_id: str
+
+
+# ── Free actions ──────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class RageStart(Action):
+    """Free action: enter rage."""
+
+
+@dataclass(frozen=True)
+class RageEnd(Action):
+    """Free action: end rage voluntarily."""
+
+
+# ── Full-round grab bag ───────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class Run(Action):
+    """Full-round action: 4x speed in a straight line; loses Dex to AC."""
+
+    direction: str
+
+
+@dataclass(frozen=True)
+class Trample(Action):
+    """Full-round action: charge through one or more foes; each takes
+    hooves damage and a Reflex save vs prone."""
+
+    direction: str
+
+
+@dataclass(frozen=True)
+class CoupDeGrace(Action):
+    """Full-round action vs. an adjacent helpless target: auto-hit + crit
+    damage; target rolls Fort or dies."""
+
+    target_id: str
+
+
+@dataclass(frozen=True)
+class TailSpikeVolley(Action):
+    """Full-round action (manticore): four ranged spike attacks against
+    a single target."""
+
+    target_id: str
+
+
 # ── Spellcasting ──────────────────────────────────────────────────────
 
 
@@ -365,6 +526,133 @@ def enumerate_legal_actions(
         for cast in _enumerate_casts(actor, state):
             actions.append(cast)
 
+    # Move-action grab bag: stand-up (prone only), mount/dismount, and
+    # draw-weapon. DrawWeapon enumeration pulls from carried_items
+    # (only weapons that aren't already held).
+    if (
+        not slots.move_used
+        and not slots.movement_taken
+        and not slots.full_round_used
+    ):
+        if "prone" in actor.conditions:
+            actions.append(StandUp(actor_id=actor.id))
+        if actor.mount_id is not None:
+            actions.append(Dismount(actor_id=actor.id))
+        else:
+            for steed in _adjacent_mountable_steeds(actor, grid):
+                actions.append(Mount(actor_id=actor.id, steed_id=steed.id))
+        for weapon_id in _stowed_weapon_ids(actor):
+            actions.append(DrawWeapon(
+                actor_id=actor.id, weapon_id=weapon_id,
+            ))
+
+    # Standard-action grab bag.
+    if not slots.standard_used and not slots.full_round_used:
+        # AidAnother — any adjacent ally.
+        for ally in _adjacent_allies(actor, grid):
+            actions.append(AidAnother(
+                actor_id=actor.id, ally_id=ally.id, mode="attack",
+            ))
+            actions.append(AidAnother(
+                actor_id=actor.id, ally_id=ally.id, mode="ac",
+            ))
+        # FightDefensively / Cleave / StunningFist — need an adjacent
+        # foe.
+        for foe in _attackable_targets(actor, grid):
+            if grid.is_adjacent(actor, foe):
+                actions.append(FightDefensively(
+                    actor_id=actor.id, target_id=foe.id,
+                ))
+                actions.append(Cleave(actor_id=actor.id, target_id=foe.id))
+                if actor.resources.get("stunning_fist_uses", 0) > 0:
+                    actions.append(StunningFist(
+                        actor_id=actor.id, target_id=foe.id,
+                    ))
+        # ChannelEnergy / DetectEvil / EscapeWeb / DrinkPotion /
+        # BardicPerformance / DomainPower — no target needed.
+        if actor.resources.get("channel_energy_uses", 0) > 0:
+            actions.append(ChannelEnergy(
+                actor_id=actor.id, mode="heal_living",
+            ))
+            actions.append(ChannelEnergy(
+                actor_id=actor.id, mode="harm_undead",
+            ))
+        # Detect Evil: paladins always; just emit one option.
+        actions.append(DetectEvil(actor_id=actor.id))
+        if "webbed" in actor.conditions or "entangled" in actor.conditions:
+            actions.append(EscapeWeb(actor_id=actor.id))
+        if actor.resources.get("bardic_performance_rounds", 0) > 0:
+            actions.append(BardicPerformance(
+                actor_id=actor.id, kind="inspire_courage",
+            ))
+        for power in actor.domain_spells.keys() if isinstance(
+            getattr(actor, "domain_spells", None), dict,
+        ) else ():
+            actions.append(DomainPower(actor_id=actor.id, power=power))
+        for potion_id in _carried_potion_ids(actor):
+            actions.append(DrinkPotion(
+                actor_id=actor.id, potion_id=potion_id,
+            ))
+
+    # Swift-action grab bag.
+    if not slots.swift_used:
+        if actor.resources.get("smite_evil_uses", 0) > 0:
+            # Smite Evil can target any visible foe regardless of
+            # melee/ranged reach (the bonuses apply to whatever attack
+            # the paladin makes against them next).
+            for other in grid.combatants.values():
+                if other.id == actor.id or other.team == actor.team:
+                    continue
+                if not other.is_alive() or "dead" in other.conditions:
+                    continue
+                actions.append(SmiteEvil(
+                    actor_id=actor.id, target_id=other.id,
+                ))
+
+    # Free-action grab bag (rage). Free actions don't consume the
+    # standard/move slots; we don't track a free-action budget for
+    # them. Picker can pick rage_start once per turn (apply will skip
+    # if already raging).
+    if actor.resources.get("rage_rounds", 0) > 0:
+        if "raging" not in actor.conditions:
+            actions.append(RageStart(actor_id=actor.id))
+        else:
+            actions.append(RageEnd(actor_id=actor.id))
+
+    # Full-round grab bag: Run, Trample, CoupDeGrace, TailSpikeVolley.
+    if (
+        not slots.standard_used
+        and not slots.move_used
+        and not slots.full_round_used
+    ):
+        for direction in _viable_withdraw_directions(actor, grid):
+            actions.append(Run(actor_id=actor.id, direction=direction))
+        # Trample requires the trample racial trait.
+        if _has_trait(actor, "trample"):
+            for direction in _viable_withdraw_directions(actor, grid):
+                actions.append(Trample(
+                    actor_id=actor.id, direction=direction,
+                ))
+        # CoupDeGrace: helpless adjacent foe.
+        for foe in _attackable_targets(actor, grid):
+            if (
+                grid.is_adjacent(actor, foe)
+                and "helpless" in foe.conditions
+            ):
+                actions.append(CoupDeGrace(
+                    actor_id=actor.id, target_id=foe.id,
+                ))
+        # TailSpikeVolley: actor has the manticore tail_spikes trait
+        # and at least one spike left.
+        if (
+            _has_trait(actor, "tail_spikes")
+            and actor.daily_resources.get("tail_spikes", 0) > 0
+        ):
+            for foe in _attackable_targets(actor, grid):
+                actions.append(TailSpikeVolley(
+                    actor_id=actor.id, target_id=foe.id,
+                ))
+
     # Grapple maintenance — usable only when the actor is currently
     # grappling someone (grappling_target_id set) or being grappled
     # (grappled_by_id set). All consume the standard slot.
@@ -535,6 +823,213 @@ def apply_action(
         from .turn_executor import _do_grapple_pin
         _do_grapple_pin(actor, {}, encounter, grid, roller, {}, events)
         slots.standard_used = True
+        return ApplyResult(events=events)
+
+    # ── Move-action grab bag ───────────────────────────────────────
+    if isinstance(action, DrawWeapon):
+        from .turn_executor import _do_move_action
+        _do_move_action(
+            actor, {"type": "draw_weapon", "weapon": action.weapon_id},
+            encounter, grid, {}, events,
+        )
+        slots.move_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, StandUp):
+        from .turn_executor import _do_move_action
+        _do_move_action(
+            actor, {"type": "stand_up"},
+            encounter, grid, {}, events,
+        )
+        slots.move_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, Mount):
+        from .turn_executor import _do_mount
+        _do_mount(actor, {"steed_id": action.steed_id},
+                  grid, {}, events)
+        slots.move_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, Dismount):
+        from .turn_executor import _do_dismount
+        _do_dismount(actor, {}, grid, events)
+        slots.move_used = True
+        return ApplyResult(events=events)
+
+    # ── Standard-action grab bag ───────────────────────────────────
+    if isinstance(action, DrinkPotion):
+        from .turn_executor import _do_move_action
+        _do_move_action(
+            actor, {"type": "drink_potion", "potion": action.potion_id},
+            encounter, grid, {}, events,
+        )
+        slots.standard_used = True  # drink is move-action per RAW; we
+        # track it as standard for simplicity until a finer slot model
+        # lands.
+        return ApplyResult(events=events)
+
+    if isinstance(action, AidAnother):
+        from .turn_executor import _do_aid_another
+        ally = grid.combatants.get(action.ally_id)
+        if ally is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "aid: ally gone"}))
+            return ApplyResult(events=events)
+        _do_aid_another(
+            actor, {"target": ally, "mode": action.mode},
+            encounter, grid, roller, {}, events,
+        )
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, FightDefensively):
+        from .turn_executor import _do_fight_defensively
+        target = grid.combatants.get(action.target_id)
+        if target is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "fight_defensively: target gone"}))
+            return ApplyResult(events=events)
+        _do_fight_defensively(
+            actor, {"target": target}, encounter, grid, roller, {}, events,
+        )
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, Cleave):
+        from .turn_executor import _do_cleave
+        target = grid.combatants.get(action.target_id)
+        if target is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "cleave: target gone"}))
+            return ApplyResult(events=events)
+        _do_cleave(
+            actor, {"target": target}, encounter, grid, roller, {}, events,
+        )
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, ChannelEnergy):
+        from .turn_executor import _do_channel_energy
+        _do_channel_energy(
+            actor, {"mode": action.mode},
+            encounter, grid, roller, {}, events,
+        )
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, StunningFist):
+        from .turn_executor import _do_stunning_fist
+        target = grid.combatants.get(action.target_id)
+        if target is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "stunning_fist: target gone"}))
+            return ApplyResult(events=events)
+        _do_stunning_fist(
+            actor, {"target": target},
+            encounter, grid, roller, {}, events,
+        )
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, BardicPerformance):
+        from .turn_executor import _do_bardic_performance
+        _do_bardic_performance(
+            actor, {"kind": action.kind},
+            encounter, grid, {}, events,
+        )
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, DetectEvil):
+        from .turn_executor import _do_detect_evil
+        _do_detect_evil(actor, {}, grid, {}, events)
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, DomainPower):
+        from .turn_executor import _do_domain_power
+        _do_domain_power(
+            actor, {"power": action.power},
+            encounter, grid, roller, {}, events,
+        )
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, EscapeWeb):
+        from .turn_executor import _do_escape_web
+        _do_escape_web(actor, {}, grid, roller, {}, events)
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    # ── Swift-action grab bag ──────────────────────────────────────
+    if isinstance(action, SmiteEvil):
+        from .turn_executor import _do_smite_evil
+        target = grid.combatants.get(action.target_id)
+        if target is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "smite_evil: target gone"}))
+            return ApplyResult(events=events)
+        _do_smite_evil(
+            actor, {"target": target}, encounter, grid, {}, events,
+        )
+        slots.swift_used = True
+        return ApplyResult(events=events)
+
+    # ── Free-action grab bag ───────────────────────────────────────
+    if isinstance(action, RageStart):
+        from .turn_executor import _do_rage_start
+        _do_rage_start(actor, {}, encounter, events)
+        return ApplyResult(events=events)
+
+    if isinstance(action, RageEnd):
+        from .turn_executor import _do_rage_end
+        _do_rage_end(actor, events)
+        return ApplyResult(events=events)
+
+    # ── Full-round grab bag ────────────────────────────────────────
+    if isinstance(action, Run):
+        from .turn_executor import _do_run
+        _do_run(actor, {"direction": action.direction},
+                encounter, grid, events)
+        slots.full_round_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, Trample):
+        from .turn_executor import _do_trample
+        _do_trample(
+            actor, {"direction": action.direction},
+            encounter, grid, roller, {}, events,
+        )
+        slots.full_round_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, CoupDeGrace):
+        from .turn_executor import _do_coup_de_grace
+        target = grid.combatants.get(action.target_id)
+        if target is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "coup_de_grace: target gone"}))
+            return ApplyResult(events=events)
+        _do_coup_de_grace(
+            actor, {"target": target},
+            encounter, grid, roller, {}, events,
+        )
+        slots.full_round_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, TailSpikeVolley):
+        from .turn_executor import _do_tail_spike_volley
+        target = grid.combatants.get(action.target_id)
+        if target is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "tail_spike_volley: target gone"}))
+            return ApplyResult(events=events)
+        _do_tail_spike_volley(
+            actor, {"target": target},
+            encounter, grid, roller, {}, events,
+        )
+        slots.full_round_used = True
         return ApplyResult(events=events)
 
     if isinstance(action, Cast):
@@ -891,6 +1386,76 @@ def run_encounter(
         if len(teams_alive) <= 1:
             return log
     return log
+
+
+def _adjacent_allies(
+    actor: Combatant, grid: Grid,
+) -> list[Combatant]:
+    """Combatants on the actor's team within melee reach (excl. self)."""
+    out: list[Combatant] = []
+    for cid, other in grid.combatants.items():
+        if other.id == actor.id:
+            continue
+        if other.team != actor.team:
+            continue
+        if not other.is_alive() or "dead" in other.conditions:
+            continue
+        if grid.is_adjacent(actor, other):
+            out.append(other)
+    return out
+
+
+def _adjacent_mountable_steeds(
+    actor: Combatant, grid: Grid,
+) -> list[Combatant]:
+    """Adjacent allies that look like rideable steeds. Conservative: any
+    same-team Large+ creature with no rider. Phase 1 stub — refine when
+    Mount has more callers."""
+    out: list[Combatant] = []
+    for cid, other in grid.combatants.items():
+        if other.id == actor.id or other.team != actor.team:
+            continue
+        if other.rider_id is not None:
+            continue
+        if not grid.is_adjacent(actor, other):
+            continue
+        if other.size in ("large", "huge", "gargantuan", "colossal"):
+            out.append(other)
+    return out
+
+
+def _stowed_weapon_ids(actor: Combatant) -> list[str]:
+    """Weapons in carried_items that aren't currently held. Phase 1
+    stub: doesn't distinguish weapon vs. non-weapon items because
+    InventoryItem doesn't carry a kind discriminator at this layer."""
+    held_ids = {
+        item.item_id for item in actor.held_items.values()
+        if item is not None
+    }
+    return sorted({
+        item.item_id for item in actor.carried_items
+        if item.item_id not in held_ids
+    })
+
+
+def _carried_potion_ids(actor: Combatant) -> list[str]:
+    """Items in carried_items whose id begins with 'potion_'. Phase 1
+    placeholder — once an Item.kind exists we filter on that."""
+    return sorted({
+        item.item_id for item in actor.carried_items
+        if str(item.item_id).startswith("potion_")
+    })
+
+
+def _has_trait(actor: Combatant, trait_id: str) -> bool:
+    """Does ``actor`` carry the named racial trait? Mirrors the
+    turn_executor helper without the import cycle."""
+    if actor.template_kind != "monster" or actor.template is None:
+        return False
+    for trait in getattr(actor.template, "racial_traits", ()) or ():
+        if isinstance(trait, dict) and trait.get("id") == trait_id:
+            return True
+    return False
 
 
 # Spell.target prefixes that mean "self only". Anything starting with
