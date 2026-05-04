@@ -122,7 +122,7 @@ def _intent_to_turn(do: dict):
 # locally to dogfood the substrate against the existing test suite.
 # Phase 2.3 will make the substrate the only path; this flag is then
 # removed alongside the v1 dispatch.
-EXECUTE_VIA_SUBSTRATE: bool = False
+EXECUTE_VIA_SUBSTRATE: bool = True
 
 
 def execute_turn(

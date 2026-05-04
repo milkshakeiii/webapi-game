@@ -89,17 +89,37 @@ class FullAttack(Action):
     """Full-attack action: all iteratives against ``target_id``.
     Sub-action decision points between iteratives (retarget / stop)
     arrive in Phase 3; Phase 1 resolves the entire chain inline like
-    the v1 executor does."""
+    the v1 executor does.
+
+    ``options`` carries v1-style flags the executor reads — e.g.,
+    ``rapid_shot``, ``two_weapon_fighting``, ``power_attack``."""
 
     target_id: str
+    options: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class Charge(Action):
     """Full-round charge to ``target_id`` along a straight line,
-    ending with a single melee attack at +2 / -2 AC."""
+    ending with a single melee attack at +2 / -2 AC.
+
+    ``options`` carries v1-style flags the executor reads — e.g.,
+    ``ride_by``, ``max_squares_override``, ``power_attack``,
+    ``charge_damage_multiplier``."""
 
     target_id: str
+    options: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class PartialCharge(Action):
+    """PF1 partial charge: a charge limited to 1x speed (vs. regular
+    charge's 2x). Used when only a standard action is available
+    (disabled / staggered actor) — but the v1 engine treats it as a
+    full-round composite for slot accounting, which we mirror."""
+
+    target_id: str
+    options: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -211,9 +231,13 @@ class AidAnother(Action):
 
 @dataclass(frozen=True)
 class FightDefensively(Action):
-    """Standard action: -4 attack / +2 dodge AC; single attack."""
+    """Standard action: -4 attack / +2 dodge AC; single attack.
+
+    ``options`` carries flags the executor reads on the attack
+    (e.g., ``power_attack``, ``combat_expertise``)."""
 
     target_id: str
+    options: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -250,21 +274,40 @@ class BardicPerformance(Action):
 
 @dataclass(frozen=True)
 class DetectEvil(Action):
-    """Standard action: detect alignment auras in a cone."""
+    """Standard action: detect alignment auras in a cone. ``target_id``
+    is the focused-target form of the SLA (paladin AI's primary use
+    case); empty string means no target."""
+
+    target_id: str = ""
 
 
 @dataclass(frozen=True)
 class DomainPower(Action):
-    """Standard action: cleric domain-granted active power. ``power``
-    selects which one (e.g., the Death domain's Bleeding Touch)."""
+    """Standard action: cleric domain-granted active power. The full
+    v1 args dict (``domain_id``, ``target``, etc.) lives in
+    ``options`` since each domain power has its own arg shape."""
 
-    power: str
+    options: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class EscapeWeb(Action):
     """Standard action while in webbing: Strength check or Escape
     Artist to free yourself."""
+
+
+@dataclass(frozen=True)
+class ReadyBrace(Action):
+    """Standard action: ready a brace-flagged weapon vs an incoming
+    charge. Sets the ``bracing`` condition for one round."""
+
+
+@dataclass(frozen=True)
+class Web(Action):
+    """Standard action (spider): cast a web at a target — Reflex save
+    or be entangled / restrained."""
+
+    target_id: str
 
 
 # ── Swift-action grab bag ─────────────────────────────────────────────
@@ -303,10 +346,13 @@ class Run(Action):
 
 @dataclass(frozen=True)
 class Trample(Action):
-    """Full-round action: charge through one or more foes; each takes
-    hooves damage and a Reflex save vs prone."""
+    """Full-round action: charge through one or more foes. v1 helper
+    takes a target rather than a direction (the mount overruns the
+    named foe); ``direction`` is preserved for the rare directional-
+    overrun case."""
 
-    direction: str
+    target_id: str = ""
+    direction: str = ""
 
 
 @dataclass(frozen=True)
@@ -346,8 +392,17 @@ class Cast(Action):
     spell_id: str
     target_id: str
     spell_level: int
-    defensive: bool = False
+    # ``defensive``: True forces a defensive cast (concentration vs.
+    # DC 15 + 2L). False forces a non-defensive cast (provokes if
+    # threatened). None lets ``_do_cast`` apply its default — which
+    # per v1 RAW is defensive when threatened, non-defensive
+    # otherwise.
+    defensive: bool | None = None
     metamagic: tuple[str, ...] = ()
+    # Extra v1 args that affect cast resolution but don't fit the
+    # canonical fields (spontaneous_cure for clerics, fancy override
+    # flags, etc.). Passed through to _do_cast as args entries.
+    options: dict = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
@@ -627,11 +682,13 @@ def enumerate_legal_actions(
     ):
         for direction in _viable_withdraw_directions(actor, grid):
             actions.append(Run(actor_id=actor.id, direction=direction))
-        # Trample requires the trample racial trait.
+        # Trample requires the trample racial trait. The v1 helper
+        # takes a target (the mount overruns through it); we offer
+        # one Trample per visible enemy.
         if _has_trait(actor, "trample"):
-            for direction in _viable_withdraw_directions(actor, grid):
+            for foe in _attackable_targets(actor, grid):
                 actions.append(Trample(
-                    actor_id=actor.id, direction=direction,
+                    actor_id=actor.id, target_id=foe.id,
                 ))
         # CoupDeGrace: helpless adjacent foe.
         for foe in _attackable_targets(actor, grid):
@@ -754,8 +811,8 @@ def apply_action(
             events.append(TurnEvent(actor.id, "skip",
                                     {"reason": "full_attack: target gone"}))
             return ApplyResult(events=events)
-        _do_full_attack(actor, target, {}, grid, roller, events,
-                        encounter=encounter)
+        _do_full_attack(actor, target, dict(action.options),
+                        grid, roller, events, encounter=encounter)
         slots.full_round_used = True
         return ApplyResult(events=events)
 
@@ -765,8 +822,20 @@ def apply_action(
             events.append(TurnEvent(actor.id, "skip",
                                     {"reason": "charge: target gone"}))
             return ApplyResult(events=events)
-        _do_charge(actor, {"target": target}, encounter, grid, roller,
-                   {}, events)
+        args = {"target": target, **action.options}
+        _do_charge(actor, args, encounter, grid, roller, {}, events)
+        slots.full_round_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, PartialCharge):
+        from .turn_executor import _do_partial_charge
+        target = grid.combatants.get(action.target_id)
+        if target is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "partial_charge: target gone"}))
+            return ApplyResult(events=events)
+        args = {"target": target, **action.options}
+        _do_partial_charge(actor, args, encounter, grid, roller, {}, events)
         slots.full_round_used = True
         return ApplyResult(events=events)
 
@@ -890,8 +959,9 @@ def apply_action(
             events.append(TurnEvent(actor.id, "skip",
                                     {"reason": "fight_defensively: target gone"}))
             return ApplyResult(events=events)
+        args = {"target": target, **action.options}
         _do_fight_defensively(
-            actor, {"target": target}, encounter, grid, roller, {}, events,
+            actor, args, encounter, grid, roller, {}, events,
         )
         slots.standard_used = True
         return ApplyResult(events=events)
@@ -943,15 +1013,24 @@ def apply_action(
 
     if isinstance(action, DetectEvil):
         from .turn_executor import _do_detect_evil
-        _do_detect_evil(actor, {}, grid, {}, events)
+        args = {}
+        if action.target_id:
+            tgt = grid.combatants.get(action.target_id)
+            if tgt is not None:
+                args["target"] = tgt
+        _do_detect_evil(actor, args, grid, {}, events)
         slots.standard_used = True
         return ApplyResult(events=events)
 
     if isinstance(action, DomainPower):
         from .turn_executor import _do_domain_power
+        # The v1 args may carry a ``target`` that's been pre-resolved
+        # to a Combatant (when run through the parity translator) or
+        # left as a string for the helper to resolve. Either way we
+        # pass the dict through.
+        args = dict(action.options)
         _do_domain_power(
-            actor, {"power": action.power},
-            encounter, grid, roller, {}, events,
+            actor, args, encounter, grid, roller, {}, events,
         )
         slots.standard_used = True
         return ApplyResult(events=events)
@@ -959,6 +1038,24 @@ def apply_action(
     if isinstance(action, EscapeWeb):
         from .turn_executor import _do_escape_web
         _do_escape_web(actor, {}, grid, roller, {}, events)
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, ReadyBrace):
+        from .turn_executor import _do_ready_brace
+        _do_ready_brace(actor, {}, encounter, events)
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, Web):
+        from .turn_executor import _do_web
+        target = grid.combatants.get(action.target_id)
+        if target is None:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "web: target gone"}))
+            return ApplyResult(events=events)
+        _do_web(actor, {"target": target},
+                encounter, grid, roller, {}, events)
         slots.standard_used = True
         return ApplyResult(events=events)
 
@@ -997,9 +1094,15 @@ def apply_action(
 
     if isinstance(action, Trample):
         from .turn_executor import _do_trample
+        args: dict = {}
+        if action.target_id:
+            tgt = grid.combatants.get(action.target_id)
+            if tgt is not None:
+                args["target"] = tgt
+        if action.direction:
+            args["direction"] = action.direction
         _do_trample(
-            actor, {"direction": action.direction},
-            encounter, grid, roller, {}, events,
+            actor, args, encounter, grid, roller, {}, events,
         )
         slots.full_round_used = True
         return ApplyResult(events=events)
@@ -1039,21 +1142,28 @@ def apply_action(
             events.append(TurnEvent(actor.id, "skip",
                                     {"reason": "cast: target gone"}))
             return ApplyResult(events=events)
-        args = {
+        args: dict = {
             "spell": action.spell_id,
             "target": target,
             "spell_level": action.spell_level,
-            "defensive": action.defensive,
             "metamagic": list(action.metamagic),
+            **action.options,
         }
+        # Only set ``defensive`` when the picker explicitly chose; None
+        # means "let _do_cast apply its v1 default" (defensive when
+        # threatened, non-defensive otherwise).
+        if action.defensive is not None:
+            args["defensive"] = action.defensive
         _do_cast(actor, args, encounter, grid, roller, {}, events)
         slots.standard_used = True
         return ApplyResult(events=events)
 
     if isinstance(action, GrappleBreakFree):
         from .turn_executor import _do_grapple_break_free
+        # v1 helper expects ``method`` ∈ {"cmb", "escape_artist"}.
+        method = "escape_artist" if action.use_skill else "cmb"
         _do_grapple_break_free(
-            actor, {"use_skill": action.use_skill},
+            actor, {"method": method},
             encounter, grid, roller, {}, events,
         )
         slots.standard_used = True
@@ -1237,6 +1347,7 @@ def translate_intent(
     actor: Combatant,
     encounter,
     grid: Grid,
+    ns: dict | None = None,
 ) -> list[Action]:
     """Convert a v1 ``TurnIntent.do`` dict into a list of substrate
     Actions that produce equivalent behavior when applied in order.
@@ -1245,21 +1356,28 @@ def translate_intent(
     (move + 5ft + standard). Each slot's intent dict is compiled into
     the matching Action subclass.
 
+    ``ns`` is the intent's namespace dict; passing it lets the
+    translator resolve string target expressions (``"enemy.closest"``,
+    ``"ally.role(healer)"``) against the same namespace the v1 dispatch
+    would. Pass ``intent.namespace`` from the caller.
+
     Returns ``[..., EndTurn]`` always — the final EndTurn closes the
     turn so the substrate's slot accounting wraps cleanly."""
     actions: list[Action] = []
+    ns = ns or {}
 
     # Swift slot — currently only ``cast`` is supported here in v1.
     swift = do.get("swift")
     if swift is not None and swift.get("type") == "cast":
-        compiled = _compile_cast_intent(swift, actor, grid)
+        compiled = _compile_cast_intent(swift, actor, grid, ns)
         if compiled is not None:
             actions.append(compiled)
 
     # Composite or slot form.
     if "composite" in do:
         compiled = _compile_composite_intent(
-            do["composite"], do.get("args") or {}, actor, encounter, grid,
+            do["composite"], do.get("args") or {},
+            actor, encounter, grid, ns,
         )
         if compiled is not None:
             actions.append(compiled)
@@ -1267,7 +1385,7 @@ def translate_intent(
         slots = do.get("slots") or do
         if slots.get("move") is not None:
             compiled = _compile_move_slot_intent(
-                slots["move"], actor, encounter, grid,
+                slots["move"], actor, encounter, grid, ns,
             )
             if compiled is not None:
                 actions.append(compiled)
@@ -1278,7 +1396,7 @@ def translate_intent(
             ))
         if slots.get("standard") is not None:
             compiled = _compile_standard_slot_intent(
-                slots["standard"], actor, encounter, grid,
+                slots["standard"], actor, encounter, grid, ns,
             )
             if compiled is not None:
                 actions.append(compiled)
@@ -1289,40 +1407,70 @@ def translate_intent(
 
 def _resolve_intent_target(
     target_value, actor: Combatant, grid: Grid,
+    ns: dict | None = None,
 ) -> Combatant | None:
     """Resolve a target value from a v1 intent into a live Combatant.
 
-    The Interpreter usually pre-resolves expressions, so the value is
-    typically already a Combatant. Strings (unresolved expressions) get
-    a best-effort lookup via the grid; failure returns None."""
+    Targets in v1 intents are unevaluated expressions (e.g.,
+    ``"enemy.closest"``); the v1 dispatch resolves them at execution
+    time via ``_resolve_target`` against the intent's namespace. We
+    do the same here so substrate behavior matches."""
     if target_value is None:
         return None
     if isinstance(target_value, Combatant):
         return target_value
     if isinstance(target_value, str):
-        return grid.combatants.get(target_value)
+        # Try grid lookup by id first (already-resolved), then fall back
+        # to namespace expression evaluation.
+        existing = grid.combatants.get(target_value)
+        if existing is not None:
+            return existing
+        if ns is not None:
+            from .turn_executor import _resolve_target
+            resolved = _resolve_target(target_value, ns)
+            if isinstance(resolved, Combatant):
+                return resolved
     return None
 
 
+_CAST_CANONICAL_KEYS = {
+    "spell", "target", "spell_level", "defensive", "metamagic", "type",
+}
+
+
 def _compile_cast_intent(
-    args: dict, actor: Combatant, grid: Grid,
+    args: dict, actor: Combatant, grid: Grid, ns: dict | None = None,
 ) -> Action | None:
-    """Compile a cast-shaped intent dict into a Cast action."""
+    """Compile a cast-shaped intent dict into a Cast action.
+
+    Anything in ``args`` not in the canonical key set passes through
+    via ``Cast.options`` so v1 extras like ``spontaneous_cure`` reach
+    ``_do_cast`` unchanged."""
     spell_id = args.get("spell")
     if not spell_id:
         return None
-    target = _resolve_intent_target(args.get("target"), actor, grid)
+    target = _resolve_intent_target(args.get("target"), actor, grid, ns)
     target_id = target.id if target is not None else actor.id
+    extras = {k: v for k, v in args.items()
+              if k not in _CAST_CANONICAL_KEYS}
+    # Three-valued defensive: explicit True / False from the intent
+    # passes through; absence stays None so _do_cast applies its
+    # v1-default-when-threatened behavior.
+    defensive: bool | None = None
+    if "defensive" in args:
+        defensive = bool(args["defensive"])
     return Cast(
         actor_id=actor.id, spell_id=spell_id, target_id=target_id,
         spell_level=int(args.get("spell_level", 0)),
-        defensive=bool(args.get("defensive", False)),
+        defensive=defensive,
         metamagic=tuple(args.get("metamagic") or ()),
+        options=extras,
     )
 
 
 def _compile_move_slot_intent(
     move: dict, actor: Combatant, encounter, grid: Grid,
+    ns: dict | None = None,
 ) -> Action | None:
     """Compile a move-slot intent into a substrate Action."""
     mtype = move.get("type")
@@ -1333,7 +1481,7 @@ def _compile_move_slot_intent(
         return None
     if mtype in ("move_toward", "move_away"):
         target_value = move.get("target")
-        target = _resolve_intent_target(target_value, actor, grid)
+        target = _resolve_intent_target(target_value, actor, grid, ns)
         if target is None:
             return None
         from .turn_executor import (
@@ -1363,23 +1511,25 @@ def _compile_move_slot_intent(
 
 def _compile_standard_slot_intent(
     std: dict, actor: Combatant, encounter, grid: Grid,
+    ns: dict | None = None,
 ) -> Action | None:
     """Compile a standard-slot intent into a substrate Action."""
     stype = std.get("type")
     if stype == "attack":
-        target = _resolve_intent_target(std.get("target"), actor, grid)
+        target = _resolve_intent_target(std.get("target"), actor, grid, ns)
         if target is None:
             return None
         return Attack(actor_id=actor.id, target_id=target.id)
     if stype == "total_defense":
         return TotalDefense(actor_id=actor.id)
     if stype == "cast":
-        return _compile_cast_intent(std, actor, grid)
+        return _compile_cast_intent(std, actor, grid, ns)
     return None
 
 
 def _compile_composite_intent(
     name: str, args: dict, actor: Combatant, encounter, grid: Grid,
+    ns: dict | None = None,
 ) -> Action | None:
     """Compile a composite intent into a substrate Action.
 
@@ -1388,15 +1538,33 @@ def _compile_composite_intent(
     ``ready_brace``, ``web``, ``partial_charge``); the caller drops
     the unhandled action and falls through to EndTurn so the turn
     still closes cleanly."""
-    target = _resolve_intent_target(args.get("target"), actor, grid)
+    target = _resolve_intent_target(args.get("target"), actor, grid, ns)
     tid = target.id if target is not None else actor.id
 
     if name == "hold":
         return None
+    # Common helper: pull the args dict, drop the canonical keys we
+    # already captured into Action fields, leave the rest in options.
+    def _opts(*reserved):
+        return {k: v for k, v in args.items() if k not in reserved}
+
     if name == "charge":
-        return Charge(actor_id=actor.id, target_id=tid)
+        return Charge(
+            actor_id=actor.id, target_id=tid,
+            options=_opts("target"),
+        )
+    if name == "partial_charge":
+        return PartialCharge(
+            actor_id=actor.id, target_id=tid,
+            options=_opts("target"),
+        )
     if name == "full_attack":
-        return FullAttack(actor_id=actor.id, target_id=tid)
+        # _do_full_attack takes ``options`` directly (not as a nested
+        # key on args), so pull it out of the v1 intent.
+        return FullAttack(
+            actor_id=actor.id, target_id=tid,
+            options=args.get("options") or {},
+        )
     if name == "withdraw":
         return Withdraw(actor_id=actor.id,
                         direction=args.get("direction", "south"))
@@ -1404,16 +1572,19 @@ def _compile_composite_intent(
         return Run(actor_id=actor.id,
                    direction=args.get("direction", "south"))
     if name == "trample":
-        return Trample(actor_id=actor.id,
-                       direction=args.get("direction", "south"))
+        return Trample(actor_id=actor.id, target_id=tid,
+                       direction=str(args.get("direction", "")))
     if name == "coup_de_grace":
         return CoupDeGrace(actor_id=actor.id, target_id=tid)
     if name == "fight_defensively":
-        return FightDefensively(actor_id=actor.id, target_id=tid)
+        return FightDefensively(
+            actor_id=actor.id, target_id=tid,
+            options=_opts("target"),
+        )
     if name == "cleave":
         return Cleave(actor_id=actor.id, target_id=tid)
     if name == "cast":
-        return _compile_cast_intent(args, actor, grid)
+        return _compile_cast_intent(args, actor, grid, ns)
     if name == "smite_evil":
         return SmiteEvil(actor_id=actor.id, target_id=tid)
     if name == "channel_energy":
@@ -1427,14 +1598,23 @@ def _compile_composite_intent(
     if name == "stunning_fist":
         return StunningFist(actor_id=actor.id, target_id=tid)
     if name == "detect_evil":
-        return DetectEvil(actor_id=actor.id)
+        return DetectEvil(actor_id=actor.id, target_id=tid)
     if name == "domain_power":
-        return DomainPower(actor_id=actor.id,
-                           power=str(args.get("power", "")))
+        # Resolve a target expression to a Combatant before stuffing
+        # into options, so _do_domain_power doesn't need to evaluate
+        # against the v1 namespace from inside our path.
+        opts = dict(args)
+        if target is not None:
+            opts["target"] = target
+        return DomainPower(actor_id=actor.id, options=opts)
     if name == "tail_spike_volley":
         return TailSpikeVolley(actor_id=actor.id, target_id=tid)
     if name == "escape_web":
         return EscapeWeb(actor_id=actor.id)
+    if name == "ready_brace":
+        return ReadyBrace(actor_id=actor.id)
+    if name == "web":
+        return Web(actor_id=actor.id, target_id=tid)
     if name == "aid_another":
         return AidAnother(actor_id=actor.id, ally_id=tid,
                           mode=args.get("mode", "attack"))
@@ -1454,8 +1634,12 @@ def _compile_composite_intent(
     if name == "grapple_pin":
         return GrapplePin(actor_id=actor.id)
     if name == "grapple_break_free":
-        return GrappleBreakFree(actor_id=actor.id,
-                                use_skill=bool(args.get("use_skill", False)))
+        # v1 method ∈ {"cmb", "escape_artist"} ↔ substrate use_skill.
+        method = args.get("method", "cmb")
+        return GrappleBreakFree(
+            actor_id=actor.id,
+            use_skill=(method == "escape_artist"),
+        )
     if name in _MANEUVER_KINDS:
         opts = {k: v for k, v in args.items() if k != "target"}
         return Maneuver(actor_id=actor.id, kind=name,
@@ -1560,11 +1744,40 @@ def run_intent_via_substrate(
             events.append(TurnEvent(actor.id, "free",
                                     {"action": fa}))
 
+    # Swift cast gate: matches the check in execute_turn. A swift-slot
+    # cast requires either a native-swift-time spell or the
+    # quicken_spell metamagic; reject otherwise with the exact same
+    # event the v1 path emits, before the slot walk.
+    swift = do.get("swift")
+    if swift is not None and swift.get("type") == "cast":
+        from .turn_executor import _classify_casting_time
+        from .content import default_registry
+        mm = list(swift.get("metamagic") or [])
+        native_swift = False
+        spell_id = swift.get("spell")
+        if spell_id:
+            try:
+                s = default_registry().get_spell(spell_id)
+                native_swift = (
+                    _classify_casting_time(s.casting_time) == "swift"
+                )
+            except Exception:
+                pass
+        if "quicken_spell" not in mm and not native_swift:
+            events.append(TurnEvent(actor.id, "skip", {
+                "reason": "swift cast requires either a native swift-time "
+                          "spell or the quicken_spell metamagic",
+                "spell": spell_id,
+            }))
+            do = dict(do)
+            do.pop("swift", None)
+
     # Translate the rest of the intent into substrate Actions and run
     # them via the substrate.
     state = GameState(encounter=encounter, grid=grid)
     state.reset_turn(actor)
-    actions_to_run = translate_intent(do, actor, encounter, grid)
+    ns = intent.namespace if intent is not None else None
+    actions_to_run = translate_intent(do, actor, encounter, grid, ns)
     for action in actions_to_run:
         result = apply_action(action, state, roller)
         events.extend(result.events)
