@@ -118,10 +118,11 @@ def _intent_to_turn(do: dict):
 
 
 # Phase 2 feature flag. When True, ``execute_turn`` delegates to the
-# substrate-driven ``run_intent_via_substrate``. Default OFF — flip
-# locally to dogfood the substrate against the existing test suite.
-# Phase 2.3 will make the substrate the only path; this flag is then
-# removed alongside the v1 dispatch.
+# substrate-driven ``run_intent_via_substrate`` — the entire test
+# suite runs through the new substrate, with the v1 dispatch below
+# kept around as fallback. Phase 5 will delete the flag and the
+# fallback together. Defaults to True now that parity is green; flip
+# locally to False to compare event streams against the v1 path.
 EXECUTE_VIA_SUBSTRATE: bool = True
 
 
