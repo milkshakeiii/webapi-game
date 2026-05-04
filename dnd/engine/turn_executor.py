@@ -342,11 +342,15 @@ def _apply_end_of_turn_racial_effects(
                 "target_id": target.id,
                 "damage": damage,
             }))
-    # Gelatinous-cube engulf: any adjacent creature ending an exposure
-    # window (here: end of cube's turn) makes a Reflex save vs DC =
-    # 10 + 1/2 HD + Str mod. Failure → paralyzed + 1d6 acid damage.
-    # Successful save does not consume the engulf opportunity (cube
-    # may try again next round).
+    # Gelatinous-cube engulf: any adjacent enemy that isn't already
+    # engulfed by this cube makes a Reflex save (DC 10 + 1/2 HD +
+    # Str mod). Failure: victim becomes engulfed (paralyzed + 1d6
+    # acid this round + ongoing per-round acid via ongoing_effects).
+    # An already-engulfed victim gets a per-round Reflex save to
+    # escape (success → free, paralysis cleared, ongoing acid
+    # removed). This wires the RAW pull-along + per-round acid;
+    # the move-into-square save is approximated by end-of-turn
+    # adjacency.
     if (
         _has_racial_trait(actor, "engulf")
         and grid is not None
@@ -355,23 +359,60 @@ def _apply_end_of_turn_racial_effects(
         hd = _monster_hd(actor)
         str_mod = _ability_modifier(actor, "str")
         dc = 10 + hd // 2 + str_mod
+        cur_round = (
+            int(encounter.round_number) if encounter is not None else 0
+        )
+        # Build candidates: anyone already engulfed by this cube (may
+        # be off-grid) plus any adjacent enemy on the grid.
+        candidates: dict[str, Combatant] = {}
+        if encounter is not None:
+            for ir in encounter.initiative:
+                if ir.combatant.engulfed_by_id == actor.id:
+                    candidates[ir.combatant.id] = ir.combatant
         for cid, victim in list(grid.combatants.items()):
             if victim.id == actor.id or victim.team == actor.team:
                 continue
+            if grid.is_adjacent(actor, victim):
+                candidates[victim.id] = victim
+        for victim in list(candidates.values()):
+            if victim.team == actor.team:
+                continue
             if "dead" in victim.conditions:
                 continue
-            if not grid.is_adjacent(actor, victim):
-                continue
+            already_engulfed = victim.engulfed_by_id == actor.id
             passed, nat, total = roll_save(victim, "ref", dc, roller)
             event_detail = {
                 "target_id": victim.id, "dc": dc,
                 "natural": nat, "total": total, "passed": passed,
+                "was_engulfed": already_engulfed,
             }
-            if not passed:
+            if already_engulfed and passed:
+                # Escape: clear engulf state, lift paralysis, place
+                # victim back on the grid at the closest free square
+                # adjacent to the cube.
+                victim.engulfed_by_id = None
+                victim.remove_condition("paralyzed")
+                _place_at_free_adjacent(victim, actor, grid)
+                event_detail["effect"] = "escaped"
+            elif already_engulfed and not passed:
+                # Still engulfed → another 1d6 acid this round.
+                acid = roller.roll("1d6")
+                victim.take_damage(int(acid.total), damage_type="acid")
+                _apply_post_damage_state(victim)
+                event_detail["effect"] = "still_engulfed"
+                event_detail["acid_damage"] = int(acid.total)
+            elif not already_engulfed and not passed:
+                # Newly engulfed: paralyzed + immediate 1d6 acid.
+                # Pull-along: remove victim from grid (occupies the
+                # cube's interior). Released on escape via the
+                # already_engulfed-pass branch above.
+                victim.engulfed_by_id = actor.id
                 victim.add_condition("paralyzed")
                 acid = roller.roll("1d6")
                 victim.take_damage(int(acid.total), damage_type="acid")
                 _apply_post_damage_state(victim)
+                grid.remove(victim.id)
+                event_detail["effect"] = "engulfed"
                 event_detail["acid_damage"] = int(acid.total)
             events.append(TurnEvent(actor.id, "engulf", event_detail))
 
@@ -462,6 +503,52 @@ def _nearest_living_creature(actor: Combatant, grid: Grid) -> Combatant | None:
             best_dist = d
             best = other
     return best
+
+
+def _place_at_free_adjacent(
+    victim: Combatant, anchor: Combatant, grid: Grid,
+) -> None:
+    """Place ``victim`` on a free square adjacent to ``anchor``'s
+    footprint. Falls back to the victim's stored position if no
+    adjacent free square exists. Used when an engulfed creature
+    escapes the cube.
+    """
+    if grid is None:
+        return
+    ax, ay = anchor.position
+    # Anchor footprint expansion: probe a 3x3 ring around the
+    # anchor's anchor-square.
+    candidates: list[tuple[int, int]] = []
+    for dx in (-1, 0, 1, 2):
+        for dy in (-1, 0, 1, 2):
+            if dx == 0 and dy == 0:
+                continue
+            candidates.append((ax + dx, ay + dy))
+    for sq in candidates:
+        if not grid.in_bounds(*sq):
+            continue
+        if grid._occupancy.get(sq) is not None:
+            continue
+        victim.position = sq
+        try:
+            grid.place(victim)
+            return
+        except Exception:
+            continue
+    # No free square; leave victim off-grid (engulfed_by_id cleared).
+
+
+def _movement_squares(actor: Combatant, encounter) -> int:
+    """Compute the actor's per-action movement allowance, in squares.
+
+    Layered on top of ``actor.speed // 5``:
+    - Choker quickness: +2 squares (+10 ft) on round 1 only.
+    """
+    base = actor.speed // 5
+    round_no = int(getattr(encounter, "round_number", 0)) if encounter else 0
+    if round_no == 1 and _has_racial_trait(actor, "quickness"):
+        base += 2
+    return base
 
 
 def _turn_used_standard_action(events: list[TurnEvent]) -> bool:
@@ -630,7 +717,7 @@ def _do_move_action(
     events: list[TurnEvent],
 ) -> None:
     mtype = move.get("type")
-    speed_squares = actor.speed // 5
+    speed_squares = _movement_squares(actor, encounter)
     if mtype == "move_to":
         target = _resolve_target(move.get("target"), ns)
         dest = _coerce_square(target)
@@ -1013,7 +1100,7 @@ def _do_charge(
         }))
         return
 
-    speed_squares = actor.speed // 5
+    speed_squares = _movement_squares(actor, encounter)
     # Partial charge uses 1× speed; regular charge uses 2× speed.
     if "max_squares_override" in args:
         charge_squares = int(args["max_squares_override"])
@@ -1460,7 +1547,7 @@ def _do_withdraw(
     events: list[TurnEvent],
 ) -> None:
     direction = args.get("direction", "south")
-    speed_squares = actor.speed // 5
+    speed_squares = _movement_squares(actor, encounter)
     withdraw_squares = speed_squares * 2
     dest = _square_in_direction(actor, direction, withdraw_squares)
     if dest is None:
@@ -2063,7 +2150,7 @@ def _do_run(
     AoOs trigger normally on each step.
     """
     direction = args.get("direction", "south")
-    speed_squares = actor.speed // 5
+    speed_squares = _movement_squares(actor, encounter)
     run_squares = speed_squares * 4
     dest = _square_in_direction(actor, direction, run_squares)
     if dest is None:
@@ -2123,6 +2210,21 @@ def _do_attack(
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "attack target not in melee range"}))
         return
+    # Daily-resource gate: a ranged 'spikes' attack from a creature
+    # with the tail_spikes trait consumes one of the 24/day pool.
+    # When empty, the attack is skipped (the manticore is out of
+    # spikes until the daily replenish ticks).
+    if (
+        chosen.get("type") == "ranged"
+        and str(chosen.get("name", "")).lower() == "spikes"
+        and _has_racial_trait(actor, "tail_spikes")
+    ):
+        remaining = int(actor.daily_resources.get("tail_spikes", 0))
+        if remaining <= 0:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "tail_spikes: pool empty"}))
+            return
+        actor.daily_resources["tail_spikes"] = remaining - 1
     # Total cover blocks line of effect for ranged attacks entirely.
     if is_ranged and _total_cover_blocks_line(actor, target, grid):
         events.append(TurnEvent(actor.id, "skip",

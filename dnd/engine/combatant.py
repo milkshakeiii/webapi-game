@@ -232,6 +232,23 @@ class Combatant:
     # aura per encounter" which mirrors the most common sub-cases.
     aura_saves_taken: set[str] = field(default_factory=set)
 
+    # PF1 engulf link: when a gelatinous-cube engulf save fails, the
+    # victim's engulfed_by_id is set to the cube. Used for pull-along
+    # (cube movement drags the victim) and for the per-round acid
+    # ticker via ongoing_effects. Cleared when the victim escapes
+    # (Reflex save) or the cube dies.
+    engulfed_by_id: str | None = None
+
+    # PF1 daily resources: per-day-replenish pools (e.g., manticore
+    # tail spikes 24/day). The engine treats 1 day = 14400 rounds at
+    # 1 round / 6 seconds; ``_last_daily_refresh_round`` records the
+    # last replenishment round and tick_round refills when 14400+
+    # rounds have elapsed. ``daily_resource_max`` holds the per-day
+    # cap so we know what to refill to.
+    daily_resources: dict[str, int] = field(default_factory=dict)
+    daily_resource_max: dict[str, int] = field(default_factory=dict)
+    _last_daily_refresh_round: int = 0
+
     # PF1 ongoing effects (poisons, diseases, ongoing damage). Each
     # entry is a dict with these fields:
     #   id              — short label (e.g. "spider_poison", "ghoul_fever")
@@ -958,6 +975,16 @@ class Combatant:
             and "dead" not in self.conditions
         ):
             self._tick_ongoing_effects(current_round, roller)
+        # Daily-resource replenishment (1 day = 14400 rounds). When
+        # at least one full day has elapsed since the last refresh,
+        # restore each pool to its declared max.
+        if (
+            self.daily_resource_max
+            and current_round - self._last_daily_refresh_round >= 14400
+        ):
+            for k, mx in self.daily_resource_max.items():
+                self.daily_resources[k] = int(mx)
+            self._last_daily_refresh_round = current_round
         # Per-round healing.
         if "dead" not in self.conditions and self.current_hp < self.max_hp:
             heal = self.fast_healing + self.regeneration
@@ -1148,12 +1175,18 @@ def _apply_monster_racial_traits(
             })
         elif tid == "quickness":
             # Choker quickness: +1 enhancement to initiative. The
-            # "+10 ft to first-round move" piece is deferred (no
-            # round-1 movement-bonus path in the engine yet).
+            # +10ft first-round move is wired in turn_executor's
+            # _movement_squares helper (round_no==1 → +2 squares).
             coll.add(Modifier(
                 value=1, type="enhancement", target="initiative",
                 source=f"{src_prefix}:{tid}",
             ))
+        elif tid == "tail_spikes":
+            # Manticore: 24 spikes per day (RAW). Stored as a
+            # daily resource pool; turn_executor decrements on each
+            # 'spikes' attack and the worker tick replenishes once
+            # per day (14400 rounds).
+            extras.setdefault("daily_resources", {})["tail_spikes"] = 24
     return extras
 
 
@@ -1448,6 +1481,8 @@ def combatant_from_monster(
         energy_resistance=racial_extras["energy_resistance"],
         concealment=racial_extras["concealment"],
         incorporeal=is_incorporeal,
+        daily_resources=dict(racial_extras.get("daily_resources") or {}),
+        daily_resource_max=dict(racial_extras.get("daily_resources") or {}),
     )
 
 
