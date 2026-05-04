@@ -652,9 +652,10 @@ the doc; all need an answer before code lands.
 
 5. **Determinism.** The order of interrupt resolution matters when
    multiple AoOs fire from the same provocation. RAW is silent;
-   v1 fires them in `grid.combatants.items()` iteration order. We
-   should make this deterministic on a stable key (e.g., initiative
-   order among threateners, ties broken by combatant id).
+   v1 fires them in `grid.combatants.items()` iteration order.
+   **Resolved (2026-05-04):** initiative order among threateners,
+   highest first; ties broken by combatant id, lexicographic. Stable
+   across runs and replay-safe.
 
 6. **Forced movement and "no decision".** Bull-rushed targets get
    shoved per RAW with no choice on direction. We model these as
@@ -663,6 +664,11 @@ the doc; all need an answer before code lands.
    (engine picks the target via the d% table, then a normal attack
    action runs against the chosen target with no further patron
    input).
+   **Resolved (2026-05-04):** confirmed. The d% table substitutes
+   *for* the picker call (forced-substituted kind), not as a
+   sub-decision; the resulting attack runs as a continuation inside
+   the same apply_action. Bull-rushed motion mutates state with no
+   picker call.
 
 7. **DSL backwards compat completeness.** Phase 4 must demonstrate
    parity for every existing patron script we care about. Today
