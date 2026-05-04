@@ -1414,6 +1414,12 @@ def _do_full_attack(
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "full_attack: target not in melee"}))
         return
+    # RAW: a ranged full attack provokes one AoO for the action (not per
+    # iterative shot). Per-shot triggers are suppressed inside _do_attack
+    # by gating on label.
+    if primary_is_ranged:
+        if _provoke_ranged_aoo(actor, grid, events, encounter):
+            return
     bab = actor.bases.get("bab", 0)
     # Build the (delta, attack_index) sequence for this full attack.
     # Default: primary-only iteratives at 0, -5, -10, ... using
@@ -2185,6 +2191,28 @@ def _do_run(
 # ---------------------------------------------------------------------------
 
 
+def _provoke_ranged_aoo(
+    actor: Combatant,
+    grid: Grid,
+    events: list[TurnEvent],
+    encounter,
+) -> bool:
+    """Fire AoOs from threateners against ``actor`` for making a ranged
+    attack action. Appends a 'skip: killed by AoO' event and returns
+    True if the actor was killed by an AoO; caller should abort the
+    action by returning. Returns False otherwise."""
+    from .encounter import aoo_triggers_for_provoking_action
+    for threatener in aoo_triggers_for_provoking_action(
+        grid, actor, "ranged_attack",
+    ):
+        _do_aoo(threatener, actor, grid, events, encounter=encounter)
+        if not actor.is_alive() or actor.current_hp <= -10:
+            events.append(TurnEvent(actor.id, "skip",
+                                    {"reason": "killed by AoO"}))
+            return True
+    return False
+
+
 def _do_attack(
     actor: Combatant,
     target: Combatant,
@@ -2236,6 +2264,18 @@ def _do_attack(
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "target beyond maximum range"}))
         return
+
+    # RAW: making a ranged attack while in a threatened square provokes
+    # an AoO from each threatener. Fired before the shot resolves; if
+    # the AoO kills the attacker, the shot is aborted.
+    #
+    # Only standalone ranged attacks fire the AoO here. Wrapper actions
+    # (``full_attack_<i>``, ``tail_spike_volley_<i>``) provoke ONCE for
+    # the whole action and do that at the wrapper level, so we suppress
+    # the per-shot trigger here.
+    if is_ranged and label in ("attack", "defensive_attack"):
+        if _provoke_ranged_aoo(actor, grid, events, encounter):
+            return  # killed by AoO
 
     # Sneak attack precision damage if attacker qualifies.
     precision_dice = _sneak_attack_dice(actor, target, grid, encounter)
@@ -3285,6 +3325,12 @@ def _do_tail_spike_volley(
     if spike_idx is None:
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "tail_spike_volley: no 'spikes' attack option"}))
+        return
+    # RAW: a ranged action provokes one AoO from threateners; the volley
+    # is a single ranged action so we provoke once before any spike
+    # fires (per-shot triggers in _do_attack are gated off for this
+    # label).
+    if _provoke_ranged_aoo(actor, grid, events, encounter):
         return
     fired = 0
     for i in range(4):

@@ -459,7 +459,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     # ── Combat: AoOs ────────────────────────────────────────────────────
     "combat.aoo":                    (IMPLEMENTED,    "1 AoO/round; aoo_triggers_for_movement + _do_aoo"),
     "combat.aoo_extra_combat_reflexes": (IMPLEMENTED,    "_aoo_limit returns 1 + Dex when feat present; per-round counter on Combatant"),
-    "combat.aoo_provoking_actions":  (IMPLEMENTED,    "leaving threatened square, stand_up, non-defensive cast, drink_potion, retrieve_stowed_item — all trigger AoO via aoo_triggers_for_provoking_action in _do_move. Drawing a weapon does NOT provoke per RAW Action Table."),
+    "combat.aoo_provoking_actions":  (IMPLEMENTED,    "leaving threatened square, stand_up, non-defensive cast, drink_potion, retrieve_stowed_item, ranged attack while threatened — all trigger AoO via aoo_triggers_for_provoking_action. Ranged AoO fires once per ranged action (full-attack triggers once, not per iterative; tail-spike volley triggers once for the whole volley) via _provoke_ranged_aoo helper. Drawing a weapon does NOT provoke per RAW Action Table."),
     "combat.threatened_squares":     (IMPLEMENTED,    "grid.threatened_squares uses (min_d, max_d) range — normal weapon threatens 1..reach; reach weapon (has_reach) shifts to (reach+1, reach+1) — adjacent NOT threatened, +5 ft beyond IS"),
     "combat.reach_weapons":          (IMPLEMENTED,    "Weapon.has_reach detected; grid.threatened_squares shifts threat from min/max=0/reach to min/max=reach+1/reach+1 — wielder threatens at +5 ft beyond normal reach but NOT adjacent. Longspear / glaive / lance carry has_reach=true"),
 
