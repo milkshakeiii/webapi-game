@@ -767,21 +767,9 @@ def _do_move_action(
             actor.remove_condition("prone")
             events.append(TurnEvent(actor.id, "stand_up", {}))
     elif mtype == "draw_weapon":
-        # PF1 RAW: drawing a weapon provokes AoOs unless your BAB is
-        # +1 or higher (in which case you can combine the draw with a
-        # regular move action). For BAB 0 actors, AoOs trigger.
-        bab = actor.bases.get("bab", 0)
-        if bab < 1:
-            from .encounter import aoo_triggers_for_provoking_action
-            for threatener in aoo_triggers_for_provoking_action(
-                grid, actor, "draw_weapon",
-            ):
-                _do_aoo(threatener, actor, grid, events,
-                        encounter=encounter)
-                if not actor.is_alive() or actor.current_hp <= -10:
-                    events.append(TurnEvent(actor.id, "skip",
-                                            {"reason": "killed by AoO"}))
-                    return
+        # RAW: drawing a weapon does not provoke (Action Table). The
+        # BAB +1 threshold is about *combining* the draw with a regular
+        # move (free vs. move action), not about AoO suppression.
         events.append(TurnEvent(actor.id, "draw_weapon",
                                 {"weapon": move.get("weapon")}))
     elif mtype == "drink_potion":
@@ -1879,17 +1867,18 @@ def _do_grapple_pin(
     ns: dict[str, Any],
     events: list[TurnEvent],
 ) -> None:
-    """Continue a grapple to pin the target. PF1 RAW: CMB - 5 vs CMD
-    (i.e., +5 difficulty). On success, target gains 'pinned' (and
-    helpless via the unconscious-implies-helpless model? No — pinned
-    explicitly makes the target helpless per RAW). Pinning consumes
-    a maintain action."""
+    """Continue a grapple to pin the target. PF1 RAW: pin is a parallel
+    maintain-action (a regular CMB vs CMD check, no +5 DC). On success,
+    target gains 'pinned' (which makes them helpless per RAW). The
+    grappler's +5 circumstance bonus from holding the grapple in
+    subsequent rounds is a separate accounting concern, not a pin DC
+    adjustment."""
     target = _resolve_grapple_partner(actor, grid)
     if target is None:
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "grapple_pin: not grappling anyone"}))
         return
-    cmb = actor.cmb() - 5  # +5 difficulty for pin
+    cmb = actor.cmb()
     cmd = target.cmd(context={"maneuver": "grapple"})
     r = roller.roll("1d20")
     nat = r.terms[0].rolls[0]
@@ -4141,7 +4130,13 @@ def _resolve_maneuver(
     r = roller.roll("1d20")
     nat = r.terms[0].rolls[0]
     total = nat + cmb
-    return total >= cmd, nat, total, total - cmd
+    if nat == 20:
+        passed = True
+    elif nat == 1:
+        passed = False
+    else:
+        passed = total >= cmd
+    return passed, nat, total, total - cmd
 
 
 _MANEUVER_KINDS = frozenset({
@@ -4803,9 +4798,8 @@ def _do_cast(
             except Exception:
                 pass
     if has_s and "grappled" in actor.conditions:
-        # PF1 RAW: somatic spells while grappled require a concentration
-        # check (DC 10 + grappler's CMB + spell level). We don't track
-        # the specific grappler here, so use a flat +4 stand-in.
+        # RAW: somatic spells while grappled require a concentration check
+        # (DC 10 + grappler's CMB + spell level).
         from .spells import key_ability_for, caster_level as _cl
         cl_g = _cl(actor)
         key_g = key_ability_for(actor)
@@ -4815,7 +4809,9 @@ def _do_cast(
             ab_g = (base - 10) // 2
             for m in actor.modifiers.for_target(f"ability:{key_g}"):
                 ab_g += m.value
-        grapple_dc = 10 + 4 + spell_level
+        grappler = _resolve_grappler(actor, grid)
+        grappler_cmb = grappler.cmb() if grappler is not None else 0
+        grapple_dc = 10 + grappler_cmb + spell_level
         r_g = roller.roll("1d20")
         nat_g = r_g.terms[0].rolls[0]
         total_g = nat_g + cl_g + ab_g
@@ -4854,7 +4850,7 @@ def _do_cast(
                 # Add modifiers
                 for m in actor.modifiers.for_target(f"ability:{key}"):
                     ab_mod += m.value
-            conc_dc = 15 + spell_level
+            conc_dc = 15 + 2 * spell_level
             r = roller.roll("1d20")
             nat = r.terms[0].rolls[0]
             total = nat + cl + ab_mod

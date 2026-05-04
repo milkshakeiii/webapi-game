@@ -41,6 +41,13 @@ from .sizes import get_size, size_modifiers
 # Filters used to derive situational AC values.
 _TOUCH_EXCLUDED_TYPES = frozenset({"armor", "shield", "natural"})
 
+# RAW: CMD picks up these bonus types from a creature's AC modifiers.
+# Armor/shield/natural/enhancement-on-armor explicitly do NOT bleed.
+_AC_BONUS_TYPES_BLEED_TO_CMD = frozenset({
+    "circumstance", "deflection", "dodge", "insight",
+    "luck", "morale", "profane", "sacred",
+})
+
 
 @dataclass
 class Combatant:
@@ -388,11 +395,27 @@ class Combatant:
         ``context`` is forwarded to the qualifier check, so situational
         bonuses like dwarven Stability (+4 CMD vs trip/bullrush) only
         apply when the resolving maneuver matches.
+
+        RAW: CMD also receives any circumstance, deflection, dodge,
+        insight, luck, morale, profane, or sacred bonus to AC. A
+        flat-footed creature does not add its Dex bonus to CMD nor any
+        dodge bonus.
         """
         from .modifiers import compute_with_context
+
+        mods = list(self.modifiers.for_target("cmd"))
+        for m in self.modifiers.for_target("ac"):
+            if m.type in _AC_BONUS_TYPES_BLEED_TO_CMD:
+                mods.append(m)
+        if "flat_footed" in self.conditions:
+            mods = [
+                m for m in mods
+                if not (m.source == "dex_modifier" and m.type == "ability")
+                and m.type != "dodge"
+            ]
         return compute_with_context(
             self.bases.get("cmd", 10),
-            self.modifiers.for_target("cmd"),
+            mods,
             context or {},
         )
 

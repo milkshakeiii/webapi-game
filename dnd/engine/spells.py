@@ -115,7 +115,8 @@ def key_ability_for(caster: Combatant) -> str | None:
 def save_dc_for(
     caster: Combatant, spell_level: int, registry: ContentRegistry,
 ) -> int:
-    """10 + spell level + key ability modifier (+ Spell Focus, not yet wired)."""
+    """10 + spell level + key ability modifier. Spell Focus / Greater
+    Spell Focus add to this DC via ``feat_effects.py`` modifiers."""
     key = key_ability_for(caster)
     if key is None:
         return 10 + spell_level
