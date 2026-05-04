@@ -396,7 +396,9 @@ SPELL_EFFECT_KINDS: dict[str, Entry] = {
     "scaling_damage":        (IMPLEMENTED, "AoE damage scaling with caster level (e.g., fireball)"),
     "stabilize":             (IMPLEMENTED, "stop dying HP loss"),
     "utility":               (IMPLEMENTED, "no mechanical effect; flavor / GM-call"),
-    "apply_bleed":           (IMPLEMENTED, "Bleed cantrip: target with HP <= 0 makes a Will save or starts bleeding for amount HP/round (Combatant.apply_bleed)"),
+    "apply_bleed":           (IMPLEMENTED, "Bleed cantrip: target with HP <= -1 makes a Will save or starts bleeding for amount HP/round via Combatant.apply_bleed."),
+    "apply_temp_hp":         (IMPLEMENTED, "Virtue: grants amount temporary HP to target via Combatant.apply_temp_hp. RAW: temp HP doesn't stack with itself (highest wins); the pool absorbs damage before current_hp; tick_round expires it without refunding."),
+    "apply_single_use_buff": (IMPLEMENTED, "Guidance: applies a +N typed modifier (default competence) to a list of d20-roll targets (attack/saves/skill_check) for the spell's duration; the source is registered in target.pending_single_use_sources and discharged on the next qualifying d20 roll (skill_check, roll_save, attack-roll site)."),
 }
 
 

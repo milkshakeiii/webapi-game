@@ -2407,6 +2407,8 @@ def _do_attack(
     outcome: AttackOutcome = resolve_attack(
         profile, defense, roller, situation=ac_situation,
     )
+    # Discharge any single-use buffs (e.g. Guidance) on the attacker.
+    actor.consume_single_use_buffs()
     # Mounted Combat feat: if the target is a mount with a rider, the
     # rider can attempt a Ride check (DC = the attack roll) to negate
     # the hit. Limited to once per round (Combat Reflexes-style

@@ -1618,10 +1618,8 @@
     "saving_throw": "fortitude_negates_harmless",
     "spell_resistance": "yes_harmless",
     "effect": {
-      "kind": "buff_target",
-      "modifiers": [
-        {"value": 1, "modifier_type": "untyped", "target": "hp_max"}
-      ],
+      "kind": "apply_temp_hp",
+      "amount": 1,
       "fixed_duration_rounds": 10
     },
     "summary": "+1 temporary HP for 1 minute."
@@ -1640,12 +1638,12 @@
     "saving_throw": "will_negates_harmless",
     "spell_resistance": "yes_harmless",
     "effect": {
-      "kind": "buff_target",
-      "modifiers": [
-        {"value": 1, "modifier_type": "competence", "target": "attack"}
-      ],
+      "kind": "apply_single_use_buff",
+      "value": 1,
+      "modifier_type": "competence",
+      "targets": ["attack", "fort_save", "ref_save", "will_save", "skill_check"],
       "fixed_duration_rounds": 10
     },
-    "summary": "+1 competence on next attack/save/skill (v1: simplified to +1 attack for 1 minute)."
+    "summary": "+1 competence on a single attack/save/skill check; discharged on first qualifying d20 roll or expires in 1 minute."
   }
 ]

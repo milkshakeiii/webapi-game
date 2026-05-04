@@ -232,6 +232,23 @@ class Combatant:
     # aura per encounter" which mirrors the most common sub-cases.
     aura_saves_taken: set[str] = field(default_factory=set)
 
+    # PF1 single-use ("discharge-on-roll") buffs: each entry is a
+    # modifier source that should be removed from self.modifiers
+    # after the next qualifying d20 roll consumes it. Used by Guidance
+    # ("+1 competence on a single attack roll, saving throw, or skill
+    # check") and similar one-shot buffs. The roll sites
+    # (skill_check, roll_save, attack_roll-call site) call
+    # ``consume_single_use_buffs`` after the roll.
+    pending_single_use_sources: set[str] = field(default_factory=set)
+
+    # PF1 temporary HP: a separate pool that absorbs damage before
+    # current_hp does. RAW: temp HP doesn't stack with itself —
+    # apply_temp_hp(amount) takes the higher of incoming / existing
+    # rather than summing. Expires at ``temp_hp_expires_round``
+    # (cleared in tick_round); current_hp is NOT refunded on expiry.
+    temp_hp: int = 0
+    temp_hp_expires_round: int | None = None
+
     # PF1 invisible-attacker pinpointing: when an invisible foe
     # attacks this combatant, the defender may roll Perception
     # (DC 20 + 1/10 ft of distance) to locate the attacker's square.
@@ -441,6 +458,11 @@ class Combatant:
         Petrified creatures have hardness 8 (any incoming damage is
         reduced by 8) and shatter outright on a single attack
         dealing 50+ damage post-hardness.
+
+        Temporary HP (from Virtue, False Life, etc.) absorbs damage
+        before current_hp does. The pool is depleted by incoming
+        damage before any of the regen / petrified / threshold logic
+        runs against current_hp.
         """
         if amount < 0:
             raise ValueError(f"damage must be >= 0, got {amount}")
@@ -450,6 +472,10 @@ class Combatant:
                 self.add_condition("dead")
                 return
             amount = max(0, amount - 8)
+        if self.temp_hp > 0 and amount > 0:
+            absorbed = min(self.temp_hp, amount)
+            self.temp_hp -= absorbed
+            amount -= absorbed
         new_hp = self.current_hp - amount
         if (
             self.regeneration > 0
@@ -467,6 +493,26 @@ class Combatant:
         # PF1 RAW: any source of magical healing stops bleed effects.
         if amount > 0 and self.bleed > 0:
             self.stop_bleed()
+
+    def consume_single_use_buffs(self) -> None:
+        """Drop every modifier whose source is in
+        pending_single_use_sources. Called by skill_check, roll_save,
+        and the attack-resolution path after a d20 roll. After the
+        first qualifying roll, single-use buffs are gone.
+        """
+        for src in list(self.pending_single_use_sources):
+            self.modifiers.remove_by_source(src)
+        self.pending_single_use_sources.clear()
+
+    def apply_temp_hp(self, amount: int, expires_round: int | None) -> None:
+        """Grant temporary HP. PF1 RAW: temp HP doesn't stack with
+        itself — the higher of (current pool, incoming) wins.
+        """
+        if amount <= 0:
+            return
+        if amount > self.temp_hp:
+            self.temp_hp = amount
+            self.temp_hp_expires_round = expires_round
 
     def apply_bleed(self, amount: int) -> None:
         """Add ``amount`` HP-per-round bleed damage.
@@ -964,6 +1010,15 @@ class Combatant:
         condition is added (which suppresses the bleed below).
         """
         expired = self.modifiers.prune_expired(current_round)
+        # Expire temp HP. RAW: if duration runs out, the pool just
+        # disappears — current_hp is not refunded.
+        if (
+            self.temp_hp > 0
+            and self.temp_hp_expires_round is not None
+            and current_round >= self.temp_hp_expires_round
+        ):
+            self.temp_hp = 0
+            self.temp_hp_expires_round = None
         stun_until = self.resources.get("stunned_until_round")
         if stun_until is not None and current_round >= stun_until:
             self.remove_condition("stunned")

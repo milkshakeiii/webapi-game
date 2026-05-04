@@ -159,6 +159,8 @@ def roll_save(
     r = roller.roll("1d20")
     nat = r.terms[0].rolls[0]
     total = nat + save_total
+    # Discharge any single-use buffs (e.g. Guidance).
+    target.consume_single_use_buffs()
     if nat == 1:
         return False, nat, total
     if nat == 20:
@@ -1012,6 +1014,65 @@ def _handle_color_spray(
         )
 
 
+def _handle_apply_single_use_buff(
+    caster: Combatant, spell: Spell, target: Combatant, dc: int,
+    cl: int, registry: ContentRegistry, roller: Roller, out: SpellOutcome,
+    current_round: int = 1,
+) -> None:
+    """Apply a discharge-on-roll buff that's consumed by the next
+    qualifying d20 roll (Guidance: +1 competence on a single attack /
+    save / skill check). The same source is laid down on every
+    candidate roll target; first roll consumes them all.
+    """
+    eff = spell.effect
+    value = int(eff.get("value", 1))
+    bonus_type = str(eff.get("modifier_type", "competence"))
+    expires = _expires_round(
+        eff, cl, current_round,
+        extend="extend_spell" in out.metamagic,
+    )
+    src = f"single_use:{spell.id}:{caster.id}"
+    targets = list(eff.get("targets") or [
+        "attack", "fort_save", "ref_save", "will_save", "skill_check",
+    ])
+    for tgt in targets:
+        target.modifiers.add(mod(
+            value=value, type=bonus_type, target=str(tgt),
+            source=src, expires_round=expires,
+        ))
+    target.pending_single_use_sources.add(src)
+    out.targets_affected.append(target.id)
+    out.log.append(
+        f"  {target.name}: +{value} {bonus_type} on next "
+        f"{'/'.join(targets)} (single-use, src={src})"
+    )
+
+
+def _handle_apply_temp_hp(
+    caster: Combatant, spell: Spell, target: Combatant, dc: int,
+    cl: int, registry: ContentRegistry, roller: Roller, out: SpellOutcome,
+    current_round: int = 1,
+) -> None:
+    """Grant temporary hit points to ``target`` (Virtue, False Life
+    when wired, etc.). RAW: temp HP doesn't stack with itself; the
+    higher pool wins. Duration is per-spell; expiry handled in
+    Combatant.tick_round.
+    """
+    eff = spell.effect
+    amount = int(eff.get("amount", 1))
+    expires = _expires_round(
+        eff, cl, current_round,
+        extend="extend_spell" in out.metamagic,
+    )
+    target.apply_temp_hp(amount, expires)
+    out.targets_affected.append(target.id)
+    duration_msg = f" (expires R{expires})" if expires else ""
+    out.log.append(
+        f"  {target.name}: +{amount} temporary HP{duration_msg} "
+        f"(pool now {target.temp_hp})"
+    )
+
+
 def _handle_apply_bleed(
     caster: Combatant, spell: Spell, target: Combatant, dc: int,
     cl: int, registry: ContentRegistry, roller: Roller, out: SpellOutcome,
@@ -1020,10 +1081,13 @@ def _handle_apply_bleed(
     """Apply ongoing bleed damage (Bleed cantrip: 1 HP/round on a
     target with HP <= 0). Will save negates."""
     eff = spell.effect
+    # RAW: target must have -1 or fewer HP (i.e. dying / stable, not
+    # disabled-at-0). The flag name is historical; the check is
+    # current_hp <= -1 not <= 0.
     requires_below_zero = bool(eff.get("requires_below_zero_hp"))
-    if requires_below_zero and target.current_hp > 0:
+    if requires_below_zero and target.current_hp > -1:
         out.log.append(
-            f"  {target.name} is not below 0 HP; bleed has no effect"
+            f"  {target.name} is not at -1 or fewer HP; bleed has no effect"
         )
         return
     save_kind, semantic = parse_saving_throw(spell.saving_throw)
@@ -1060,4 +1124,6 @@ _EFFECT_HANDLERS: dict[str, Any] = {
     "dispel_magic":          _handle_dispel_magic,
     "color_spray":           _handle_color_spray,
     "apply_bleed":           _handle_apply_bleed,
+    "apply_temp_hp":         _handle_apply_temp_hp,
+    "apply_single_use_buff": _handle_apply_single_use_buff,
 }

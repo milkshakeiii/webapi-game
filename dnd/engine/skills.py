@@ -127,6 +127,9 @@ def skill_check(
         natural = result.terms[0].rolls[0]
     total = natural + bonus
     success: bool | None = (total >= dc) if dc is not None else None
+    # Discharge any single-use buffs (e.g. Guidance) the actor was
+    # holding for their next roll.
+    actor.consume_single_use_buffs()
     return SkillCheckResult(
         skill_id=skill_id, actor_id=actor.id,
         natural=natural, bonus=bonus, total=total,
