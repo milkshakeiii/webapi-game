@@ -669,6 +669,12 @@ def _execute_composite(
     if composite == "domain_power":
         _do_domain_power(actor, args, encounter, grid, roller, ns, events)
         return
+    if composite == "tail_spike_volley":
+        _do_tail_spike_volley(actor, args, encounter, grid, roller, ns, events)
+        return
+    if composite == "escape_web":
+        _do_escape_web(actor, args, grid, roller, ns, events)
+        return
     if composite == "aid_another":
         _do_aid_another(actor, args, encounter, grid, roller, ns, events)
         return
@@ -2315,11 +2321,21 @@ def _do_attack(
     # Invisible attacker: +2 attack and target denied Dex (target can't
     # see attacker absent True Seeing or pinpointing). PF1 ranged
     # invisible attackers don't get the +2 (RAW: only melee).
+    # Pinpoint-by-Perception: a defender already aware of this invisible
+    # attacker (via a successful Perception check on a prior round)
+    # negates the Dex-denied benefit. The +2 attack bonus persists.
     invisible_bonus = 0
     if "invisible" in actor.conditions:
         if not is_ranged:
             invisible_bonus = 2
-        ac_situation = "flat_footed"
+        cur_round = (
+            int(encounter.round_number) if encounter is not None else 0
+        )
+        already_pinpointed = (
+            target.pinpointed_invisible.get(actor.id, -1) >= cur_round - 1
+        )
+        if not already_pinpointed:
+            ac_situation = "flat_footed"
     # Weapon proficiency: -4 attack if the attacker isn't proficient
     # with the weapon they're using. ``_weapon_not_proficient`` checks
     # the cached proficient categories on the combatant against the
@@ -2458,9 +2474,9 @@ def _do_attack(
             )
     # Rock-catching: if the target has the rock_catching trait and the
     # incoming attack is a thrown rock, the target may attempt a
-    # Reflex save (DC 15 small / 20 medium / 25 large rock) to catch
-    # it instead of taking the hit. v1 uses DC 15 — it suffices for
-    # the standard hill-giant boulder scenario.
+    # Reflex save (DC 15 small / 20 medium / 25 large rock; based on
+    # the thrower's size) to catch it instead of taking the hit. RAW
+    # caps at one catch per round per target.
     if (
         outcome.hit
         and is_ranged
@@ -2470,18 +2486,34 @@ def _do_attack(
             or str(chosen.get("name", "")).lower() == "rock"
         )
     ):
-        from .spells import roll_save
-        passed, nat, total = roll_save(target, "ref", 15, roller)
-        if passed:
-            from dataclasses import replace as _replace
-            outcome = _replace(
-                outcome,
-                hit=False, crit=False,
-                damage=0, damage_dealt_pre_dr=0, dr_absorbed=0,
-                log=outcome.log + [
-                    f"rock caught: Ref d20={nat}+{total - nat}={total} ≥ 15 — caught",
-                ],
+        cur_round = (
+            int(encounter.round_number) if encounter is not None else 0
+        )
+        last_caught = int(target.resources.get(
+            "last_rock_caught_round", -1,
+        ))
+        if last_caught == cur_round:
+            # Already caught this round; skip the save.
+            pass
+        else:
+            from .spells import roll_save
+            dc = _ROCK_CATCH_DC.get(
+                str(getattr(actor, "size", "medium")).lower(), 15,
             )
+            passed, nat, total = roll_save(target, "ref", dc, roller)
+            if passed:
+                from dataclasses import replace as _replace
+                target.resources["last_rock_caught_round"] = cur_round
+                outcome = _replace(
+                    outcome,
+                    hit=False, crit=False,
+                    damage=0, damage_dealt_pre_dr=0, dr_absorbed=0,
+                    log=outcome.log + [
+                        f"rock caught: Ref d20={nat}+{total - nat}="
+                        f"{total} ≥ {dc} — caught (thrower size "
+                        f"{getattr(actor, 'size', 'medium')})",
+                    ],
+                )
 
     # Incorporeal target resolution: non-magical attacks miss outright
     # (immune); force / ghost-touch attacks pass through; any other
@@ -2616,6 +2648,28 @@ def _do_attack(
                 actor, target, roller, p_trait_id, p_data,
                 encounter=encounter,
             )
+    # Pinpoint check: if the attacker is invisible, the defender
+    # rolls Perception (DC 20 + 1 per 10 ft of distance) to locate
+    # the attacker's square. Success records the attacker_id under
+    # target.pinpointed_invisible so subsequent attacks at the
+    # same attacker drop the Dex-denied benefit. The +2 attack
+    # bonus persists either way.
+    if "invisible" in actor.conditions:
+        ax, ay = actor.position
+        tx, ty = target.position
+        dist_squares = max(abs(ax - tx), abs(ay - ty))
+        dc = 20 + (dist_squares * 5) // 10
+        from .skills import skill_check
+        from .content import default_registry
+        result = skill_check(
+            target, "perception", dc=dc, roller=roller,
+            registry=default_registry(),
+        )
+        if result.success:
+            cur_round = (
+                int(encounter.round_number) if encounter is not None else 0
+            )
+            target.pinpointed_invisible[actor.id] = cur_round
     events.append(TurnEvent(actor.id, label, {
         "target_id": target.id,
         "weapon": profile.name,
@@ -3209,6 +3263,115 @@ def _monster_hd(actor: Combatant) -> int:
         return 1
 
 
+def _do_tail_spike_volley(
+    actor: Combatant,
+    args: dict,
+    encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Manticore tail-spike volley (RAW): a standard action that
+    fires 4 spikes against a single target up to 180 ft away. Each
+    consumes one spike from the daily pool; the volley stops early
+    if the pool runs out.
+    """
+    if not _has_racial_trait(actor, "tail_spikes"):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "tail_spike_volley: actor lacks the trait"}))
+        return
+    target = _resolve_target(args.get("target"), ns)
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "tail_spike_volley: no target"}))
+        return
+    spike_idx = next(
+        (i for i, opt in enumerate(actor.attack_options or [])
+         if str(opt.get("name", "")).lower() == "spikes"),
+        None,
+    )
+    if spike_idx is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "tail_spike_volley: no 'spikes' attack option"}))
+        return
+    fired = 0
+    for i in range(4):
+        if int(actor.daily_resources.get("tail_spikes", 0)) <= 0:
+            break
+        if not target.is_alive():
+            break
+        _do_attack(actor, target, grid, roller, events,
+                   label=f"tail_spike_volley_{i+1}",
+                   encounter=encounter,
+                   attack_index=spike_idx)
+        fired += 1
+    events.append(TurnEvent(actor.id, "tail_spike_volley", {
+        "target_id": target.id,
+        "fired": fired,
+        "remaining": int(actor.daily_resources.get("tail_spikes", 0)),
+    }))
+
+
+def _do_escape_web(
+    actor: Combatant,
+    args: dict,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """PF1: escape from a giant-spider's web — Strength check or
+    Escape Artist check vs DC 16 (one full round to escape via
+    Strength; one Escape Artist check works as a standard action).
+
+    For v1: standard action, rolls the higher of Str check or
+    Escape Artist; on success removes the entangled condition
+    sourced under 'web:<spider_id>'.
+    """
+    if "entangled" not in actor.conditions:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "escape_web: not entangled"}))
+        return
+    str_score = _ability_score(actor, "str")
+    str_mod = (str_score - 10) // 2 if str_score > 0 else 0
+    str_roll = roller.roll("1d20")
+    str_total = int(str_roll.terms[0].rolls[0]) + str_mod
+    ea_total = actor.skill_total("escape_artist")
+    ea_roll = roller.roll("1d20")
+    ea_total += int(ea_roll.terms[0].rolls[0])
+    best = max(str_total, ea_total)
+    passed = best >= 16
+    if passed:
+        # Drop entangled if any sourced_conditions entry references it
+        # under a 'web:<id>' source.
+        web_sourced = [
+            k for k, v in actor.sourced_conditions.items()
+            if k.startswith("web:") and "entangled" in v
+        ]
+        for src in web_sourced:
+            actor.sourced_conditions.pop(src, None)
+        actor.remove_condition("entangled")
+    events.append(TurnEvent(actor.id, "escape_web", {
+        "str_total": str_total, "ea_total": ea_total,
+        "best": best, "dc": 16, "passed": passed,
+    }))
+
+
+def _ability_score(actor: Combatant, ability: str) -> int:
+    """Read the actor's effective ability score (post racial / bumps /
+    ability damage). Falls back to 10 for missing data."""
+    if actor.template_kind == "character" and actor.template is not None:
+        base = (actor.template.base_ability_scores or {}).get(ability) or 10
+        for m in actor.modifiers.for_target(f"ability:{ability}"):
+            base += m.value
+        return int(base)
+    if actor.template_kind == "monster" and actor.template is not None:
+        scores = getattr(actor.template, "ability_scores", None) or {}
+        return int(scores.get(ability, 10) or 10)
+    return 10
+
+
 def _do_domain_power(
     actor: Combatant,
     args: dict,
@@ -3518,6 +3681,10 @@ def _do_web(
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "web: actor has no web racial"}))
         return
+    if int(actor.daily_resources.get("web_uses", 0)) <= 0:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "web: daily pool empty"}))
+        return
     target = _resolve_target(args.get("target"), ns)
     if target is None:
         events.append(TurnEvent(actor.id, "skip",
@@ -3533,10 +3700,14 @@ def _do_web(
     hd = _monster_hd(actor)
     con_mod = _ability_modifier(actor, "con")
     dc = 10 + hd // 2 + con_mod
+    actor.daily_resources["web_uses"] = (
+        int(actor.daily_resources.get("web_uses", 0)) - 1
+    )
     passed, nat, total = roll_save(target, "ref", dc, roller)
     detail = {
         "target_id": target.id, "dc": dc,
         "natural": nat, "total": total, "passed": passed,
+        "uses_remaining": int(actor.daily_resources.get("web_uses", 0)),
     }
     if not passed:
         target.add_condition("entangled")
@@ -5238,6 +5409,19 @@ _DEX_DENIED_CONDITIONS = frozenset({
     "flat_footed", "helpless", "paralyzed", "stunned", "pinned",
     "cowering", "blinded", "prone", "sleeping", "petrified",
 })
+
+
+# Reflex DC for catching a thrown rock, indexed by the thrower's
+# size. PF1 RAW: small rock DC 15, medium 20, large 25, huge 30,
+# gargantuan 35, colossal 40. Rocks scale with the thrower's size.
+_ROCK_CATCH_DC: dict[str, int] = {
+    "small": 15,
+    "medium": 20,
+    "large": 25,
+    "huge": 30,
+    "gargantuan": 35,
+    "colossal": 40,
+}
 
 
 def _weapon_attack_tags(actor: Combatant, chosen: dict) -> frozenset[str]:

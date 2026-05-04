@@ -271,6 +271,17 @@ def _check_actor_legality(turn: Turn, combatant: Combatant) -> None:
                     f"entangled combatant cannot take {kind!r} action"
                 )
 
+    if "fatigued" in conds or "exhausted" in conds:
+        # PF1: a fatigued creature cannot run or charge; exhausted
+        # inherits this restriction.
+        if turn.full_round is not None:
+            kind = turn.full_round.get("composite") or turn.full_round.get("type")
+            if kind in ("charge", "run"):
+                state = "exhausted" if "exhausted" in conds else "fatigued"
+                raise TurnValidationError(
+                    f"{state} combatant cannot take {kind!r} action"
+                )
+
     if "panicked" in conds:
         # PF1: panicked creature drops items, flees, and cannot attack
         # except in self-defense (effectively reduced to move + total

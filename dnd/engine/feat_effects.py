@@ -92,6 +92,41 @@ def feat_modifiers(feat_id: str, character) -> list[Modifier]:
     if feat_id == "spell_penetration":
         return [mod(2, "untyped", "spell_resistance_check", src)]
 
+    # ── Improved-X defensive CMD bonuses (each grants +2 CMD vs the
+    # named maneuver, qualifier-gated so non-matching maneuvers don't
+    # see the bonus). The +2 CMB on the offensive side is applied at
+    # _resolve_maneuver — these handle the matching CMD half.
+    if feat_id == "improved_grapple":
+        return [mod(2, "untyped", "cmd", src,
+                    qualifier={"maneuver": ["grapple"]})]
+    if feat_id == "improved_disarm":
+        return [mod(2, "untyped", "cmd", src,
+                    qualifier={"maneuver": ["disarm"]})]
+    if feat_id == "improved_trip":
+        return [mod(2, "untyped", "cmd", src,
+                    qualifier={"maneuver": ["trip"]})]
+    if feat_id == "improved_sunder":
+        return [mod(2, "untyped", "cmd", src,
+                    qualifier={"maneuver": ["sunder"]})]
+    if feat_id == "improved_bull_rush":
+        return [mod(2, "untyped", "cmd", src,
+                    qualifier={"maneuver": ["bull_rush"]})]
+    if feat_id == "improved_overrun":
+        return [mod(2, "untyped", "cmd", src,
+                    qualifier={"maneuver": ["overrun"]})]
+    if feat_id == "improved_drag":
+        return [mod(2, "untyped", "cmd", src,
+                    qualifier={"maneuver": ["drag"]})]
+    if feat_id == "improved_reposition":
+        return [mod(2, "untyped", "cmd", src,
+                    qualifier={"maneuver": ["reposition"]})]
+    if feat_id == "improved_steal":
+        return [mod(2, "untyped", "cmd", src,
+                    qualifier={"maneuver": ["steal"]})]
+    if feat_id == "improved_dirty_trick":
+        return [mod(2, "untyped", "cmd", src,
+                    qualifier={"maneuver": ["dirty_trick"]})]
+
     # ── Point-Blank Shot (+1 attack and damage with ranged within 30 ft). ─
     # We model as a flat +1 to ranged attack/damage; range qualifier
     # isn't enforced in v1 (most ranged shots are at <30 ft anyway).

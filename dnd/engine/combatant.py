@@ -232,6 +232,15 @@ class Combatant:
     # aura per encounter" which mirrors the most common sub-cases.
     aura_saves_taken: set[str] = field(default_factory=set)
 
+    # PF1 invisible-attacker pinpointing: when an invisible foe
+    # attacks this combatant, the defender may roll Perception
+    # (DC 20 + 1/10 ft of distance) to locate the attacker's square.
+    # On success, the attacker_id is recorded here against the round
+    # in which the pinpoint succeeded — DSL behavior scripts can
+    # consult this to retaliate at the right square. The +2/Dex-
+    # denied benefit of being invisible is independent and persists.
+    pinpointed_invisible: dict[str, int] = field(default_factory=dict)
+
     # PF1 cleric domain selection: list of domain ids picked at L1
     # (via class_choices.domains). Empty for non-clerics or for a
     # cleric who hasn't committed yet. Used by the domain-power
@@ -428,9 +437,19 @@ class Combatant:
         approximate by flooring at -1 since the engine doesn't model
         nonlethal damage separately.) Bypass-type damage applies
         normally and CAN drop the creature below -1, killing it.
+
+        Petrified creatures have hardness 8 (any incoming damage is
+        reduced by 8) and shatter outright on a single attack
+        dealing 50+ damage post-hardness.
         """
         if amount < 0:
             raise ValueError(f"damage must be >= 0, got {amount}")
+        if "petrified" in self.conditions and amount > 0:
+            if amount >= 50:
+                self.current_hp = self.death_threshold - 1
+                self.add_condition("dead")
+                return
+            amount = max(0, amount - 8)
         new_hp = self.current_hp - amount
         if (
             self.regeneration > 0
@@ -608,6 +627,14 @@ class Combatant:
             self.modifiers.add(Modifier(value=-4, type="untyped",
                                         target="initiative",
                                         source="deafened"))
+        # Petrified stone-body: halve max HP (and clamp current).
+        # Stash the pre-petrified values so removal can restore.
+        if condition_id == "petrified" and "pre_petrified_max_hp" not in self.resources:
+            self.resources["pre_petrified_max_hp"] = self.max_hp
+            self.resources["pre_petrified_current_hp"] = self.current_hp
+            new_max = max(1, self.max_hp // 2)
+            self.max_hp = new_max
+            self.current_hp = min(self.current_hp, new_max)
         # Helpless cascade (multiple conditions can set this off).
         if condition_id in _IMPLIES_HELPLESS:
             # PF1 RAW: unconscious / sleeping / paralyzed / petrified
@@ -689,6 +716,19 @@ class Combatant:
             self.speed = self.speed * 2
         elif condition_id == "deafened":
             self.modifiers.remove_by_source("deafened")
+        # Petrified: restore stone-body HP scaling.
+        if condition_id == "petrified" and "pre_petrified_max_hp" in self.resources:
+            self.max_hp = int(
+                self.resources.pop("pre_petrified_max_hp", self.max_hp),
+            )
+            stashed_cur = int(
+                self.resources.pop("pre_petrified_current_hp", self.current_hp),
+            )
+            # Don't refund HP — restore the bigger pool but cap current
+            # at whatever it actually fell to during petrification.
+            self.current_hp = min(stashed_cur, self.current_hp + 0)
+            # If current HP is now <= death threshold, ensure dying
+            # transitions handled externally.
         if condition_id in _IMPLIES_HELPLESS:
             # Only drop helpless if WE applied it. The implication map
             # entry is present iff we did the add; missing means
@@ -1201,6 +1241,9 @@ def _apply_monster_racial_traits(
             # 'spikes' attack and the worker tick replenishes once
             # per day (14400 rounds).
             extras.setdefault("daily_resources", {})["tail_spikes"] = 24
+        elif tid == "web_giant_spider":
+            # PF1: 8 webs per day. Daily replenish via tick_round.
+            extras.setdefault("daily_resources", {})["web_uses"] = 8
     return extras
 
 
