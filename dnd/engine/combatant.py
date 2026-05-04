@@ -224,6 +224,14 @@ class Combatant:
     # Set at construction from ``monster.subtypes``.
     incorporeal: bool = False
 
+    # PF1 aura saving-throw cooldowns: per-aura-source set of trait IDs
+    # this combatant has already rolled (and either passed or
+    # failed) against during the current encounter. Auras like stench
+    # or captivating_song let a target re-test only after a fixed
+    # cooldown / on a new exposure, but for v1 we use "one save per
+    # aura per encounter" which mirrors the most common sub-cases.
+    aura_saves_taken: set[str] = field(default_factory=set)
+
     # PF1 ability damage (poison, blood drain, etc.). Each point of
     # damage lowers the effective ability score by 1; the mod-step
     # approximation here is `-(dmg // 2)` per ability, applied as

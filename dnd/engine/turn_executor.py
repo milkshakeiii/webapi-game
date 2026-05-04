@@ -82,6 +82,10 @@ def execute_turn(
     if intent is None or "composite" in intent.do and intent.do["composite"] == "hold":
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "no rule matched" if intent is None else "hold"}))
+        # Aura/end-of-turn riders still fire on a held turn — exposure
+        # to a stench/gaze isn't avoided by holding action.
+        _apply_end_of_turn_racial_effects(actor, grid, roller, events,
+                                          encounter=encounter)
         return TurnResult(actor.id, rule_index, events)
 
     do = intent.do
@@ -149,14 +153,125 @@ def execute_turn(
             }))
 
     # End-of-turn racial-trait riders.
-    _apply_end_of_turn_racial_effects(actor, grid, roller, events)
+    _apply_end_of_turn_racial_effects(actor, grid, roller, events,
+                                      encounter=encounter)
 
     return TurnResult(actor.id, rule_index, events)
 
 
+_AURA_TRAITS: dict[str, dict] = {
+    "stench": {
+        "radius_squares": 6,           # 30 ft / 5 ft per square
+        "save": "fort",
+        "ability_for_dc": "con",
+        "condition": "sickened",
+        "duration_dice": "1d6",        # rounds on save fail
+        "cooldown": "encounter",
+        "self_immune_template_ids": ["troglodyte"],
+    },
+    "captivating_song": {
+        "radius_squares": 60,          # 300 ft
+        "save": "will",
+        "ability_for_dc": "cha",
+        "condition": "fascinated",
+        "duration_dice": None,         # ongoing while singing
+        "cooldown": "encounter",
+        "self_immune_template_ids": ["harpy"],
+    },
+    "petrifying_gaze": {
+        "radius_squares": 6,           # 30 ft
+        "save": "fort",
+        "ability_for_dc": "cha",       # basilisk gaze DC = Cha-based
+        "condition": "petrified",
+        "duration_dice": None,         # permanent until Stone to Flesh
+        "cooldown": "round",           # fresh save each round
+        "self_immune_template_ids": ["basilisk"],
+    },
+}
+
+
+def _aura_save_dc(source: Combatant, trait_data: dict) -> int:
+    """Standard PF1 monster save-DC formula: 10 + 1/2 HD + ability mod."""
+    hd = _monster_hd(source)
+    ability = trait_data.get("ability_for_dc", "cha")
+    return 10 + hd // 2 + _ability_modifier(source, ability)
+
+
+def _apply_aura_exposure(
+    actor: Combatant, grid: Grid, roller: Roller,
+    events: list[TurnEvent], *, encounter=None,
+) -> None:
+    """Roll any unsaved aura saves the actor is exposed to right now.
+
+    Cooldown semantics:
+      - "encounter": one save per source per encounter (stench,
+        captivating_song). Both pass and fail consume the cooldown.
+      - "round": fresh save every round (gazes). The cooldown key
+        bakes in the round number so a new round resets it.
+    """
+    if grid is None:
+        return
+    if "dead" in actor.conditions or "unconscious" in actor.conditions:
+        return
+    encounter_round = (
+        int(encounter.round_number) if encounter is not None else 0
+    )
+    for cid, source in list(grid.combatants.items()):
+        if source.id == actor.id:
+            continue
+        if "dead" in source.conditions:
+            continue
+        for trait_id, data in _AURA_TRAITS.items():
+            if not _has_racial_trait(source, trait_id):
+                continue
+            self_immune = data.get("self_immune_template_ids") or []
+            if (
+                actor.template_kind == "monster"
+                and actor.template is not None
+                and getattr(actor.template, "id", None) in self_immune
+            ):
+                continue
+            radius = int(data.get("radius_squares", 0))
+            ax, ay = actor.position
+            sx, sy = source.position
+            if max(abs(ax - sx), abs(ay - sy)) > radius:
+                continue
+            cooldown = data.get("cooldown", "encounter")
+            if cooldown == "round":
+                key = f"{trait_id}:{source.id}:r{encounter_round}"
+            else:
+                key = f"{trait_id}:{source.id}"
+            if key in actor.aura_saves_taken:
+                continue
+            # Don't re-apply a permanent condition that's already set.
+            cond = data.get("condition")
+            if cond and cond in actor.conditions and not data.get("duration_dice"):
+                actor.aura_saves_taken.add(key)
+                continue
+            from .spells import roll_save
+            dc = _aura_save_dc(source, data)
+            kind = data["save"]
+            passed, nat, total = roll_save(actor, kind, dc, roller)
+            actor.aura_saves_taken.add(key)
+            event_detail: dict = {
+                "trait": trait_id,
+                "source_id": source.id,
+                "save_kind": kind,
+                "dc": dc,
+                "natural": nat, "total": total, "passed": passed,
+            }
+            if not passed and cond:
+                actor.add_condition(cond)
+                duration_dice = data.get("duration_dice")
+                if duration_dice:
+                    dur_roll = roller.roll(duration_dice)
+                    event_detail["duration"] = int(dur_roll.total)
+            events.append(TurnEvent(actor.id, "aura_exposure", event_detail))
+
+
 def _apply_end_of_turn_racial_effects(
     actor: Combatant, grid: Grid, roller: Roller,
-    events: list[TurnEvent],
+    events: list[TurnEvent], *, encounter=None,
 ) -> None:
     """Per-round racial effects that fire at the end of the actor's turn.
 
@@ -165,7 +280,11 @@ def _apply_end_of_turn_racial_effects(
       Stops once the cumulative drain reaches 4 (RAW cap).
     - Lion rake: while grappling, two free claw attacks against the
       grapple target.
+    - Aura exposure: when the actor ends its turn within an aura
+      source's range, the actor makes the matching save (one save
+      per aura per encounter; see Combatant.aura_saves_taken).
     """
+    _apply_aura_exposure(actor, grid, roller, events, encounter=encounter)
     if (
         _has_racial_trait(actor, "blood_drain")
         and actor.grappling_target_id is not None
@@ -201,6 +320,60 @@ def _apply_end_of_turn_racial_effects(
                 _do_attack(actor, target, grid, roller, events,
                            label="rake", encounter=None,
                            attack_index=idx)
+    # Choker constrict + strangle: while grappling, automatic 1d4+3
+    # bludgeoning damage and silenced (cannot speak / V-cast).
+    if (
+        _has_racial_trait(actor, "constrict_strangle")
+        and actor.grappling_target_id is not None
+        and grid is not None
+    ):
+        target = grid.combatants.get(actor.grappling_target_id)
+        if target is not None and target.is_alive():
+            r = roller.roll("1d4")
+            damage = int(r.total) + 3
+            target.take_damage(damage)
+            _apply_post_damage_state(target)
+            if "silenced" not in target.conditions:
+                target.add_condition("silenced")
+                target.register_sourced_condition(
+                    f"constrict_strangle:{actor.id}", "silenced",
+                )
+            events.append(TurnEvent(actor.id, "constrict_strangle", {
+                "target_id": target.id,
+                "damage": damage,
+            }))
+    # Gelatinous-cube engulf: any adjacent creature ending an exposure
+    # window (here: end of cube's turn) makes a Reflex save vs DC =
+    # 10 + 1/2 HD + Str mod. Failure → paralyzed + 1d6 acid damage.
+    # Successful save does not consume the engulf opportunity (cube
+    # may try again next round).
+    if (
+        _has_racial_trait(actor, "engulf")
+        and grid is not None
+    ):
+        from .spells import roll_save
+        hd = _monster_hd(actor)
+        str_mod = _ability_modifier(actor, "str")
+        dc = 10 + hd // 2 + str_mod
+        for cid, victim in list(grid.combatants.items()):
+            if victim.id == actor.id or victim.team == actor.team:
+                continue
+            if "dead" in victim.conditions:
+                continue
+            if not grid.is_adjacent(actor, victim):
+                continue
+            passed, nat, total = roll_save(victim, "ref", dc, roller)
+            event_detail = {
+                "target_id": victim.id, "dc": dc,
+                "natural": nat, "total": total, "passed": passed,
+            }
+            if not passed:
+                victim.add_condition("paralyzed")
+                acid = roller.roll("1d6")
+                victim.take_damage(int(acid.total), damage_type="acid")
+                _apply_post_damage_state(victim)
+                event_detail["acid_damage"] = int(acid.total)
+            events.append(TurnEvent(actor.id, "engulf", event_detail))
 
 
 _STANDARD_ACTION_EVENT_KINDS: frozenset[str] = frozenset({
@@ -399,6 +572,9 @@ def _execute_composite(
         return
     if composite == "coup_de_grace":
         _do_coup_de_grace(actor, args, encounter, grid, roller, ns, events)
+        return
+    if composite == "web":
+        _do_web(actor, args, encounter, grid, roller, ns, events)
         return
     if composite == "aid_another":
         _do_aid_another(actor, args, encounter, grid, roller, ns, events)
@@ -2172,6 +2348,33 @@ def _do_attack(
                     f"{target.concealment} — miss",
                 ],
             )
+    # Rock-catching: if the target has the rock_catching trait and the
+    # incoming attack is a thrown rock, the target may attempt a
+    # Reflex save (DC 15 small / 20 medium / 25 large rock) to catch
+    # it instead of taking the hit. v1 uses DC 15 — it suffices for
+    # the standard hill-giant boulder scenario.
+    if (
+        outcome.hit
+        and is_ranged
+        and _has_racial_trait(target, "rock_catching")
+        and (
+            chosen.get("weapon_id") == "rock"
+            or str(chosen.get("name", "")).lower() == "rock"
+        )
+    ):
+        from .spells import roll_save
+        passed, nat, total = roll_save(target, "ref", 15, roller)
+        if passed:
+            from dataclasses import replace as _replace
+            outcome = _replace(
+                outcome,
+                hit=False, crit=False,
+                damage=0, damage_dealt_pre_dr=0, dr_absorbed=0,
+                log=outcome.log + [
+                    f"rock caught: Ref d20={nat}+{total - nat}={total} ≥ 15 — caught",
+                ],
+            )
+
     # Incorporeal target resolution: non-magical attacks miss outright
     # (immune); force / ghost-touch attacks pass through; any other
     # magical attack rolls a 50% miss (RAW: "50% chance to ignore
@@ -2887,6 +3090,54 @@ def _monster_hd(actor: Combatant) -> int:
         return int(hd_str)
     except ValueError:
         return 1
+
+
+def _do_web(
+    actor: Combatant,
+    args: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Giant-spider web composite action.
+
+    Throws a web at a creature within 50 feet (10 squares). Target
+    rolls Reflex vs DC = 10 + 1/2 HD + Con mod; failure → entangled
+    (and effectively rooted, in v1, by setting speed to 0 via the
+    entangled-condition's speed-halving + an extra resource flag).
+    PF1 RAW gives 8 webs/day; v1 doesn't enforce a per-day cap.
+    """
+    if not _has_racial_trait(actor, "web_giant_spider"):
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "web: actor has no web racial"}))
+        return
+    target = _resolve_target(args.get("target"), ns)
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "web: no target"}))
+        return
+    ax, ay = actor.position
+    tx, ty = target.position
+    if max(abs(ax - tx), abs(ay - ty)) > 10:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "web: target beyond 50ft"}))
+        return
+    from .spells import roll_save
+    hd = _monster_hd(actor)
+    con_mod = _ability_modifier(actor, "con")
+    dc = 10 + hd // 2 + con_mod
+    passed, nat, total = roll_save(target, "ref", dc, roller)
+    detail = {
+        "target_id": target.id, "dc": dc,
+        "natural": nat, "total": total, "passed": passed,
+    }
+    if not passed:
+        target.add_condition("entangled")
+        target.register_sourced_condition(f"web:{actor.id}", "entangled")
+        detail["applied"] = "entangled"
+    events.append(TurnEvent(actor.id, "web", detail))
 
 
 def _resolve_paralysis_rider(
