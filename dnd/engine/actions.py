@@ -1955,6 +1955,207 @@ def _first(actions: list[Action], cls: type) -> Action:
     raise RuntimeError(f"no {cls.__name__} in legal actions")
 
 
+# ---------------------------------------------------------------------------
+# Phase 4: BehaviorScript-compiled reactive picker
+# ---------------------------------------------------------------------------
+
+
+def _classify_reactive_kind(actions: list[Action]) -> str | None:
+    """Inspect a legal-action list to figure out which reactive
+    decision-point kind this is. Returns None if the actions don't
+    look like a reactive interrupt the DSL knows about."""
+    if any(isinstance(a, TakeAoO) or isinstance(a, PassAoO) for a in actions):
+        return "aoo"
+    if any(isinstance(a, Brace) or isinstance(a, PassBrace) for a in actions):
+        return "brace"
+    if any(isinstance(a, CleaveTo) or isinstance(a, PassCleave) for a in actions):
+        return "cleave"
+    return None
+
+
+def _reactive_context(
+    kind: str, actions: list[Action], state: GameState,
+) -> dict:
+    """Build the context dict the reactive namespace builder consumes.
+    Pulls the `provoker` / `charger` / `primary` Combatant out of the
+    legal-action list (whichever's relevant for the kind)."""
+    ctx: dict = {}
+    grid = state.grid
+    if kind == "aoo":
+        for a in actions:
+            if isinstance(a, TakeAoO):
+                provoker = grid.combatants.get(a.provoker_id)
+                if provoker is not None:
+                    ctx["provoker"] = provoker
+                    break
+            if isinstance(a, PassAoO):
+                provoker = grid.combatants.get(a.provoker_id)
+                if provoker is not None:
+                    ctx["provoker"] = provoker
+                    break
+    elif kind == "brace":
+        for a in actions:
+            cid = getattr(a, "charger_id", None)
+            if cid:
+                charger = grid.combatants.get(cid)
+                if charger is not None:
+                    ctx["charger"] = charger
+                    break
+    elif kind == "cleave":
+        for a in actions:
+            pid = getattr(a, "primary_target_id", None)
+            if pid:
+                primary = grid.combatants.get(pid)
+                if primary is not None:
+                    ctx["primary"] = primary
+            if isinstance(a, CleaveTo):
+                tgt = grid.combatants.get(a.target_id)
+                if tgt is not None:
+                    ctx.setdefault("candidates", []).append(tgt)
+    return ctx
+
+
+def _compile_reactive_do(
+    do: dict, kind: str, actions: list[Action],
+) -> Action | None:
+    """Translate a ``do:`` dict from a reactive rule into one of the
+    legal Actions. Returns None if the do-dict doesn't map (caller
+    should fall through to the next rule).
+
+    The ``do`` shape is dict-style, matching v1: ``{"type": "take_aoo",
+    "weapon": 0}`` etc. Bare strings (``"pass_aoo"``) also accepted as
+    sugar for ``{"type": "pass_aoo"}``."""
+    if isinstance(do, str):
+        do = {"type": do}
+    dtype = do.get("type")
+    if dtype is None:
+        return None
+    if kind == "aoo":
+        if dtype == "take_aoo":
+            weapon = int(do.get("weapon", 0))
+            for a in actions:
+                if isinstance(a, TakeAoO) and a.weapon_index == weapon:
+                    return a
+            # Fall back to TakeAoO with weapon 0 if the requested
+            # weapon isn't offered.
+            for a in actions:
+                if isinstance(a, TakeAoO):
+                    return a
+            return None
+        if dtype == "pass_aoo":
+            for a in actions:
+                if isinstance(a, PassAoO):
+                    return a
+            return None
+    if kind == "brace":
+        if dtype == "brace":
+            for a in actions:
+                if isinstance(a, Brace):
+                    return a
+            return None
+        if dtype == "pass_brace":
+            for a in actions:
+                if isinstance(a, PassBrace):
+                    return a
+            return None
+    if kind == "cleave":
+        if dtype == "cleave_to":
+            # ``target`` is a target-expression string evaluated below;
+            # this helper only handles literal target_ids. Returning
+            # None signals the caller to try expression-resolution.
+            target_id = do.get("target_id")
+            if target_id:
+                for a in actions:
+                    if (isinstance(a, CleaveTo)
+                            and a.target_id == target_id):
+                        return a
+            return None
+        if dtype == "pass_cleave":
+            for a in actions:
+                if isinstance(a, PassCleave):
+                    return a
+            return None
+    return None
+
+
+class CompiledReactivePicker(Picker):
+    """A Picker compiled from a ``BehaviorScript``'s ``react:`` rules.
+
+    Per-decision flow:
+      1. Classify the legal-actions list into a reactive kind (``aoo``,
+         ``brace``, ``cleave``).
+      2. Filter rules to those whose ``react`` field matches.
+      3. For each matched rule in order, evaluate ``when`` against the
+         reactive namespace. First match → translate ``do`` to an Action.
+      4. If no rule matched: fall back to the v1-equivalent default
+         (TakeAoO/Brace/CleaveTo[first] — same as no picker registered).
+
+    Built only once per (actor, encounter); cheap to call repeatedly."""
+
+    def __init__(self, script):
+        self.script = script
+
+    def pick(
+        self,
+        actor: Combatant,
+        state: GameState,
+        actions: list[Action],
+    ) -> Action:
+        kind = _classify_reactive_kind(actions)
+        if kind is None:
+            # Not a reactive decision we understand — return the first
+            # offered action as a permissive fallback.
+            return actions[0]
+
+        from .dsl import build_reactive_namespace, evaluate, DSLError
+
+        ctx = _reactive_context(kind, actions, state)
+        ns = build_reactive_namespace(
+            actor, state.encounter, state.grid, kind=kind, context=ctx,
+        )
+
+        for rule in self.script.rules:
+            if rule.react != kind:
+                continue
+            if rule.when is not None:
+                try:
+                    if not bool(evaluate(rule.when, ns)):
+                        continue
+                except DSLError:
+                    continue
+            chosen = _compile_reactive_do(rule.do, kind, actions)
+            if chosen is not None:
+                return chosen
+
+        # No matching rule — use the v1-equivalent default per kind.
+        return actions[0]
+
+
+def register_script_pickers(
+    actor: Combatant,
+    script,
+    encounter,
+) -> None:
+    """Compile ``script`` into a ``CompiledReactivePicker`` and register
+    it for ``actor`` on ``encounter.pickers``. Idempotent: replaces any
+    prior registration for the actor.
+
+    Called when a hero is deployed / when an encounter starts. Active-
+    turn picks still flow through ``Interpreter.pick_turn`` →
+    ``TurnIntent`` → ``execute_turn`` (Phase 4 doesn't change that);
+    only reactive interrupts are routed through this picker."""
+    if not getattr(script, "rules", None):
+        return
+    has_reactive = any(
+        getattr(r, "react", None) is not None
+        or getattr(r, "sub", None) is not None
+        for r in script.rules
+    )
+    if not has_reactive:
+        return
+    encounter.pickers[actor.id] = CompiledReactivePicker(script)
+
+
 def run_encounter(
     state: GameState,
     pickers: dict[str, Picker],

@@ -78,6 +78,15 @@ class Rule:
     hero: str = "any"           # role name or "any"
     when: str | None = None     # condition expression; None = always
     do: dict = field(default_factory=dict)
+    # DSL v2: ``react`` and ``sub`` discriminate non-active-turn rules.
+    # When both are None, the rule applies to active-turn picking
+    # (existing behavior). When ``react`` is set (e.g., "aoo", "brace",
+    # "cleave"), the rule applies to that reactive-interrupt kind.
+    # When ``sub`` is set (e.g., "full_attack"), the rule applies to
+    # that sub-action decision-point. The ``when`` namespace is
+    # context-specific (build_reactive_namespace builds it).
+    react: str | None = None
+    sub: str | None = None
 
 
 @dataclass
@@ -117,6 +126,8 @@ def script_from_dict(data: dict) -> BehaviorScript:
             hero=str(r.get("hero", "any")),
             when=r.get("when"),
             do=dict(r.get("do") or {}),
+            react=r.get("react"),
+            sub=r.get("sub"),
         ))
     return BehaviorScript(name=name, party=party, rules=rules)
 
@@ -377,6 +388,53 @@ def build_namespace(
         "round_number": encounter.round_number,
         "True": True, "False": False, "None": None,
     }
+
+
+def build_reactive_namespace(
+    actor: Combatant,
+    encounter: Encounter,
+    grid: Grid,
+    *,
+    kind: str,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Namespace for a reactive-interrupt or sub-action ``when`` clause.
+
+    Inherits the base namespace (``self``, ``enemy``, ``ally``,
+    ``round_number``) and overlays kind-specific bindings:
+
+    - ``react: aoo``   — ``provoker`` (Combatant), ``weapon`` index list
+      (the threatener's attack_options), ``aoos_left`` (per-round budget
+      remaining).
+    - ``react: brace`` — ``charger`` (Combatant), ``charger.distance``,
+      etc.
+    - ``react: cleave`` — ``primary`` (Combatant), ``candidates`` (list
+      of adjacent enemies).
+    - ``sub: full_attack`` — ``current_target``, ``iteration``,
+      ``remaining_iteratives``.
+
+    Phase 4 first slice ships the ``aoo`` namespace; the others land
+    in subsequent slices.
+    """
+    ns = build_namespace(actor, encounter, grid)
+    ctx = context or {}
+    if kind == "aoo":
+        provoker = ctx.get("provoker")
+        ns["provoker"] = SelfRef(provoker) if provoker is not None else None
+    elif kind == "brace":
+        charger = ctx.get("charger")
+        ns["charger"] = SelfRef(charger) if charger is not None else None
+    elif kind == "cleave":
+        primary = ctx.get("primary")
+        ns["primary"] = SelfRef(primary) if primary is not None else None
+        ns["candidates"] = ctx.get("candidates") or []
+    elif kind == "full_attack":
+        current = ctx.get("current_target")
+        ns["current_target"] = (
+            SelfRef(current) if current is not None else None
+        )
+        ns["iteration"] = ctx.get("iteration", 0)
+    return ns
 
 
 # ---------------------------------------------------------------------------
