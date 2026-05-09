@@ -540,18 +540,40 @@ The patron-facing API doesn't change yet. Tests still pass.
 to `apply_action`); `_execute_slots` is gone; all 1100+ existing
 tests pass on the new internals.
 
-### Phase 3 — reactive abilities surface as decision points
+### Phase 3 — reactive abilities surface as decision points (CLOSED)
 
-Brace, cleave, AoO selection, confused-actor sub-list — each gets
-its own `interrupt` or `forced_substituted` decision point in the
-new model, with patron pickers able to override defaults. The
-default picker maintains current behavior (so a patron who hasn't
-touched their script keeps getting the v1 outcome).
+Brace, cleave, AoO selection — each gets its own `interrupt`
+decision point in the new model, with patron pickers able to
+override defaults. The default picker maintains current behavior
+(so a patron who hasn't touched their script keeps getting the v1
+outcome).
 
-Tests for reactive behaviors get split: one set verifies the default
-picker produces the v1 outcome (parity); another set exercises
-patron overrides. **Exit criterion**: the engine no longer makes any
-reactive choice silently — every choice flows through a Picker.
+Landed in three sub-slices:
+
+- **3.1 — AoO selection.** TakeAoO(weapon_index)/PassAoO actions;
+  ``Encounter.pickers`` registry; ``_do_aoo`` consults it (default:
+  weapon 0). PassAoO does not consume the per-round AoO budget.
+- **3.2 — Brace.** Brace/PassBrace actions; the brace section of
+  ``_do_charge`` consults the bracer's picker (default: spring).
+  PassBrace keeps the bracing condition for a later trigger.
+- **3.3 — Cleave continuation.** CleaveTo(secondary_id)/PassCleave
+  actions; the cleaver's picker chooses among adjacent foes
+  (default: first adjacent, matching v1's hardcoded behavior).
+
+**Confused-actor d% is not a picker decision** (per §7.6
+resolution): RAW gives no player choice, the d% determines outcome.
+``_resolve_confusion`` already implements that correctly; no
+change needed.
+
+Tests are split per slice: one set per phase verifies the default
+picker mirrors v1 (parity), another exercises custom pickers
+(``_AlwaysPassPicker``, ``_PreferRangedPicker``,
+``_PassBracePicker``, ``_PreferCleaveBPicker``, etc.).
+
+**Exit criterion (met)**: the engine no longer makes any reactive
+choice silently — AoO selection, brace, and cleave continuation all
+flow through a Picker, with v1-equivalent defaults when no picker
+is registered.
 
 ### Phase 4 — patron-authored decision-point syntax
 
