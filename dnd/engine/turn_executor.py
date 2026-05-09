@@ -1380,9 +1380,43 @@ def _do_full_attack(
 
     has_rend = _has_racial_trait(actor, "rend")
     claw_hits = 0
+    # DSL v2 Phase 4: between iteratives, a sub-action decision-point
+    # asks the actor's picker whether to ContinueFullAttack or
+    # EndFullAttack. Default behavior (no picker, or no matching
+    # ``sub: full_attack`` rule) preserves v1: continue while the
+    # target is alive, stop on death/dying. Patron-authored ``sub``
+    # rules can override (e.g., end after the first iterative).
+    from .actions import (
+        ContinueFullAttack as _Cont, EndFullAttack as _End,
+        GameState as _GameState,
+    )
     for i, (delta, idx) in enumerate(schedule):
-        if not target.is_alive() or target.current_hp <= 0:
-            break
+        if i > 0:
+            # Build the sub-action legal list and consult the picker.
+            target_alive = target.is_alive() and target.current_hp > 0
+            sub_legal: list = [
+                _Cont(actor_id=actor.id, target_id=target.id),
+                _End(actor_id=actor.id, target_id=target.id),
+            ]
+            picker = (encounter.pickers.get(actor.id)
+                      if encounter is not None else None)
+            if picker is None:
+                # Default: v1 break-when-target-down semantics.
+                if not target_alive:
+                    chosen = sub_legal[1]  # End
+                else:
+                    chosen = sub_legal[0]  # Continue
+            else:
+                st = _GameState(encounter=encounter, grid=grid)
+                chosen = picker.pick(actor, st, sub_legal)
+            if isinstance(chosen, _End):
+                break
+            # Continue: keep going (no state change needed).
+        else:
+            # First iterative — no sub-decision yet (the action itself
+            # was the FullAttack pick at the active-turn layer).
+            if not target.is_alive() or target.current_hp <= 0:
+                break
         hp_before = target.current_hp
         _do_attack(actor, target, grid, roller, events,
                    attack_bonus_delta=delta,

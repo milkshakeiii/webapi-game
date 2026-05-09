@@ -243,6 +243,24 @@ class PassCleave(Action):
     primary_target_id: str
 
 
+@dataclass(frozen=True)
+class ContinueFullAttack(Action):
+    """Sub-action decision: take the next iterative against the
+    current target. Default behavior (v1-equivalent): continue while
+    the target is alive."""
+
+    target_id: str
+
+
+@dataclass(frozen=True)
+class EndFullAttack(Action):
+    """Sub-action decision: stop the iterative chain early (e.g., the
+    target is down and there's no point swinging at a corpse, or the
+    patron wants to conserve a per-attack resource)."""
+
+    target_id: str
+
+
 # ── Move-action grab bag ──────────────────────────────────────────────
 
 
@@ -1960,16 +1978,23 @@ def _first(actions: list[Action], cls: type) -> Action:
 # ---------------------------------------------------------------------------
 
 
-def _classify_reactive_kind(actions: list[Action]) -> str | None:
-    """Inspect a legal-action list to figure out which reactive
-    decision-point kind this is. Returns None if the actions don't
-    look like a reactive interrupt the DSL knows about."""
+def _classify_reactive_kind(actions: list[Action]) -> tuple[str, str] | None:
+    """Inspect a legal-action list to figure out the decision-point
+    kind. Returns ``(bucket, kind)`` where bucket is ``"react"`` or
+    ``"sub"`` and kind is the discriminator a Rule's matching field
+    expects (``rule.react`` or ``rule.sub``). Returns None if the
+    actions don't look like a kind the DSL knows about."""
     if any(isinstance(a, TakeAoO) or isinstance(a, PassAoO) for a in actions):
-        return "aoo"
+        return ("react", "aoo")
     if any(isinstance(a, Brace) or isinstance(a, PassBrace) for a in actions):
-        return "brace"
+        return ("react", "brace")
     if any(isinstance(a, CleaveTo) or isinstance(a, PassCleave) for a in actions):
-        return "cleave"
+        return ("react", "cleave")
+    if any(
+        isinstance(a, ContinueFullAttack) or isinstance(a, EndFullAttack)
+        for a in actions
+    ):
+        return ("sub", "full_attack")
     return None
 
 
@@ -2012,6 +2037,14 @@ def _reactive_context(
                 tgt = grid.combatants.get(a.target_id)
                 if tgt is not None:
                     ctx.setdefault("candidates", []).append(tgt)
+    elif kind == "full_attack":
+        for a in actions:
+            tid = getattr(a, "target_id", None)
+            if tid:
+                t = grid.combatants.get(tid)
+                if t is not None:
+                    ctx["current_target"] = t
+                    break
     return ctx
 
 
@@ -2076,6 +2109,17 @@ def _compile_reactive_do(
                 if isinstance(a, PassCleave):
                     return a
             return None
+    if kind == "full_attack":
+        if dtype == "continue_full_attack":
+            for a in actions:
+                if isinstance(a, ContinueFullAttack):
+                    return a
+            return None
+        if dtype == "end_full_attack":
+            for a in actions:
+                if isinstance(a, EndFullAttack):
+                    return a
+            return None
     return None
 
 
@@ -2133,11 +2177,12 @@ class CompiledReactivePicker(Picker):
         state: GameState,
         actions: list[Action],
     ) -> Action:
-        kind = _classify_reactive_kind(actions)
-        if kind is None:
-            # Not a reactive decision we understand — return the first
-            # offered action as a permissive fallback.
+        classified = _classify_reactive_kind(actions)
+        if classified is None:
+            # Not a kind the DSL recognizes — return the first offered
+            # action as a permissive fallback.
             return actions[0]
+        bucket, kind = classified
 
         from .dsl import build_reactive_namespace, evaluate, DSLError
 
@@ -2147,7 +2192,11 @@ class CompiledReactivePicker(Picker):
         )
 
         for rule in self.script.rules:
-            if rule.react != kind:
+            # Filter by bucket: react: matches react-context decisions,
+            # sub: matches sub-action context decisions.
+            if bucket == "react" and rule.react != kind:
+                continue
+            if bucket == "sub" and rule.sub != kind:
                 continue
             if rule.when is not None:
                 try:
