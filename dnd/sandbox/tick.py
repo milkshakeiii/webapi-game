@@ -254,6 +254,15 @@ def _materialize_encounter(
     we._monsters = [monster_combatant]   # type: ignore[attr-defined]
     we._roller = roller                  # type: ignore[attr-defined]
     we._behavior = _load_behavior_script(castle, deployment)  # type: ignore[attr-defined]
+    # DSL v2 Phase 4: if the hero's behavior script has any reactive
+    # rules (``react: aoo``, ``react: brace``, ``react: cleave``,
+    # ``sub: full_attack``), compile and register a picker on the
+    # encounter so those rules fire when interrupts land. Active-turn
+    # picking still flows through Interpreter.pick_turn → TurnIntent
+    # below; only reactive interrupts route through the picker.
+    if we._behavior is not None:  # type: ignore[attr-defined]
+        from dnd.engine.actions import register_script_pickers
+        register_script_pickers(hero_combatant, we._behavior, encounter)  # type: ignore[attr-defined]
     world.active_encounters[we_id] = we
 
     deployment.phase = PHASE_IN_COMBAT
