@@ -2016,15 +2016,19 @@ def _reactive_context(
 
 
 def _compile_reactive_do(
-    do: dict, kind: str, actions: list[Action],
+    do: dict | str, kind: str, actions: list[Action],
+    ns: dict | None = None,
 ) -> Action | None:
     """Translate a ``do:`` dict from a reactive rule into one of the
     legal Actions. Returns None if the do-dict doesn't map (caller
     should fall through to the next rule).
 
     The ``do`` shape is dict-style, matching v1: ``{"type": "take_aoo",
-    "weapon": 0}`` etc. Bare strings (``"pass_aoo"``) also accepted as
-    sugar for ``{"type": "pass_aoo"}``."""
+    "weapon": 0}`` etc. Bare strings (``"pass_aoo"``) accepted as sugar
+    for ``{"type": "pass_aoo"}``. The ``cleave_to`` form's ``target``
+    field is a target expression evaluated against ``ns`` (e.g.,
+    ``"enemy.lowest_hp"``); the resolved Combatant must appear in the
+    legal CleaveTo set or the rule falls through."""
     if isinstance(do, str):
         do = {"type": do}
     dtype = do.get("type")
@@ -2060,10 +2064,7 @@ def _compile_reactive_do(
             return None
     if kind == "cleave":
         if dtype == "cleave_to":
-            # ``target`` is a target-expression string evaluated below;
-            # this helper only handles literal target_ids. Returning
-            # None signals the caller to try expression-resolution.
-            target_id = do.get("target_id")
+            target_id = _resolve_cleave_target(do, ns)
             if target_id:
                 for a in actions:
                     if (isinstance(a, CleaveTo)
@@ -2075,6 +2076,37 @@ def _compile_reactive_do(
                 if isinstance(a, PassCleave):
                     return a
             return None
+    return None
+
+
+def _resolve_cleave_target(do: dict, ns: dict | None) -> str | None:
+    """Resolve the ``cleave_to`` rule's target spec into a combatant id.
+
+    Accepts either an explicit ``target_id`` (literal, mostly for
+    tests) or a ``target`` field whose value is either an expression
+    string evaluated against ``ns`` (e.g., ``"enemy.lowest_hp"``) or a
+    Combatant directly."""
+    explicit = do.get("target_id")
+    if explicit:
+        return str(explicit)
+    target = do.get("target")
+    if target is None or ns is None:
+        return None
+    from .combatant import Combatant
+    if isinstance(target, Combatant):
+        return target.id
+    if isinstance(target, str):
+        from .dsl import evaluate, DSLError
+        try:
+            resolved = evaluate(target, ns)
+        except DSLError:
+            return None
+        if isinstance(resolved, Combatant):
+            return resolved.id
+        # SelfRef-wrapped combatant.
+        wrapped = getattr(resolved, "_c", None)
+        if isinstance(wrapped, Combatant):
+            return wrapped.id
     return None
 
 
@@ -2123,7 +2155,7 @@ class CompiledReactivePicker(Picker):
                         continue
                 except DSLError:
                     continue
-            chosen = _compile_reactive_do(rule.do, kind, actions)
+            chosen = _compile_reactive_do(rule.do, kind, actions, ns)
             if chosen is not None:
                 return chosen
 
