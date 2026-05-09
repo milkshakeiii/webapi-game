@@ -45,8 +45,8 @@ data.
 - `DESIGN_PROPOSAL.md` — overall sandbox design (1100 lines).
 - `SANDBOX_DESIGN.md` — the live world / continuous-tick architecture.
 - `CHARACTER_OPTIONS.md` — what character builds the engine supports.
-- `BEHAVIOR_VOCABULARY.md` — the v1 DSL patrons write hero scripts in (turn-building model). **Being superseded** by `DECISION_POINT_DSL.md` — read that first when working on the executor.
-- `DECISION_POINT_DSL.md` — proposal-stage redesign of the DSL and execution model. Decision-point loop replaces turn assembly. Multi-phase migration; old DSL syntax compiles to pickers in the end state. **Substrate-first migration; no implementation yet.**
+- `BEHAVIOR_VOCABULARY.md` — the DSL patrons write hero scripts in. Active-turn rules (existing v1 surface) plus reactive/sub-action rules (v2 additions: `react: aoo` / `brace` / `cleave`, `sub: full_attack`).
+- `DECISION_POINT_DSL.md` — design + migration tracker for the DSL/execution-model rework. Phases 1–5a closed; the substrate is the only execution path; Phase 5b (delete `Turn` / `validate_turn` / `_intent_to_turn`) is the only remaining piece.
 - `WORK_QUEUE.md` — pending phases and follow-ups.
 - `PF1_COVERAGE.md` — narrative of `coverage.py`.
 - `README.md` — public-facing overview + run/test instructions.

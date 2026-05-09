@@ -1,16 +1,13 @@
-# Behavior DSL Vocabulary (v1 Draft)
+# Behavior DSL Vocabulary
 
-> **Status: being superseded.** This document describes the v1 turn-
-> building DSL. A redesign — the decision-point DSL — is proposed in
-> `DECISION_POINT_DSL.md` and supersedes the execution model here.
-> The expression vocabulary (conditions, target selectors) carries
-> over largely unchanged; what disappears is the `Turn` slot
-> structure and the assumption that the patron commits to a whole
-> turn before any of it resolves. In particular: reactive actions
-> like `ready_action`, immediate actions, AoO selection, and cleave's
-> secondary-target choice — which v1 either deferred or hardcoded —
-> become first-class decision points in v2. Don't extend v1 in ways
-> the migration would have to undo.
+> **Status: live.** Active-turn rules use the v1 surface described in
+> the bulk of this document. Reactive interrupts (AoO selection,
+> brace, cleave continuation) and sub-action decision points
+> (between full-attack iteratives) are authored via the v2 ``react:``
+> / ``sub:`` clauses described in the **Reactive and sub-action
+> rules** section below. Both surfaces compile to the same engine
+> substrate (`actions.py` — see `DECISION_POINT_DSL.md` for the
+> architecture).
 
 This is the constrained dictionary of expressions and actions a behavior
 script can use. The parser ships only what's listed here; nothing else
@@ -320,3 +317,207 @@ want any in:
   categories.
 
 Redline freely. After your sign-off I wire up the parser + interpreter.
+
+---
+
+# Reactive and sub-action rules (v2)
+
+Active-turn rules above describe what a hero does **on their turn**.
+The DSL also supports two additional rule kinds that fire **between**
+or **outside** turns: reactive interrupts and sub-action decision
+points. Both share the same `BehaviorScript` / `Rule` syntax — they
+just add a `react:` or `sub:` discriminator that says when the rule
+applies.
+
+```yaml
+rules:
+  # Active rule (existing v1 syntax — turn-building).
+  - when: enemy.closest.distance > 1
+    do:
+      composite: charge
+      args: { target: enemy.closest }
+
+  # Reactive rule: when an AoO opportunity comes up, take it only if
+  # the provoker is bloodied; otherwise save the opportunity.
+  - react: aoo
+    when: provoker.hp_pct < 0.5
+    do: { type: take_aoo, weapon: 0 }
+  - react: aoo
+    do: { type: pass_aoo }
+
+  # Sub-action rule: between full-attack iteratives, retarget to a
+  # different foe if the current one is down for the round.
+  - sub: full_attack
+    when: current_target.hp <= 0
+    do: { type: retarget_full_attack, target: enemy.closest }
+  - sub: full_attack
+    do: { type: continue_full_attack }
+```
+
+## How rules dispatch
+
+The Interpreter and the substrate cooperate:
+
+- **Active rules** (rules with neither `react:` nor `sub:` set) feed
+  `Interpreter.pick_turn` once per turn. The first matching rule's
+  `do:` becomes the `TurnIntent`, which the substrate translates
+  into a sequence of Actions. Same as v1.
+- **Reactive rules** (`react: aoo` / `react: brace` / `react: cleave`)
+  fire when the engine offers the actor a reactive interrupt. The
+  rules with the matching `react:` field are walked in order; the
+  first whose `when:` evaluates True picks the action via its `do:`.
+- **Sub-action rules** (`sub: full_attack`) fire *between* iteratives
+  in a full-attack chain (or, in future, between any other multi-
+  step composite that surfaces sub-decisions).
+
+If no reactive/sub rule matches, the engine falls back to a
+v1-equivalent default — TakeAoO weapon 0, Brace springs, CleaveTo
+the first adjacent foe, ContinueFullAttack while target alive. This
+means scripts that don't author any reactive rules behave exactly
+as they did in v1.
+
+## Picker registration
+
+For reactive/sub rules to fire, the script's compiled picker has to
+be registered on the encounter. The sandbox tick worker does this
+automatically when a deployment engages
+(`register_script_pickers(hero, script, encounter)` is called inside
+`_materialize_encounter`); for direct-engine tests, call the helper
+yourself before the first interrupt:
+
+```python
+from dnd.engine.actions import register_script_pickers
+register_script_pickers(hero, behavior_script, encounter)
+```
+
+The helper is a no-op if the script has no `react:` / `sub:` rules.
+
+## react: aoo
+
+Fires when the actor (the threatener) gets an attack-of-opportunity
+opportunity against another combatant.
+
+**Namespace bindings** (in addition to the active-turn base):
+
+| Name | Type | Semantics |
+|---|---|---|
+| `provoker` | SelfRef | The combatant whose action provoked. Read `.hp`, `.hp_pct`, `.hp_max`, `.is_alive`, `.has_condition(name)`. |
+
+**Allowed `do:` types:**
+
+| Type | Fields | Effect |
+|---|---|---|
+| `take_aoo` | `weapon: int` (default 0) | Resolve the AoO with `actor.attack_options[weapon]`. Consumes one of the actor's per-round AoO budget. |
+| `pass_aoo` | — | Decline the opportunity; no budget consumed; emits `aoo_pass` event. |
+
+**Defaults if no rule matches:** `take_aoo` with weapon 0 (matches v1).
+
+## react: brace
+
+Fires when a charging foe ends adjacent to the actor and the actor
+has both the `bracing` condition and a brace-flagged weapon ready.
+
+**Namespace bindings:**
+
+| Name | Type | Semantics |
+|---|---|---|
+| `charger` | SelfRef | The combatant who just charged. |
+
+**Allowed `do:` types:**
+
+| Type | Fields | Effect |
+|---|---|---|
+| `brace` | — | Spring the brace. Triggers a free attack at the charger with double damage; consumes the `bracing` condition. |
+| `pass_brace` | — | Decline. Charger's attack resolves normally; `bracing` stays set so a later charger this round may still trigger it. |
+
+**Defaults:** `brace` (matches v1's unconditional trigger).
+
+## react: cleave
+
+Fires when the actor's primary cleave attack hits and at least one
+adjacent foe other than the primary is in reach.
+
+**Namespace bindings:**
+
+| Name | Type | Semantics |
+|---|---|---|
+| `primary` | SelfRef | The primary target (the one the cleave hit). |
+| `candidates` | list[Combatant] | Adjacent foes other than the primary. |
+
+**Allowed `do:` types:**
+
+| Type | Fields | Effect |
+|---|---|---|
+| `cleave_to` | `target: <expr>` or `target_id: <id>` | Continue the cleave against the resolved combatant. The `target:` expression evaluates against the namespace (so `target: enemy.lowest_hp` works); the resolved combatant must be in `candidates` or the rule falls through. |
+| `pass_cleave` | — | Skip the continuation. |
+
+**Defaults:** `cleave_to` against the first candidate (matches v1).
+
+## sub: full_attack
+
+Fires *between* iteratives in a full-attack chain. The first
+iterative always runs (it was the active-turn pick that brought us
+here); the picker is consulted before each subsequent iterative.
+
+**Namespace bindings:**
+
+| Name | Type | Semantics |
+|---|---|---|
+| `current_target` | SelfRef | The actor's current target for the iterative chain (changes if a previous rule chose `retarget_full_attack`). |
+| `candidates` | list[Combatant] | Other foes the actor could legally retarget to (adjacent for melee primaries; any visible for ranged). |
+| `iteration` | int | Which iterative is about to fire (0-indexed). 0 means the first iterative — the picker isn't actually called there. |
+
+**Allowed `do:` types:**
+
+| Type | Fields | Effect |
+|---|---|---|
+| `continue_full_attack` | — | Take the next iterative against `current_target`. |
+| `end_full_attack` | — | Stop the chain. Skip remaining iteratives. |
+| `retarget_full_attack` | `target: <expr>` or `new_target_id: <id>` | Switch `current_target` to the resolved combatant; the next iterative swings at them. |
+
+**Defaults:** `continue_full_attack` while `current_target` is alive
+and at HP > 0; otherwise `end_full_attack`. The default never
+retargets — patrons must opt in.
+
+A note on rend (troll): the engine tracks claw hits per-target. If
+the patron retargets mid-chain, the original target's tally is
+preserved; if claws connect on the new target, that target also
+becomes eligible for rend. Both rends fire if both reach 2+ claw
+hits.
+
+## A note on `is_alive` vs `hp <= 0`
+
+`SelfRef.is_alive` returns True unless the `dead` condition is set.
+For most creatures that's a clean "is this thing actually dead"
+check. For orcs (and other creatures with the `ferocity` racial
+trait) it's misleading: ferocity keeps `is_alive` True even at
+negative HP — the creature is staggered and bleeding out, not dead.
+
+For "this target is down for the round, time to switch", use
+`current_target.hp <= 0` rather than `not current_target.is_alive`.
+
+## Migration notes from v1
+
+If you wrote v1 scripts:
+
+- Active rules need no changes — the v1 turn-building syntax
+  (`composite:` / `slots:` / `do.standard:` / etc.) is preserved
+  end-to-end through `translate_intent` into substrate Actions.
+- Reactive behaviors that v1 hardcoded (auto-take AoO with weapon
+  0, auto-spring brace, auto-cleave-to-first-adjacent) now happen
+  *because no rule overrode the default*. To keep v1 behavior, do
+  nothing. To customize, add `react:` / `sub:` rules.
+
+## Open future work
+
+Tracked in `DECISION_POINT_DSL.md` and `WORK_QUEUE.md`:
+
+- More reactive kinds: `react: counterspell`, `react: immediate_action`,
+  `react: ready_action_trigger`. The plumbing pattern is in place;
+  each just needs its own legal-actions enumeration + namespace.
+- `sub:` for other composites that have natural mid-action choices
+  (cleave already has `react: cleave`; charge could surface a
+  sub-action point if/when partial-charge variants land).
+- Continuous-tick world integration: when the actor is paused at a
+  picker call but their patron is remote, who blocks the world
+  clock? See `DECISION_POINT_DSL.md` §7.2 for the design proposal.

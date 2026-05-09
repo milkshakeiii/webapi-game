@@ -35,34 +35,38 @@ deleting in the next cleanup pass.
 
 ---
 
-## DSL v2 migration (2026-05-04 — proposal stage)
+## DSL v2 migration (mostly closed — only Phase 5b remains)
 
 Decision-point execution model replacing the turn-building DSL.
-Design lives in `DECISION_POINT_DSL.md`; this is the rolled-up
-phase tracker.
+Design lives in `DECISION_POINT_DSL.md`; status snapshot:
 
-- **Phase 1** — substrate (`enumerate_legal_actions`, `apply_action`,
-  `Action` hierarchy). New tests in isolation. Existing executor
-  untouched. Parity harness verifies the substrate covers every
-  state the existing engine reaches. Estimate: 2-3 days.
-- **Phase 2** — `execute_turn` rewritten as the driver loop. Old
-  composites become thin wrappers over `apply_action`. Reactive
-  logic still hardcoded but routed through interrupt decision-points
-  internally. All existing tests pass. Estimate: 2 days.
-- **Phase 3** — reactive abilities (brace, cleave, AoO selection,
-  confused) surface as decision-points patrons can override.
-  Default pickers preserve v1 behavior so untouched scripts don't
-  change. Estimate: 2 days.
-- **Phase 4** — `react:` and `sub:` DSL syntax for decision-point-
-  aware patron scripts. v2 vocabulary doc supersedes
-  `BEHAVIOR_VOCABULARY.md`. Estimate: 1-2 days.
-- **Phase 5** — delete `Turn`, `validate_turn`, `_intent_to_turn`,
-  the slot dispatch, the old `_execute_composite` / `_execute_slots`.
-  One execution model in the codebase. Estimate: half a day.
+- ✅ **Phase 1** — substrate (`enumerate_legal_actions`,
+  `apply_action`, `Action` hierarchy across move / attack / cast /
+  maneuver / spell / class actives + reactive interrupts). 84 tests.
+- ✅ **Phase 2** — parity harness (`translate_intent` /
+  `run_intent_via_substrate`); `execute_turn` delegates to substrate
+  with all 1234 legacy tests still green.
+- ✅ **Phase 3** — reactive abilities surface as picker decisions:
+  AoO selection (3.1), brace (3.2), cleave continuation (3.3).
+  Confused d% intentionally not a picker decision (no player choice
+  per RAW). Default pickers preserve v1 behavior.
+- ✅ **Phase 4** — patron-authored DSL: `react: aoo` / `react: brace`
+  / `react: cleave` / `sub: full_attack` (Continue / End /
+  RetargetFullAttack). `BEHAVIOR_VOCABULARY.md` updated. Sandbox
+  tick worker auto-registers reactive pickers on engagement.
+- ✅ **Phase 5a** — v1 dispatch deleted (`_execute_composite`,
+  `_execute_slots`, `_do_standard`, `EXECUTE_VIA_SUBSTRATE` flag all
+  gone). `execute_turn` is now a thin wrapper.
+- ⏳ **Phase 5b** — delete `Turn` / `validate_turn` /
+  `_intent_to_turn`. Still load-bearing because the substrate's
+  intent-translation seam needs them to validate v1-shape intents.
+  They go away when patrons stop authoring active-turn rules via
+  `BehaviorScript` and write pickers directly. Not blocking; defer
+  until there's a forcing function.
 
-Open design questions in §7 of the doc need answers as each phase
-begins (random-outcome reactives, continuous-tick interaction, ready
-actions, determinism of multi-AoO ordering, etc.).
+1265 tests passing as of phase-4 close. Open design questions in §7
+of the doc remain (continuous-tick world interaction, ready actions,
+random-outcome reactives like Lucky-style rerolls).
 
 ---
 

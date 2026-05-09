@@ -575,17 +575,43 @@ choice silently — AoO selection, brace, and cleave continuation all
 flow through a Picker, with v1-equivalent defaults when no picker
 is registered.
 
-### Phase 4 — patron-authored decision-point syntax
+### Phase 4 — patron-authored decision-point syntax (CLOSED)
 
-Add `react:` and `sub:` rule clauses (§4.3). Update parser,
-namespace builder for the new contexts, vocabulary doc. Existing
-scripts unchanged; new scripts can use the richer surface.
+Landed in five sub-slices:
 
-Add documentation: a successor to `BEHAVIOR_VOCABULARY.md` covering
-the v2 vocabulary in full. The v1 doc is marked superseded.
+- **4.1 — `react: aoo` end-to-end.** Rule dataclass gains
+  ``react: str | None`` and ``sub: str | None`` fields; parser
+  accepts them. ``CompiledReactivePicker`` compiles a
+  ``BehaviorScript``'s reactive rules into a Picker that filters
+  by kind, evaluates ``when`` against a context-specific namespace
+  (``provoker.*`` for AoO), and translates ``do`` into substrate
+  Actions. ``register_script_pickers`` puts the compiled picker on
+  ``Encounter.pickers``.
+- **4.2 — `react: brace` and `react: cleave`.** Same pattern; the
+  cleave path adds target-expression evaluation
+  (``target: enemy.lowest_hp``).
+- **4.3 — `sub: full_attack` (Continue / End).** Between-iterative
+  decision points surface in ``_do_full_attack``; default behavior
+  (no picker / no matching rule) preserves v1's break-on-death.
+- **4.4 — RetargetFullAttack.** Adds the third sub-action option;
+  rend's claw-hit tracker becomes per-target so target switches
+  don't smear counts.
+- **4.5 — Auto-registration in the sandbox tick worker.**
+  `_materialize_encounter` calls ``register_script_pickers`` on
+  engagement so patrons don't have to wire pickers manually.
 
-**Exit criterion**: every reactive behavior our existing tests cover
-is also expressible in patron-authored DSL.
+`BEHAVIOR_VOCABULARY.md` updated with a "Reactive and sub-action
+rules (v2)" section documenting the new clauses, namespaces,
+``do:`` types, defaults, the `is_alive` vs `hp <= 0` gotcha
+(orc ferocity), and migration notes.
+
+**Exit criterion (met)**: every reactive behavior covered by Phase
+3's Python-Picker subclasses is also expressible in patron-authored
+DSL — the tests in ``test_phase4_dsl_react.py`` /
+``test_phase4_dsl_brace_cleave.py`` /
+``test_phase4_dsl_sub_full_attack.py`` are the proof. Auto-
+registration in the sandbox is verified by
+``test_phase4_sandbox_picker_registration.py``.
 
 ### Phase 5 — turn-building infrastructure removed
 
