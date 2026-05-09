@@ -117,15 +117,6 @@ def _intent_to_turn(do: dict):
     )
 
 
-# Phase 2 feature flag. When True, ``execute_turn`` delegates to the
-# substrate-driven ``run_intent_via_substrate`` — the entire test
-# suite runs through the new substrate, with the v1 dispatch below
-# kept around as fallback. Phase 5 will delete the flag and the
-# fallback together. Defaults to True now that parity is green; flip
-# locally to False to compare event streams against the v1 path.
-EXECUTE_VIA_SUBSTRATE: bool = True
-
-
 def execute_turn(
     actor: Combatant,
     intent: TurnIntent | None,
@@ -135,128 +126,17 @@ def execute_turn(
 ) -> TurnResult:
     """Execute the actor's turn against the encounter state.
 
-    Phase 2 of the DSL v2 migration. When ``EXECUTE_VIA_SUBSTRATE`` is
-    True, delegates to ``run_intent_via_substrate`` (which translates
-    the intent into substrate Actions and runs them via apply_action).
-    The flag is OFF by default until parity is fully demonstrated;
-    flip to True to dogfood the substrate against the existing test
-    suite.
+    DSL v2: this is now a thin wrapper that delegates to the
+    substrate-driven ``run_intent_via_substrate`` in ``actions``.
+    The function lives here for import compatibility with existing
+    callers — eventually patrons will hold pickers directly and call
+    apply_action / enumerate_legal_actions, and execute_turn becomes
+    redundant.
     """
-    if EXECUTE_VIA_SUBSTRATE:
-        from .actions import run_intent_via_substrate
-        return run_intent_via_substrate(
-            actor, intent, encounter, grid, roller,
-        )
-
-    rule_index = intent.rule_index if intent else None
-    events: list[TurnEvent] = []
-
-    if intent is None or "composite" in intent.do and intent.do["composite"] == "hold":
-        events.append(TurnEvent(actor.id, "skip",
-                                {"reason": "no rule matched" if intent is None else "hold"}))
-        # Aura/end-of-turn riders still fire on a held turn — exposure
-        # to a stench/gaze isn't avoided by holding action.
-        _apply_end_of_turn_racial_effects(actor, grid, roller, events,
-                                          encounter=encounter)
-        return TurnResult(actor.id, rule_index, events)
-
-    # Validate the action economy before dispatching. An invalid combo
-    # (e.g., a slots dict with both ``move`` and a 5-ft step, or a
-    # full-round composite plus a standard slot) skips with a clear
-    # reason instead of silently running an illegal turn.
-    from .encounter import validate_turn, TurnValidationError
-    try:
-        validate_turn(_intent_to_turn(intent.do), actor, grid)
-    except TurnValidationError as exc:
-        events.append(TurnEvent(actor.id, "skip", {
-            "reason": "invalid_turn",
-            "detail": str(exc),
-        }))
-        _apply_end_of_turn_racial_effects(actor, grid, roller, events,
-                                          encounter=encounter)
-        return TurnResult(actor.id, rule_index, events)
-
-    do = intent.do
-    ns = intent.namespace
-
-    # PF1 confusion: each round, a confused actor rolls 1d100 to
-    # decide what they actually do.  01-25 act normally; 26-50 babble
-    # (do nothing); 51-75 self-attack; 76-100 attack nearest creature.
-    if "confused" in actor.conditions:
-        do = _resolve_confusion(actor, do, encounter, grid, roller, events)
-        if do is None:
-            return TurnResult(actor.id, rule_index, events)
-
-    # Free actions first.
-    for fa in do.get("free", []) or []:
-        fa_type = fa.get("type") if isinstance(fa, dict) else None
-        if fa_type == "fall_prone":
-            if "prone" not in actor.conditions:
-                actor.add_condition("prone")
-            events.append(TurnEvent(actor.id, "fall_prone", {}))
-        else:
-            events.append(TurnEvent(actor.id, "free",
-                                    {"action": fa}))
-
-    # Swift action. Two ways to land a cast in the swift slot: a
-    # native swift-time spell (``Spell.casting_time == "swift"``) or
-    # any spell quickened via the Quicken Spell metamagic feat. The
-    # latter raises the slot cost +4. Action-economy validation
-    # already allows swift alongside standard.
-    swift = do.get("swift")
-    if swift is not None:
-        stype = swift.get("type")
-        if stype == "cast":
-            mm = list(swift.get("metamagic") or [])
-            spell_id = swift.get("spell")
-            native_swift = False
-            if spell_id:
-                try:
-                    from .content import default_registry
-                    s = default_registry().get_spell(spell_id)
-                    native_swift = (
-                        _classify_casting_time(s.casting_time) == "swift"
-                    )
-                except Exception:
-                    pass
-            if "quicken_spell" not in mm and not native_swift:
-                events.append(TurnEvent(actor.id, "skip", {
-                    "reason": "swift cast requires either a native swift-time "
-                              "spell or the quicken_spell metamagic",
-                    "spell": spell_id,
-                }))
-            else:
-                _do_cast(actor, swift, encounter, grid, roller, ns, events)
-        else:
-            events.append(TurnEvent(actor.id, "swift",
-                                    {"action": swift,
-                                     "note": f"swift {stype!r} not implemented"}))
-
-    # Composite or slot form?
-    if "composite" in do:
-        _execute_composite(actor, do["composite"], do.get("args", {}),
-                           encounter, grid, roller, ns, events)
-    else:
-        slots = do.get("slots") or do
-        _execute_slots(actor, slots, encounter, grid, roller, ns, events)
-
-    # PF1 RAW: a disabled creature (HP exactly 0) loses 1 HP whenever
-    # it takes a standard action. We approximate "took a standard
-    # action this turn" by checking for any non-skip event whose kind
-    # corresponds to a standard-action effect.
-    if "disabled" in actor.conditions and actor.current_hp == 0:
-        if _turn_used_standard_action(events):
-            actor.take_damage(1)
-            _apply_post_damage_state(actor)
-            events.append(TurnEvent(actor.id, "disabled_self_damage", {
-                "amount": 1,
-            }))
-
-    # End-of-turn racial-trait riders.
-    _apply_end_of_turn_racial_effects(actor, grid, roller, events,
-                                      encounter=encounter)
-
-    return TurnResult(actor.id, rule_index, events)
+    from .actions import run_intent_via_substrate
+    return run_intent_via_substrate(
+        actor, intent, encounter, grid, roller,
+    )
 
 
 _AURA_TRAITS: dict[str, dict] = {
@@ -728,164 +608,20 @@ _FREE_COMPOSITES = frozenset({
     "rage_start", "rage_end",
 })
 
-# Everything else routed through ``_execute_composite`` is treated as a
-# standard action for validation purposes (cast, ready_brace, smite,
-# channel, web, combat maneuvers, etc.).
-
-
-# ---------------------------------------------------------------------------
-# Composite dispatchers
-# ---------------------------------------------------------------------------
-
-
-def _execute_composite(
-    actor: Combatant,
-    composite: str,
-    args: dict,
-    encounter: Encounter,
-    grid: Grid,
-    roller: Roller,
-    ns: dict[str, Any],
-    events: list[TurnEvent],
-) -> None:
-    if composite == "hold":
-        events.append(TurnEvent(actor.id, "skip", {"reason": "hold"}))
-        return
-    if composite == "charge":
-        _do_charge(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "full_attack":
-        target = _resolve_target(args.get("target"), ns)
-        if target is None:
-            events.append(TurnEvent(actor.id, "skip",
-                                    {"reason": "full_attack: no target resolved"}))
-            return
-        _do_full_attack(actor, target, args.get("options") or {},
-                        grid, roller, events, encounter=encounter)
-        return
-    if composite == "withdraw":
-        _do_withdraw(actor, args, encounter, grid, events)
-        return
-    if composite == "run":
-        _do_run(actor, args, encounter, grid, events)
-        return
-    if composite == "mount":
-        _do_mount(actor, args, grid, ns, events)
-        return
-    if composite == "dismount":
-        _do_dismount(actor, args, grid, events)
-        return
-    if composite == "trample":
-        _do_trample(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "coup_de_grace":
-        _do_coup_de_grace(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "partial_charge":
-        _do_partial_charge(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "fight_defensively":
-        _do_fight_defensively(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "ready_brace":
-        _do_ready_brace(actor, args, encounter, events)
-        return
-    if composite == "grapple_damage":
-        _do_grapple_damage(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "grapple_move":
-        _do_grapple_move(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "grapple_pin":
-        _do_grapple_pin(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "grapple_break_free":
-        _do_grapple_break_free(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "cast":
-        _do_cast(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "cleave":
-        _do_cleave(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "rage_start":
-        _do_rage_start(actor, args, encounter, events)
-        return
-    if composite == "rage_end":
-        _do_rage_end(actor, events)
-        return
-    if composite == "smite_evil":
-        _do_smite_evil(actor, args, encounter, grid, ns, events)
-        return
-    if composite == "channel_energy":
-        _do_channel_energy(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "bardic_performance":
-        _do_bardic_performance(actor, args, encounter, grid, ns, events)
-        return
-    if composite == "stunning_fist":
-        _do_stunning_fist(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "coup_de_grace":
-        _do_coup_de_grace(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "web":
-        _do_web(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "detect_evil":
-        _do_detect_evil(actor, args, grid, ns, events)
-        return
-    if composite == "domain_power":
-        _do_domain_power(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "tail_spike_volley":
-        _do_tail_spike_volley(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite == "escape_web":
-        _do_escape_web(actor, args, grid, roller, ns, events)
-        return
-    if composite == "aid_another":
-        _do_aid_another(actor, args, encounter, grid, roller, ns, events)
-        return
-    if composite in (
-        "trip", "disarm", "sunder", "bull_rush", "grapple",
-        "drag", "overrun", "reposition", "steal", "dirty_trick",
-    ):
-        _do_combat_maneuver(
-            actor, composite, args, encounter, grid, roller, ns, events,
-        )
-        return
-    raise NotImplementedError(f"composite action {composite!r} not yet implemented")
-
-
-def _execute_slots(
-    actor: Combatant,
-    slots: dict,
-    encounter: Encounter,
-    grid: Grid,
-    roller: Roller,
-    ns: dict[str, Any],
-    events: list[TurnEvent],
-) -> None:
-    """Execute slot-based turn (standard + move + 5ft step)."""
-    # Move first (most common for "approach and attack" patterns).
-    move = slots.get("move")
-    if move is not None:
-        _do_move_action(actor, move, encounter, grid, ns, events)
-
-    # 5ft step.
-    five = slots.get("five_foot_step")
-    if five is not None:
-        _do_5ft_step(actor, five, grid, ns, events)
-
-    # Standard action.
-    std = slots.get("standard")
-    if std is not None:
-        _do_standard(actor, std, grid, roller, ns, events, encounter=encounter)
+# Everything else (cast, ready_brace, smite, channel, web, combat
+# maneuvers, etc.) is treated as a standard action for validation
+# purposes by ``_intent_to_turn``.
 
 
 # ---------------------------------------------------------------------------
 # Movement primitives
+#
+# Note: the v1 dispatch entry points (``_execute_composite`` /
+# ``_execute_slots`` / ``_do_standard``) were deleted in Phase 5 of
+# the DSL v2 migration. The per-action helpers below
+# (``_do_move_action``, ``_do_charge``, ``_do_full_attack``,
+# ``_do_combat_maneuver``, ``_do_cast``, etc.) live on — they're now
+# called from ``apply_action`` in ``actions.py``.
 # ---------------------------------------------------------------------------
 
 
@@ -1182,45 +918,6 @@ def _direction_to_square(actor: Combatant, direction: str) -> tuple[int, int] | 
 # ---------------------------------------------------------------------------
 # Standard / full-round actions
 # ---------------------------------------------------------------------------
-
-
-def _do_standard(
-    actor: Combatant,
-    std: dict,
-    grid: Grid,
-    roller: Roller,
-    ns: dict[str, Any],
-    events: list[TurnEvent],
-    encounter=None,
-) -> None:
-    stype = std.get("type")
-    if stype == "attack":
-        target = _resolve_target(std.get("target"), ns)
-        if target is None:
-            events.append(TurnEvent(actor.id, "skip",
-                                    {"reason": "attack: no target"}))
-            return
-        _do_attack(actor, target, grid, roller, events,
-                   encounter=encounter,
-                   script_options=std.get("options") or {})
-    elif stype == "total_defense":
-        # PF1 RAW: standard action; +4 dodge AC for one round; can't
-        # attack. The dodge bonus expires at the start of the actor's
-        # next turn (current_round + 1).
-        cur_round = encounter.round_number if encounter else 1
-        src = "total_defense"
-        actor.modifiers.remove_by_source(src)
-        actor.modifiers.add(Modifier(
-            value=4, type="dodge", target="ac",
-            source=src, expires_round=cur_round + 1,
-        ))
-        events.append(TurnEvent(actor.id, "total_defense", {
-            "ac_bonus": 4, "expires_round": cur_round + 1,
-        }))
-    elif stype == "cast":
-        _do_cast(actor, std, encounter, grid, roller, ns, events)
-    else:
-        raise NotImplementedError(f"standard action {stype!r} not implemented")
 
 
 def _do_charge(

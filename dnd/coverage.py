@@ -233,7 +233,7 @@ CONDITIONS: dict[str, Entry] = {
     "dazzled":         (IMPLEMENTED,    "-1 untyped to attack and skill:perception via _on_condition_applied"),
     "deafened":        (IMPLEMENTED,    "20% spell-failure roll for V-component spells in _do_cast; -4 untyped to initiative wired in _on_condition_applied"),
     "dead":            (IMPLEMENTED,     "set by _apply_post_damage_state; turn validation prevents acts"),
-    "disabled":        (IMPLEMENTED,    "validate_turn restricts to one move OR standard (no full-round); _execute_slots applies 1 HP self-damage after the standard resolves (drops the actor into dying)"),
+    "disabled":        (IMPLEMENTED,    "validate_turn restricts to one move OR standard (no full-round); run_intent_via_substrate applies 1 HP self-damage after the standard resolves (drops the actor into dying)"),
     "dying":           (IMPLEMENTED,     "set by _apply_post_damage_state at HP <= 0; deployment marks DEAD on encounter end if hero is dying"),
     "energy_drained":  (IMPLEMENTED,    "negative_levels counter on Combatant; apply_negative_levels(n) adds -1 untyped to attack/fort/ref/will/skill_check per level + -5 max_hp; remove_negative_levels lifts one level at a time. add_condition('energy_drained') stacks; remove_condition strips all. Undead/constructs immune."),
     "entangled":       (IMPLEMENTED,    "-2 attack, -4 ability:dex, half speed via _on_condition_applied; charge/run banned in validate_turn"),
@@ -481,7 +481,7 @@ CORE_MECHANICS: dict[str, Entry] = {
     "combat.massive_damage":         (IMPLEMENTED,    "_check_massive_damage fires after damage in _do_attack: 50+ damage from one source → Fort DC 15 or die. Bypasses dying-threshold rules"),
     "combat.aid_another":            (IMPLEMENTED,    "composite 'aid_another' with mode='attack'|'ac'; DC 10 attack roll → +2 attack vs the named foe (qualifier on target_id) OR +2 dodge AC vs the named foe (qualifier on attacker_id). Bonus only applies when context matches the foe's id"),
     "combat.fight_defensively":      (IMPLEMENTED,    "_do_fight_defensively composite: -4 to attack, +2 dodge AC for one round (expires next round). Single attack against the named target"),
-    "combat.total_defense":          (IMPLEMENTED,    "+4 dodge AC for 1 round (expires_round = current_round + 1); via _do_standard"),
+    "combat.total_defense":          (IMPLEMENTED,    "+4 dodge AC for 1 round (expires_round = current_round + 1); via the TotalDefense substrate Action's apply path"),
 
     # ── Combat: charge & full-round movement ─────────────────────────────
     "combat.charge":                 (PARTIAL,        "min-distance, straight-line, lane-clear, end-adjacent enforced; _charge_path_clear rejects difficult-terrain cells in the lane; +2 attack bonus on the charge attack honored. GAP: RAW also imposes -2 to AC until the start of the charger's next turn — not modeled (see comment at _do_charge:1093 marking the deliberate omission)."),

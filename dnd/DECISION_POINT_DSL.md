@@ -589,21 +589,37 @@ is also expressible in patron-authored DSL.
 
 ### Phase 5 — turn-building infrastructure removed
 
-Delete:
+Two passes:
 
-- `Turn` dataclass and its imports.
-- `validate_turn`, `TurnValidationError`, `_intent_to_turn`,
-  `_FULL_ROUND_COMPOSITES` / `_FREE_COMPOSITES` mappings.
-- The `Turn`-based legality checks scattered through condition hooks
-  (those become legality predicates inside `enumerate_legal_actions`).
+**5a — v1 executor dispatch deleted (DONE).** The
+``EXECUTE_VIA_SUBSTRATE`` flag and the v1 fallback path under it are
+gone. ``execute_turn`` is now a thin wrapper that delegates to
+``run_intent_via_substrate`` in ``actions.py``. The dead-code helpers
+``_execute_composite``, ``_execute_slots``, and ``_do_standard``
+have been removed (~190 LOC). The v1 per-action helpers
+(``_do_charge``, ``_do_full_attack``, ``_do_combat_maneuver``,
+``_do_cast``, etc.) live on — they're called from ``apply_action``,
+not from the dead dispatchers.
 
-The old DSL syntax stays — but now it provably has *no separate
-execution path*; it's just sugar that compiles to pickers. Verify by
-removing the old executor module entirely and checking nothing
-imports it outside of test fixtures.
+**5b — Turn / validate_turn / _intent_to_turn deletion (DEFERRED).**
+These are still used by the substrate's intent-translation path
+(`run_intent_via_substrate` validates the v1-shape intent dict
+before walking it). They become removable once Phase 4's DSL syntax
+lets patrons author pickers directly without going through
+TurnIntent. Until then they earn their keep as the action-economy
+validator on the intent-translation seam.
 
-**Exit criterion**: `git grep` for `validate_turn` returns zero
-hits. The engine has one execution model.
+The old DSL syntax stays. With the v1 dispatch gone, it provably has
+no separate execution path — it's already just sugar that
+``translate_intent`` compiles to substrate Actions, run through the
+substrate.
+
+**Exit criterion (5a, met)**: ``execute_turn`` is a one-liner;
+``_execute_composite`` / ``_execute_slots`` / ``_do_standard`` no
+longer exist; all 1243 tests still pass.
+
+**Exit criterion (5b)**: ``git grep validate_turn`` returns zero
+hits. Pending Phase 4.
 
 ## 6. Test strategy
 
