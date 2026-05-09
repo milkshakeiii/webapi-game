@@ -184,6 +184,27 @@ class GrappleBreakFree(Action):
     use_skill: bool = False
 
 
+# ── Reactive interrupts ───────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class TakeAoO(Action):
+    """Reactive interrupt: take an attack of opportunity against
+    ``provoker_id`` with the threatener's ``weapon_index``."""
+
+    provoker_id: str
+    weapon_index: int = 0
+
+
+@dataclass(frozen=True)
+class PassAoO(Action):
+    """Reactive interrupt: decline an AoO opportunity (e.g., to save
+    it for a higher-value target later in the round, or because the
+    threatener is flat-footed)."""
+
+    provoker_id: str
+
+
 # ── Move-action grab bag ──────────────────────────────────────────────
 
 

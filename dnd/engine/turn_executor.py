@@ -6062,35 +6062,75 @@ def _do_aoo(
     events: list[TurnEvent],
     encounter=None,
 ) -> None:
+    """Resolve a triggered AoO opportunity. DSL v2 Phase 3.1: this
+    becomes a reactive-interrupt decision point — the threatener's
+    registered Picker (if any) chooses a weapon or declines. With no
+    picker registered, the default is "take with weapon 0", matching
+    v1 behavior so untouched scripts/tests don't change."""
     # Throttle AoOs by the per-round limit (1 + Dex if Combat Reflexes).
     if encounter is not None:
         if not _can_take_aoo(threatener, encounter.round_number):
             return
-        threatener.aoos_used_this_round += 1
-    # Use the threatener's first attack option as their AoO weapon.
     if not threatener.attack_options:
         return
-    chosen = threatener.attack_options[0]
+
+    # Build the picker's legal-actions list: one TakeAoO per available
+    # weapon plus a PassAoO entry. The picker sees only the actions —
+    # not the kind of decision-point — per the kind-blind contract
+    # (DECISION_POINT_DSL.md §4.1).
+    from .actions import TakeAoO as _TakeAoO, PassAoO as _PassAoO
+    legal_actions: list = [
+        _TakeAoO(
+            actor_id=threatener.id, provoker_id=target.id,
+            weapon_index=i,
+        )
+        for i in range(len(threatener.attack_options))
+    ] + [
+        _PassAoO(actor_id=threatener.id, provoker_id=target.id),
+    ]
+
+    picker = None
+    if encounter is not None and encounter.pickers:
+        picker = encounter.pickers.get(threatener.id)
+
+    if picker is None:
+        # Default behavior: TakeAoO with weapon 0. Preserves v1.
+        chosen = legal_actions[0]
+    else:
+        from .actions import GameState as _GameState
+        state = _GameState(encounter=encounter, grid=grid)
+        chosen = picker.pick(threatener, state, legal_actions)
+
+    # PassAoO: no budget consumed, emit a trace event, done.
+    if isinstance(chosen, _PassAoO):
+        events.append(TurnEvent(threatener.id, "aoo_pass", {
+            "provoker_id": target.id,
+        }))
+        return
+
+    # TakeAoO: consume the per-round budget and resolve the attack.
+    if encounter is not None:
+        threatener.aoos_used_this_round += 1
+    weapon_index = (
+        chosen.weapon_index if isinstance(chosen, _TakeAoO) else 0
+    )
+    if weapon_index < 0 or weapon_index >= len(threatener.attack_options):
+        weapon_index = 0
+    chosen_weapon = threatener.attack_options[weapon_index]
     profile = AttackProfile(
-        attack_bonus=int(chosen["attack_bonus"]),
-        damage_dice=str(chosen["damage"]),
-        damage_bonus=int(chosen.get("damage_bonus", 0)),
-        crit_range=tuple(chosen.get("crit_range") or [20, 20]),  # type: ignore[arg-type]
-        crit_multiplier=int(chosen.get("crit_multiplier", 2)),
-        damage_type=str(chosen.get("damage_type", "")),
-        name=str(chosen.get("name", "weapon")),
+        attack_bonus=int(chosen_weapon["attack_bonus"]),
+        damage_dice=str(chosen_weapon["damage"]),
+        damage_bonus=int(chosen_weapon.get("damage_bonus", 0)),
+        crit_range=tuple(chosen_weapon.get("crit_range") or [20, 20]),  # type: ignore[arg-type]
+        crit_multiplier=int(chosen_weapon.get("crit_multiplier", 2)),
+        damage_type=str(chosen_weapon.get("damage_type", "")),
+        name=str(chosen_weapon.get("name", "weapon")),
     )
     # AoO uses the encounter's RNG sequence so seeded simulations stay
-    # deterministic. Without this routing the AoO would use Python's
-    # global RNG (random.Random(None) seeds from os.urandom), which
-    # makes any test that fires an AoO order-dependent — that was the
-    # root cause of the test_disarm / test_explicit_condition_choice
-    # / test_dirty_trick / test_steal flake cluster.
+    # deterministic.
     if encounter is not None and encounter.roller is not None:
         aoo_roller = encounter.roller
     else:
-        # No encounter (rare in test paths): fall back to a fixed seed
-        # so behavior is at least repeatable within a process.
         from .dice import Roller as _R
         aoo_roller = _R(seed=0)
     outcome = resolve_attack(profile, target.defense_profile(), aoo_roller)
@@ -6102,6 +6142,7 @@ def _do_aoo(
         "hit": outcome.hit,
         "crit": outcome.crit,
         "damage": outcome.damage,
+        "weapon_index": weapon_index,
         "trace": outcome.log,
     }))
 

@@ -369,6 +369,13 @@ class Encounter:
     # Optional roller carried between rounds. Used by tick_round's
     # stabilization check (and any other between-round dice rolls).
     roller: Roller | None = None
+    # DSL v2 Phase 3: per-actor reactive picker registry. When a
+    # reactive interrupt fires (AoO, brace, cleave continuation), the
+    # engine looks up the threatener / decision-owner here. Missing
+    # entries fall back to v1-equivalent defaults (e.g., AoO uses
+    # weapon 0, brace always springs). Active-turn pickers live
+    # elsewhere — the encounter only carries reactive ones.
+    pickers: dict = field(default_factory=dict)
 
     @classmethod
     def begin(
