@@ -124,5 +124,107 @@ class TestEndOnDeadTargetIsDefault(unittest.TestCase):
         self.assertEqual(_count_iteratives(result.events), 1)
 
 
+# ---------------------------------------------------------------------------
+# RetargetFullAttack
+# ---------------------------------------------------------------------------
+
+
+def _setup_attacker_with_two_foes():
+    """BAB 11 attacker, two adjacent foes. First foe is fragile (1 HP),
+    second is a tank. Lets us test "switch when first dies"."""
+    attacker = _orc((5, 5), "x")
+    attacker.bases["bab"] = 11
+    attacker.attack_options = [{
+        "type": "melee", "name": "Test Sword",
+        "weapon_id": "longsword", "weapon_category": "martial",
+        "attack_bonus": 100, "damage": "1d6", "damage_bonus": 4,
+        "damage_type": "S", "crit_range": [20, 20],
+        "crit_multiplier": 2, "range_increment": 0,
+    }]
+    primary = _orc((6, 5), "y")
+    primary.max_hp = primary.current_hp = 1
+    secondary = _orc((4, 5), "y")
+    secondary.max_hp = secondary.current_hp = 9999
+    grid = Grid(width=12, height=12)
+    grid.place(attacker)
+    grid.place(primary)
+    grid.place(secondary)
+    enc = Encounter.begin(grid, [attacker, primary, secondary],
+                          Roller(seed=1))
+    return attacker, primary, secondary, grid, enc
+
+
+class TestRetargetOnDeath(unittest.TestCase):
+    def test_dsl_retarget_to_secondary_when_primary_drops(self):
+        attacker, primary, secondary, grid, enc = (
+            _setup_attacker_with_two_foes()
+        )
+        # Picker: when current_target is at or below 0 HP (down for
+        # the round, regardless of orc ferocity keeping ``is_alive``
+        # True), retarget to the other adjacent foe; otherwise
+        # continue. ``hp <= 0`` is the right idiom for "no longer
+        # worth swinging at" — orc ferocity at negative HP keeps the
+        # technical ``is_alive`` flag set but the creature is
+        # staggered and going down.
+        script = BehaviorScript(name="opportunist", rules=[
+            Rule(
+                sub="full_attack",
+                when="current_target.hp <= 0",
+                do={"type": "retarget_full_attack",
+                    "target": "enemy.closest"},
+            ),
+            Rule(
+                sub="full_attack",
+                do={"type": "continue_full_attack"},
+            ),
+        ])
+        register_script_pickers(attacker, script, enc)
+        result = _full_attack(attacker, primary, enc, grid)
+        # Primary dropped to 0-or-below on iterative 1; iteratives 2
+        # and 3 hit the secondary.
+        self.assertLessEqual(primary.current_hp, 0)
+        self.assertLess(secondary.current_hp, 9999)
+        self.assertEqual(_count_iteratives(result.events), 3)
+
+    def test_default_does_not_retarget(self):
+        """Without a picker, primary's HP <= 0 stops the chain; the
+        secondary stays untouched (v1 default behavior preserved)."""
+        attacker, primary, secondary, grid, enc = (
+            _setup_attacker_with_two_foes()
+        )
+        before_secondary = secondary.current_hp
+        result = _full_attack(attacker, primary, enc, grid)
+        # Primary went to 0 or below (orc ferocity may keep them
+        # technically is_alive, but the engine's default loop breaks
+        # on ``current_hp <= 0``).
+        self.assertLessEqual(primary.current_hp, 0)
+        self.assertEqual(secondary.current_hp, before_secondary)
+        self.assertEqual(_count_iteratives(result.events), 1)
+
+
+class TestSelfRefHasIsAlive(unittest.TestCase):
+    """Sanity check: ``current_target.is_alive`` works in the DSL.
+    Useful as a condition for non-ferocity creatures; for orcs use
+    ``current_target.hp <= 0`` instead (see test above)."""
+
+    def test_dsl_can_read_is_alive(self):
+        from dnd.engine.dsl import build_reactive_namespace, evaluate
+        attacker, primary, _secondary, grid, enc = (
+            _setup_attacker_with_two_foes()
+        )
+        ns = build_reactive_namespace(
+            attacker, enc, grid, kind="full_attack",
+            context={"current_target": primary},
+        )
+        self.assertTrue(evaluate("current_target.is_alive", ns))
+        # Mark dead explicitly.
+        primary.add_condition("dead")
+        ns = build_reactive_namespace(
+            attacker, enc, grid, kind="full_attack",
+            context={"current_target": primary},
+        )
+        self.assertFalse(evaluate("current_target.is_alive", ns))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1379,39 +1379,61 @@ def _do_full_attack(
             schedule.append((twf_offhand_pen, offhand_index))
 
     has_rend = _has_racial_trait(actor, "rend")
-    claw_hits = 0
     # DSL v2 Phase 4: between iteratives, a sub-action decision-point
-    # asks the actor's picker whether to ContinueFullAttack or
-    # EndFullAttack. Default behavior (no picker, or no matching
-    # ``sub: full_attack`` rule) preserves v1: continue while the
-    # target is alive, stop on death/dying. Patron-authored ``sub``
-    # rules can override (e.g., end after the first iterative).
+    # asks the actor's picker whether to Continue / End / Retarget.
+    # Default behavior (no picker, or no matching ``sub: full_attack``
+    # rule) preserves v1: continue while the target is alive, stop on
+    # death/dying. Rend tracking is per-target (a dict indexed by the
+    # target's id) so retargeting doesn't smear claw-hit counts across
+    # creatures.
     from .actions import (
         ContinueFullAttack as _Cont, EndFullAttack as _End,
+        RetargetFullAttack as _Retarget,
         GameState as _GameState,
     )
+    claw_hits_by_target: dict[str, int] = {}
     for i, (delta, idx) in enumerate(schedule):
         if i > 0:
-            # Build the sub-action legal list and consult the picker.
             target_alive = target.is_alive() and target.current_hp > 0
+            # Build the sub-action legal list and consult the picker.
+            # Retarget candidates: any other live foe legitimately
+            # attackable from here. For melee primaries only adjacent
+            # foes; for ranged, anyone visible.
             sub_legal: list = [
                 _Cont(actor_id=actor.id, target_id=target.id),
                 _End(actor_id=actor.id, target_id=target.id),
             ]
+            for foe in grid.combatants.values():
+                if foe.id == actor.id or foe.id == target.id:
+                    continue
+                if foe.team == actor.team:
+                    continue
+                if not foe.is_alive() or "dead" in foe.conditions:
+                    continue
+                if not primary_is_ranged and not grid.is_adjacent(actor, foe):
+                    continue
+                sub_legal.append(_Retarget(
+                    actor_id=actor.id, new_target_id=foe.id,
+                ))
             picker = (encounter.pickers.get(actor.id)
                       if encounter is not None else None)
             if picker is None:
                 # Default: v1 break-when-target-down semantics.
-                if not target_alive:
-                    chosen = sub_legal[1]  # End
-                else:
-                    chosen = sub_legal[0]  # Continue
+                chosen = sub_legal[1] if not target_alive else sub_legal[0]
             else:
                 st = _GameState(encounter=encounter, grid=grid)
                 chosen = picker.pick(actor, st, sub_legal)
             if isinstance(chosen, _End):
                 break
-            # Continue: keep going (no state change needed).
+            if isinstance(chosen, _Retarget):
+                new_target = grid.combatants.get(chosen.new_target_id)
+                if new_target is not None:
+                    target = new_target
+                # Note: we do NOT reset claw_hits_by_target — the
+                # original target's tally is preserved (in case the
+                # picker bounces back to it later) and the new target
+                # starts fresh per-target.
+            # Continue: keep target as-is.
         else:
             # First iterative — no sub-decision yet (the action itself
             # was the FullAttack pick at the active-turn layer).
@@ -1424,23 +1446,34 @@ def _do_full_attack(
                    encounter=encounter,
                    script_options=options,
                    attack_index=idx)
-        # Track claw hits for the rend rider (troll, etc.). A claw is
-        # any attack option whose ``name`` starts with "claw".
+        # Track claw hits per-target for the rend rider (troll, etc.).
+        # A claw is any attack option whose ``name`` starts with "claw".
         if has_rend and idx < len(actor.attack_options):
             attack_name = str(actor.attack_options[idx].get("name", "")).lower()
             if attack_name.startswith("claw") and target.current_hp < hp_before:
-                claw_hits += 1
-    if has_rend and claw_hits >= 2 and target.is_alive():
-        # PF1 troll rend: +1d6+1 damage when both claws connect.
-        rend_roll = roller.roll("1d6")
-        rend_damage = int(rend_roll.total) + 1
-        target.take_damage(rend_damage)
-        _apply_post_damage_state(target)
-        events.append(TurnEvent(actor.id, "rend", {
-            "target_id": target.id,
-            "damage": rend_damage,
-            "die_roll": int(rend_roll.total),
-        }))
+                claw_hits_by_target[target.id] = (
+                    claw_hits_by_target.get(target.id, 0) + 1
+                )
+    # PF1 troll rend: +1d6+1 damage to any target this turn that took
+    # 2+ claw hits and is still alive. With per-target tracking, a
+    # full-attack that retargeted to a second creature can rend each
+    # creature independently if it landed both claws on each.
+    if has_rend:
+        for tid, count in claw_hits_by_target.items():
+            if count < 2:
+                continue
+            rend_target = grid.combatants.get(tid)
+            if rend_target is None or not rend_target.is_alive():
+                continue
+            rend_roll = roller.roll("1d6")
+            rend_damage = int(rend_roll.total) + 1
+            rend_target.take_damage(rend_damage)
+            _apply_post_damage_state(rend_target)
+            events.append(TurnEvent(actor.id, "rend", {
+                "target_id": rend_target.id,
+                "damage": rend_damage,
+                "die_roll": int(rend_roll.total),
+            }))
 
 
 _DIRECTION_DELTAS: dict[str, tuple[int, int]] = {

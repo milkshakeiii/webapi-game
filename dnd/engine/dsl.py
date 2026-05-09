@@ -258,7 +258,9 @@ def _compare(left: Any, op: ast.cmpop, right: Any) -> bool:
 
 
 class SelfRef:
-    """Wraps the active combatant for ``self.X`` access."""
+    """Wraps the active combatant for ``self.X`` access (also used for
+    ``provoker``, ``charger``, ``primary``, ``current_target`` in
+    reactive/sub namespaces)."""
     def __init__(self, c: Combatant):
         self._c = c
 
@@ -274,6 +276,21 @@ class SelfRef:
         # Lookup hostile threateners against our position; expensive but
         # only one combatant.
         return 0  # placeholder until we have the encounter / grid context
+
+    @property
+    def is_alive(self) -> bool:
+        """True when the combatant isn't ``dead``. Note: orcs with
+        ferocity stay ``is_alive`` even at negative HP — use
+        ``hp <= 0`` if you want "down for the round" semantics."""
+        return self._c.is_alive()
+
+    @property
+    def is_dying(self) -> bool:
+        return self._c.is_dying()
+
+    @property
+    def is_unconscious(self) -> bool:
+        return self._c.is_unconscious()
 
     def has_condition(self, name: str) -> bool:
         return name in self._c.conditions
@@ -434,6 +451,7 @@ def build_reactive_namespace(
             SelfRef(current) if current is not None else None
         )
         ns["iteration"] = ctx.get("iteration", 0)
+        ns["candidates"] = ctx.get("candidates") or []
     return ns
 
 

@@ -261,6 +261,16 @@ class EndFullAttack(Action):
     target_id: str
 
 
+@dataclass(frozen=True)
+class RetargetFullAttack(Action):
+    """Sub-action decision: continue the iterative chain against a
+    different target (the original primary died, moved out of reach,
+    or just stopped being interesting). Subsequent iteratives swing
+    at ``new_target_id``."""
+
+    new_target_id: str
+
+
 # ── Move-action grab bag ──────────────────────────────────────────────
 
 
@@ -1991,7 +2001,8 @@ def _classify_reactive_kind(actions: list[Action]) -> tuple[str, str] | None:
     if any(isinstance(a, CleaveTo) or isinstance(a, PassCleave) for a in actions):
         return ("react", "cleave")
     if any(
-        isinstance(a, ContinueFullAttack) or isinstance(a, EndFullAttack)
+        isinstance(a, (ContinueFullAttack, EndFullAttack,
+                       RetargetFullAttack))
         for a in actions
     ):
         return ("sub", "full_attack")
@@ -2038,13 +2049,18 @@ def _reactive_context(
                 if tgt is not None:
                     ctx.setdefault("candidates", []).append(tgt)
     elif kind == "full_attack":
+        candidates: list = []
         for a in actions:
-            tid = getattr(a, "target_id", None)
-            if tid:
-                t = grid.combatants.get(tid)
-                if t is not None:
+            if isinstance(a, (ContinueFullAttack, EndFullAttack)):
+                t = grid.combatants.get(a.target_id)
+                if t is not None and "current_target" not in ctx:
                     ctx["current_target"] = t
-                    break
+            if isinstance(a, RetargetFullAttack):
+                t = grid.combatants.get(a.new_target_id)
+                if t is not None:
+                    candidates.append(t)
+        if candidates:
+            ctx["candidates"] = candidates
     return ctx
 
 
@@ -2120,6 +2136,44 @@ def _compile_reactive_do(
                 if isinstance(a, EndFullAttack):
                     return a
             return None
+        if dtype == "retarget_full_attack":
+            new_target_id = _resolve_retarget_target(do, ns)
+            if new_target_id:
+                for a in actions:
+                    if (isinstance(a, RetargetFullAttack)
+                            and a.new_target_id == new_target_id):
+                        return a
+            return None
+    return None
+
+
+def _resolve_retarget_target(
+    do: dict, ns: dict | None,
+) -> str | None:
+    """Resolve a ``retarget_full_attack`` rule's target spec to a
+    combatant id. Mirrors ``_resolve_cleave_target``: literal
+    ``new_target_id``, or a ``target`` field that's an expression
+    string evaluated against ``ns``."""
+    explicit = do.get("new_target_id")
+    if explicit:
+        return str(explicit)
+    target = do.get("target")
+    if target is None or ns is None:
+        return None
+    from .combatant import Combatant
+    if isinstance(target, Combatant):
+        return target.id
+    if isinstance(target, str):
+        from .dsl import evaluate, DSLError
+        try:
+            resolved = evaluate(target, ns)
+        except DSLError:
+            return None
+        if isinstance(resolved, Combatant):
+            return resolved.id
+        wrapped = getattr(resolved, "_c", None)
+        if isinstance(wrapped, Combatant):
+            return wrapped.id
     return None
 
 
