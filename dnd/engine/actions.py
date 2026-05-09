@@ -205,6 +205,44 @@ class PassAoO(Action):
     provoker_id: str
 
 
+@dataclass(frozen=True)
+class Brace(Action):
+    """Reactive interrupt: spring a readied brace against an
+    incoming charger. Bracer's first hit deals doubled damage; the
+    bracing condition is consumed."""
+
+    charger_id: str
+
+
+@dataclass(frozen=True)
+class PassBrace(Action):
+    """Reactive interrupt: decline to spring the brace, letting the
+    charge resolve normally. The bracing condition stays set so the
+    bracer might still spring it on a later charger this round."""
+
+    charger_id: str
+
+
+@dataclass(frozen=True)
+class CleaveTo(Action):
+    """Sub-action decision: continue a cleave to ``target_id`` after a
+    successful primary hit. The target must be adjacent to the
+    cleaver and different from the primary."""
+
+    primary_target_id: str
+    target_id: str
+
+
+@dataclass(frozen=True)
+class PassCleave(Action):
+    """Sub-action decision: skip the cleave continuation even though
+    a secondary foe is in reach (e.g., to save the swing for later
+    in the round, or because all other foes are flagged 'don't
+    target')."""
+
+    primary_target_id: str
+
+
 # ── Move-action grab bag ──────────────────────────────────────────────
 
 

@@ -1336,7 +1336,9 @@ def _do_charge(
     # Brace trigger: if the target is bracing AND has a brace-flagged
     # weapon, they get to attack the charger first with doubled
     # damage. RAW: brace deals double damage on a successful hit
-    # against a charging foe.
+    # against a charging foe. DSL v2 Phase 3.2: this is a reactive
+    # interrupt — the bracer's registered Picker chooses Brace or
+    # PassBrace; default is Brace (preserves v1 behavior).
     if (
         "bracing" in target.conditions
         and target.attack_options
@@ -1354,19 +1356,39 @@ def _do_charge(
                 except Exception:
                     target_w = None
                 if target_w is not None and target_w.has_brace:
-                    _do_attack(
-                        target, actor, grid, roller, events,
-                        label="brace_attack",
-                        encounter=encounter,
-                        script_options={"charge_damage_multiplier": 2},
-                    )
-                    target.remove_condition("bracing")
-                    target.resources.pop("bracing_until_round", None)
-                    if not actor.is_alive() or actor.current_hp <= -10:
-                        events.append(TurnEvent(actor.id, "skip", {
-                            "reason": "killed by brace attack",
+                    from .actions import Brace as _Brace, PassBrace as _PassBrace
+                    legal: list = [
+                        _Brace(actor_id=target.id, charger_id=actor.id),
+                        _PassBrace(actor_id=target.id, charger_id=actor.id),
+                    ]
+                    bracer_picker = encounter.pickers.get(target.id)
+                    if bracer_picker is None:
+                        chosen = legal[0]  # Default: spring the brace.
+                    else:
+                        from .actions import GameState as _GameState
+                        st = _GameState(encounter=encounter, grid=grid)
+                        chosen = bracer_picker.pick(target, st, legal)
+                    if isinstance(chosen, _Brace):
+                        _do_attack(
+                            target, actor, grid, roller, events,
+                            label="brace_attack",
+                            encounter=encounter,
+                            script_options={"charge_damage_multiplier": 2},
+                        )
+                        target.remove_condition("bracing")
+                        target.resources.pop("bracing_until_round", None)
+                        if not actor.is_alive() or actor.current_hp <= -10:
+                            events.append(TurnEvent(actor.id, "skip", {
+                                "reason": "killed by brace attack",
+                            }))
+                            return
+                    else:
+                        # PassBrace: emit a trace event; the bracing
+                        # condition stays set so a later charger may
+                        # still trigger it this round.
+                        events.append(TurnEvent(target.id, "brace_pass", {
+                            "charger_id": actor.id,
                         }))
-                        return
     # PF1 RAW: a lance wielded one-handed in the same hand as a mount's
     # reins doubles damage on a charge. Spirited Charge feat doubles
     # the multiplier (×3 total with a lance). We mark the charge so
@@ -3109,11 +3131,38 @@ def _do_cleave(
         events.append(TurnEvent(actor.id, "cleave_no_followup",
                                 {"reason": "primary missed"}))
         return
-    # Second swing at any other adjacent foe.
-    secondary = _pick_adjacent_foe(actor, encounter, grid, exclude=primary)
-    if secondary is None:
+    # DSL v2 Phase 3.3: cleave continuation is a sub-action decision
+    # point. The cleaver's registered Picker chooses among CleaveTo
+    # (one per adjacent foe other than primary) and PassCleave. With
+    # no picker, default to the v1 behavior — first adjacent foe.
+    candidates = _adjacent_enemies_excluding(actor, grid, primary)
+    if not candidates:
         events.append(TurnEvent(actor.id, "cleave_no_followup",
                                 {"reason": "no second foe in reach"}))
+        return
+    from .actions import CleaveTo as _CleaveTo, PassCleave as _PassCleave
+    legal: list = [
+        _CleaveTo(actor_id=actor.id, primary_target_id=primary.id,
+                  target_id=c.id)
+        for c in candidates
+    ] + [
+        _PassCleave(actor_id=actor.id, primary_target_id=primary.id),
+    ]
+    cleaver_picker = encounter.pickers.get(actor.id) if encounter is not None else None
+    if cleaver_picker is None:
+        chosen = legal[0]  # Default: first adjacent foe.
+    else:
+        from .actions import GameState as _GameState
+        st = _GameState(encounter=encounter, grid=grid)
+        chosen = cleaver_picker.pick(actor, st, legal)
+    if isinstance(chosen, _PassCleave):
+        events.append(TurnEvent(actor.id, "cleave_no_followup",
+                                {"reason": "picker_passed"}))
+        return
+    secondary = grid.combatants.get(chosen.target_id)
+    if secondary is None:
+        events.append(TurnEvent(actor.id, "cleave_no_followup",
+                                {"reason": "secondary target gone"}))
         return
     _do_attack(actor, secondary, grid, roller, events,
                label="cleave_secondary", encounter=encounter)
@@ -3138,6 +3187,28 @@ def _pick_adjacent_foe(
         if grid.is_adjacent(actor, c):
             return c
     return None
+
+
+def _adjacent_enemies_excluding(
+    actor: Combatant,
+    grid: Grid,
+    exclude: Combatant | None = None,
+) -> list[Combatant]:
+    """All adjacent enemies of ``actor`` (alive, conscious), in
+    initiative order if encounter is available — otherwise grid-order.
+    Used by the cleave continuation picker to enumerate secondary
+    targets."""
+    out: list[Combatant] = []
+    for cid, c in grid.combatants.items():
+        if c.id == actor.id or c.team == actor.team:
+            continue
+        if exclude is not None and c.id == exclude.id:
+            continue
+        if c.current_hp <= 0 or c.is_unconscious():
+            continue
+        if grid.is_adjacent(actor, c):
+            out.append(c)
+    return out
 
 
 def _do_rage_start(
