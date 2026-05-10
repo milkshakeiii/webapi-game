@@ -2197,6 +2197,17 @@ def _do_attack(
         events.append(TurnEvent(actor.id, "skip",
                                 {"reason": "attack target not in melee range"}))
         return
+    # RAW (Fascinate, Foundry pack ``Fascinate``): "Any obvious threat,
+    # such as someone drawing a weapon, casting a spell, or aiming a
+    # weapon at the target, automatically breaks the effect." An
+    # incoming attack is the canonical obvious threat — clear the
+    # condition before resolution so the target isn't still penalized
+    # by the -4 reactions while being attacked.
+    if "fascinated" in target.conditions:
+        target.remove_condition("fascinated")
+        events.append(TurnEvent(target.id, "fascinate_broken",
+                                {"reason": "attacked",
+                                 "attacker_id": actor.id}))
     # Daily-resource gate: a ranged 'spikes' attack from a creature
     # with the tail_spikes trait consumes one of the 24/day pool.
     # When empty, the attack is skipped (the manticore is out of
@@ -3208,6 +3219,11 @@ def _bard_levels(actor: Combatant) -> int:
     return levels
 
 
+_BARDIC_MODES = frozenset({
+    "inspire_courage", "countersong", "distraction", "fascinate",
+})
+
+
 def _do_bardic_performance(
     actor: Combatant,
     args: dict,
@@ -3216,12 +3232,27 @@ def _do_bardic_performance(
     ns: dict[str, Any],
     events: list[TurnEvent],
 ) -> None:
-    """Bardic Performance — Inspire Courage (only mode in v1).
+    """Bardic Performance dispatch.
 
-    Standard action to start (free to maintain). +1 morale attack/damage
-    to all allies who can hear, scaling at L5/L11/L17. Lasts 1 round
-    after activation; scripts must repeat to sustain. Each round
-    consumes one round from ``performance_rounds``.
+    RAW (Foundry pack ``Bardic Performance``): standard action to
+    start, free action to maintain. Each round consumes one round
+    from ``performance_rounds``. The bard cannot have more than one
+    bardic performance in effect at one time — switching modes
+    requires stopping the previous one and starting a new one as a
+    standard action.
+
+    Modes implemented:
+    - ``inspire_courage``: morale +attack/damage and morale +Will-vs-fear
+      to all allies in earshot.
+    - ``countersong``: bard rolls Perform; any creature within 30 ft
+      may use the bard's Perform total in place of a save vs sonic /
+      language-dependent magic that round (intercepted in
+      ``roll_save`` via ``_bardic_save_intercept``).
+    - ``distraction``: same shape as countersong, vs illusion (pattern)
+      / illusion (figment).
+    - ``fascinate``: targets within 90 ft must beat a Will save
+      DC 10 + 1/2 bard level + Cha mod or be fascinated (1 target
+      at L1, +1 per 3 levels above 1st).
     """
     bard_levels = _bard_levels(actor)
     if bard_levels <= 0:
@@ -3234,13 +3265,41 @@ def _do_bardic_performance(
                                 {"reason": "no bardic performance rounds left"}))
         return
     mode = args.get("mode", "inspire_courage")
-    if mode != "inspire_courage":
+    if mode not in _BARDIC_MODES:
         events.append(TurnEvent(actor.id, "skip",
-                                {"reason": f"bardic mode {mode!r} not implemented"}))
+                                {"reason": f"bardic mode {mode!r} not "
+                                           f"in RAW menu"}))
         return
 
     actor.resources["performance_rounds"] = rounds_left - 1
     cur_round = encounter.round_number if encounter else 1
+
+    if mode == "inspire_courage":
+        _bardic_inspire_courage(actor, encounter, cur_round,
+                                bard_levels, events)
+        return
+    if mode == "countersong":
+        _bardic_countersong_distraction(
+            actor, encounter, cur_round, mode,
+            args, ns, events,
+        )
+        return
+    if mode == "distraction":
+        _bardic_countersong_distraction(
+            actor, encounter, cur_round, mode,
+            args, ns, events,
+        )
+        return
+    if mode == "fascinate":
+        _bardic_fascinate(actor, encounter, grid, cur_round,
+                          bard_levels, args, ns, events)
+        return
+
+
+def _bardic_inspire_courage(
+    actor: Combatant, encounter: Encounter, cur_round: int,
+    bard_levels: int, events: list[TurnEvent],
+) -> None:
     bonus = 1
     if bard_levels >= 17:
         bonus = 4
@@ -3270,11 +3329,198 @@ def _do_bardic_performance(
                                  expires_round=cur_round + 1))
         affected_ids.append(c.id)
 
+    # Mark the active mode + clear any prior performance state so the
+    # countersong / distraction intercept turns off when we switch
+    # to inspire_courage. RAW: "A bard cannot have more than one
+    # bardic performance in effect at one time."
+    actor.resources["bardic_active_mode"] = "inspire_courage"
+    actor.resources["bardic_active_until_round"] = cur_round + 1
+    actor.resources.pop("bardic_perform_total", None)
+
     events.append(TurnEvent(actor.id, "bardic_performance", {
-        "mode": mode, "bonus": bonus,
+        "mode": "inspire_courage", "bonus": bonus,
         "affected_ids": affected_ids,
         "rounds_remaining": actor.resources["performance_rounds"],
     }))
+
+
+# Perform skills allowed for each performance per RAW. Used to
+# validate the `subskill` arg if supplied; a default is chosen if
+# the patron didn't pick one.
+_PERFORM_SUBSKILLS_COUNTERSONG = ("keyboard", "percussion", "wind",
+                                  "string", "sing")
+_PERFORM_SUBSKILLS_DISTRACTION = ("act", "comedy", "dance", "oratory")
+
+
+def _bardic_countersong_distraction(
+    actor: Combatant, encounter: Encounter, cur_round: int,
+    mode: str, args: dict, ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Roll the bard's Perform check for the round and stash it on the
+    bard's resources. ``_bardic_save_intercept`` reads it during save
+    resolution for any matching effect that lands on a creature
+    within 30 ft. RAW: countersong vs sonic / language-dependent;
+    distraction vs illusion (pattern) / illusion (figment)."""
+    if mode == "countersong":
+        allowed = _PERFORM_SUBSKILLS_COUNTERSONG
+    else:
+        allowed = _PERFORM_SUBSKILLS_DISTRACTION
+    subskill = args.get("subskill") or allowed[0]
+    if subskill not in allowed:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": f"{mode}: subskill {subskill!r} not in RAW menu",
+            "allowed": list(allowed),
+        }))
+        return
+
+    # Roll the bard's Perform check. Use the encounter's roller so
+    # the result is reproducible alongside the rest of the turn.
+    # PF1 has Perform as a single skill with named subtypes; ranks
+    # apply to the whole skill regardless of which subtype is rolled,
+    # so we read the umbrella ``perform`` skill_total here. The
+    # ``subskill`` label is preserved on the event for trace purposes
+    # (it's still RAW-validated against the per-performance allowed
+    # list).
+    roller = getattr(encounter, "roller", None) or Roller()
+    nat = roller.roll("1d20").terms[0].rolls[0]
+    perform_total = nat + actor.skill_total("perform")
+
+    actor.resources["bardic_active_mode"] = mode
+    actor.resources["bardic_active_until_round"] = cur_round + 1
+    actor.resources["bardic_perform_total"] = perform_total
+
+    events.append(TurnEvent(actor.id, "bardic_performance", {
+        "mode": mode,
+        "subskill": subskill,
+        "perform_natural": nat,
+        "perform_total": perform_total,
+        "rounds_remaining": actor.resources["performance_rounds"],
+    }))
+
+
+def _bardic_fascinate(
+    actor: Combatant, encounter: Encounter, grid: Grid, cur_round: int,
+    bard_levels: int, args: dict, ns: dict[str, Any],
+    events: list[TurnEvent],
+) -> None:
+    """Will save vs DC 10 + 1/2 bard level + Cha mod for each target
+    in 90 ft. RAW: 1 target at L1, +1 per 3 levels beyond. Targets
+    must be able to see and hear the bard, and the bard must be able
+    to see them. On fail: ``fascinated`` condition applied."""
+    from .spells import roll_save
+    cha_mod = _ability_modifier(actor, "cha")
+    dc = 10 + bard_levels // 2 + cha_mod
+    max_targets = 1 + max(0, (bard_levels - 1) // 3)
+
+    raw_targets = args.get("targets") or []
+    resolved_targets: list[Combatant] = []
+    for t_expr in raw_targets:
+        t = _resolve_target(t_expr, ns)
+        if t is None:
+            continue
+        if not t.is_alive() or t.current_hp <= 0:
+            continue
+        # 90 ft = 18 squares. Range gate.
+        if grid.distance_squares(actor.position, t.position) > 18:
+            continue
+        resolved_targets.append(t)
+        if len(resolved_targets) >= max_targets:
+            break
+
+    affected: list[dict] = []
+    for t in resolved_targets:
+        # Mind-affecting + enchantment immunities short-circuit.
+        if "fascinated" in t.condition_immunities:
+            affected.append({"target_id": t.id, "result": "immune"})
+            continue
+        passed, nat, total = roll_save(
+            t, "will", dc, encounter.roller or Roller(seed=0),
+            context={"effect_tags": ["enchantment", "compulsion",
+                                     "mind_affecting"]},
+        )
+        if passed:
+            affected.append({"target_id": t.id, "result": "save",
+                             "natural": nat, "total": total})
+        else:
+            t.add_condition("fascinated")
+            affected.append({"target_id": t.id, "result": "fascinated",
+                             "natural": nat, "total": total})
+
+    actor.resources["bardic_active_mode"] = "fascinate"
+    actor.resources["bardic_active_until_round"] = cur_round + 1
+
+    events.append(TurnEvent(actor.id, "bardic_performance", {
+        "mode": "fascinate",
+        "save_dc": dc,
+        "max_targets": max_targets,
+        "affected": affected,
+        "rounds_remaining": actor.resources["performance_rounds"],
+    }))
+
+
+# RAW descriptor / school predicates for the countersong / distraction
+# intercepts. Matched against the spell-save context built by
+# ``_spell_save_context``.
+_COUNTERSONG_DESCRIPTORS = frozenset({"sonic", "language-dependent",
+                                      "language_dependent"})
+_DISTRACTION_SUBSCHOOLS = frozenset({"pattern", "figment"})
+
+
+def _bardic_save_intercept(
+    target: Combatant, save_kind: str, save_total: int,
+    context: dict, encounter, grid,
+) -> int | None:
+    """Returns the substituted save total (the bard's Perform total)
+    if a bard within 30 ft has an active matching performance and the
+    Perform total is higher than ``save_total``. ``None`` otherwise.
+
+    Called from ``spells.roll_save`` after the natural save has been
+    rolled. The Perform total was computed when the bard activated
+    countersong / distraction this round and stashed in
+    ``bardic_perform_total``.
+    """
+    if encounter is None or grid is None:
+        return None
+    descriptors = set(context.get("descriptors") or [])
+    school = (context.get("school") or "").lower()
+    subschool = (context.get("subschool") or "").lower()
+    countersong_match = bool(_COUNTERSONG_DESCRIPTORS & descriptors)
+    distraction_match = (school == "illusion"
+                         and subschool in _DISTRACTION_SUBSCHOOLS)
+    if not countersong_match and not distraction_match:
+        return None
+    cur_round = encounter.round_number
+    best_total: int | None = None
+    for ir in encounter.initiative:
+        bard = ir.combatant
+        if bard.id == target.id:
+            # The bard themselves can also benefit from countersong
+            # per RAW ("any creature within 30 feet of the bard
+            # including the bard himself"). Don't skip on identity.
+            pass
+        mode = bard.resources.get("bardic_active_mode")
+        if mode is None:
+            continue
+        until = bard.resources.get("bardic_active_until_round", 0)
+        if until < cur_round:
+            continue
+        # Only the matching mode applies.
+        if countersong_match and mode != "countersong":
+            continue
+        if distraction_match and mode != "distraction":
+            continue
+        # 30 ft = 6 squares.
+        if grid.distance_squares(bard.position, target.position) > 6:
+            continue
+        # The performance must be a save-replacing kind. inspire_courage
+        # / fascinate produce no Perform total.
+        perform_total = bard.resources.get("bardic_perform_total")
+        if perform_total is None:
+            continue
+        if best_total is None or perform_total > best_total:
+            best_total = perform_total
+    return best_total
 
 
 def _character_level(actor: Combatant) -> int:
@@ -5028,6 +5274,7 @@ def _do_cast(
     outcome = cast_spell(
         actor, spell, targets, base_spell_level, registry, roller,
         current_round=cur_round, metamagic=metamagic, grid=grid,
+        encounter=encounter,
     )
     events.append(TurnEvent(actor.id, "cast", outcome.to_dict()))
 

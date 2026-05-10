@@ -165,7 +165,7 @@ CLASS_FEATURES_L1: dict[str, Entry] = {
 
     # Bard
     "bardic_knowledge":      (IMPLEMENTED,    "+1/2 level (min 1) untyped on every Knowledge skill; applied at combatant_from_character"),
-    "bardic_performance":    (PARTIAL,         "Inspire Courage implemented; Countersong, Distraction, Fascinate not"),
+    "bardic_performance":    (IMPLEMENTED,     "L1 modes: Inspire Courage (morale +attack/damage/Will to all allies in earshot), Countersong (bard rolls Perform; any creature within 30 ft can substitute the bard's Perform total for a save vs sonic / language-dependent magic via _bardic_save_intercept in spells.roll_save), Distraction (same shape vs illusion (pattern) / illusion (figment)), Fascinate (Will save DC 10 + 1/2 bard level + Cha mod for targets in 90 ft, applies fascinated condition; max targets = 1 + (bard_level-1)//3). RAW auto-break-on-threat for fascinate is wired in _do_attack. Subskill arg validated against the per-mode RAW menu (countersong: keyboard/percussion/wind/string/sing; distraction: act/comedy/dance/oratory). Mode switch ends prior performance per RAW. Higher-level performances (Inspire Competence L3, Suggestion L6, etc.) deferred."),
     "cantrips_bard":         (IMPLEMENTED,    "Bard 0-level spells (light, daze, ghost_sound, mage_hand, etc. — combat-relevant subset wired). At-will: _do_cast bypasses both slot consumption and prep-entry burn at base_spell_level=0. Bard is spontaneous, so any cantrip in castable_spells can be cast freely."),
 
     # Cleric
@@ -238,7 +238,7 @@ CONDITIONS: dict[str, Entry] = {
     "energy_drained":  (IMPLEMENTED,    "negative_levels counter on Combatant; apply_negative_levels(n) adds -1 untyped to attack/fort/ref/will/skill_check per level + -5 max_hp; remove_negative_levels lifts one level at a time. add_condition('energy_drained') stacks; remove_condition strips all. Undead/constructs immune."),
     "entangled":       (IMPLEMENTED,    "-2 attack, -4 ability:dex, half speed via _on_condition_applied; charge/run banned in the intent-legality check"),
     "exhausted":       (IMPLEMENTED,     "-6 untyped to ability:str/dex via condition hook; speed halved on apply, restored on remove; supersedes fatigued"),
-    "fascinated":      (PARTIAL,        "-4 untyped to skill:perception via _on_condition_applied; intent-legality check blocks all action slots. GAP: RAW says any obvious threat (an enemy attacking, a hostile spell, etc.) automatically breaks the effect; the engine does not auto-clear fascinated on threat exposure."),
+    "fascinated":      (IMPLEMENTED,    "-4 untyped to skill:perception via _on_condition_applied; intent-legality check blocks all action slots. RAW auto-break-on-threat: _do_attack clears the condition before resolving an incoming attack and emits a ``fascinate_broken`` event."),
     "fatigued":        (IMPLEMENTED,    "-2 untyped to ability:str/dex via condition hook; cleared by remove_condition. The intent-legality check explicitly bans run / charge full-round actions while fatigued (or exhausted, which inherits the ban)."),
     "flat_footed":     (IMPLEMENTED,     "AC variant computed; sneak attack qualifies"),
     "frightened":      (PARTIAL,        "-2 morale to attack/all saves/skill_check via _on_condition_applied; supersedes shaken (and is superseded by panicked) via add_condition tier-suppression. GAP: RAW says frightened creatures must flee from the source of fear; flee compulsion / target-of-fear tracking is not enforced — the actor can still take offensive actions."),

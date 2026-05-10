@@ -50,6 +50,11 @@ class SpellOutcome:
     # there is no spatial context (e.g., scenario-tests casting
     # without a grid).
     grid: object | None = None
+    # Optional encounter for handlers that need turn-context lookups
+    # (e.g., bardic countersong / distraction reactive intercepts in
+    # roll_save). None when the cast happens outside an encounter
+    # (scenario tests etc.).
+    encounter: object | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -144,6 +149,8 @@ def roll_save(
     roller: Roller,
     context: dict | None = None,
     cover_bonus: int = 0,
+    encounter=None,
+    grid=None,
 ) -> tuple[bool, int, int]:
     """Roll a saving throw. Returns (passed, natural, total).
 
@@ -155,6 +162,17 @@ def roll_save(
     cover, +4 for greater cover). Currently only Reflex saves benefit
     per RAW; we apply it unconditionally and let the caller pass 0 for
     non-Reflex contexts.
+
+    ``encounter`` and ``grid``, when both supplied, enable bardic
+    countersong / distraction reactive intercepts. RAW: any creature
+    within 30 ft of a bard with the matching active performance "may
+    use the bard's Perform check result in place of its saving throw
+    if, after the saving throw is rolled, the Perform check result
+    proves to be higher." The intercept is applied AFTER the natural
+    save roll, matching the RAW order. ``context`` should carry
+    ``descriptors`` (for sonic / language-dependent → countersong) and
+    ``school`` + ``subschool`` (for illusion-pattern / illusion-figment
+    → distraction).
     """
     save_total = target.save(save_kind, context=context) + cover_bonus
     r = roller.roll("1d20")
@@ -162,6 +180,21 @@ def roll_save(
     total = nat + save_total
     # Discharge any single-use buffs (e.g. Guidance).
     target.consume_single_use_buffs()
+    # Bardic intercept: swap in the bard's Perform total if higher.
+    # Done before the nat-1/nat-20 short-circuits per RAW: "if, after
+    # the saving throw is rolled, the Perform check result proves to
+    # be higher" — the intercept replaces the rolled total wholesale.
+    if encounter is not None and grid is not None and context is not None:
+        from .turn_executor import _bardic_save_intercept
+        intercepted = _bardic_save_intercept(
+            target, save_kind, total, context, encounter, grid,
+        )
+        if intercepted is not None and intercepted > total:
+            total = intercepted
+            # The intercept doesn't change the natural roll, so nat-1
+            # auto-fail / nat-20 auto-pass still apply per the RAW
+            # order ("the saving throw is rolled" first, then the
+            # bard's check substitutes).
     if nat == 1:
         return False, nat, total
     if nat == 20:
@@ -339,6 +372,7 @@ def cast_spell(
     current_round: int = 1,
     metamagic: list[str] | None = None,
     grid: object | None = None,
+    encounter: object | None = None,
 ) -> SpellOutcome:
     """Resolve a spell cast.
 
@@ -369,6 +403,7 @@ def cast_spell(
         save_dc=dc,
         metamagic=list(metamagic),
         grid=grid,
+        encounter=encounter,
     )
     metamagic_note = (
         f" [metamagic: {', '.join(metamagic)}]" if metamagic else ""
@@ -625,6 +660,7 @@ def _handle_scaling_damage(
             target, save_kind, dc, roller,
             context=_spell_save_context(spell),
             cover_bonus=cover_bonus,
+            encounter=out.encounter, grid=out.grid,
         )
         cover_note = f" + {cover_bonus} cover" if cover_bonus else ""
         out.log.append(
@@ -782,12 +818,22 @@ def resolve_spell_touch_attack(
 def _spell_save_context(spell: Spell) -> dict:
     """Build the effect-tag context for save resolution against a spell.
 
-    Used by situational racial save bonuses (hardy +2 vs spells,
-    illusion_resistance +2 vs illusion, etc.)."""
+    Used by:
+    - situational racial save bonuses (hardy +2 vs spells,
+      illusion_resistance +2 vs illusion, etc.) via ``effect_tags``.
+    - bardic countersong / distraction reactive intercepts (matching on
+      ``descriptors`` for sonic / language-dependent and on
+      ``school`` + ``subschool`` for illusion-pattern / illusion-figment).
+    """
     tags: list[str] = ["spell"]
     if spell.school:
         tags.append(spell.school.lower())
-    return {"effect_tags": tags}
+    return {
+        "effect_tags": tags,
+        "school": (spell.school or "").lower(),
+        "subschool": (spell.subschool or "").lower(),
+        "descriptors": [str(d).lower() for d in (spell.descriptors or [])],
+    }
 
 
 def _handle_apply_condition_save(
@@ -822,6 +868,7 @@ def _handle_apply_condition_save(
     if save_kind:
         passed, nat, total = roll_save(
             target, save_kind, dc, roller, context=_spell_save_context(spell),
+            encounter=out.encounter, grid=out.grid,
         )
         out.log.append(
             f"  {target.name} {save_kind} save: d20={nat}+{target.save(save_kind)}={total} vs DC {dc} → "
@@ -858,6 +905,7 @@ def _handle_charm(
     if save_kind:
         passed, nat, total = roll_save(
             target, save_kind, dc, roller, context=_spell_save_context(spell),
+            encounter=out.encounter, grid=out.grid,
         )
         out.log.append(
             f"  {target.name} {save_kind} save: d20={nat}+{target.save(save_kind)}={total} vs DC {dc} → "
@@ -982,6 +1030,7 @@ def _handle_color_spray(
         passed, nat, total = roll_save(
             target, save_kind, dc, roller,
             context=_spell_save_context(spell),
+            encounter=out.encounter, grid=out.grid,
         )
         out.log.append(
             f"  {target.name} {save_kind} save: d20={nat}+"
@@ -1096,6 +1145,7 @@ def _handle_apply_bleed(
         passed, nat, total = roll_save(
             target, save_kind, dc, roller,
             context=_spell_save_context(spell),
+            encounter=out.encounter, grid=out.grid,
         )
         out.log.append(
             f"  {target.name} {save_kind} save: d20={nat}+"

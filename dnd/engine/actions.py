@@ -354,9 +354,12 @@ class StunningFist(Action):
 @dataclass(frozen=True)
 class BardicPerformance(Action):
     """Standard action (initial; later rounds maintain via free): start
-    a bardic performance. ``kind`` is the performance type."""
+    a bardic performance. ``mode`` is the performance type. ``options``
+    carries any per-mode arguments (e.g., ``targets`` for fascinate,
+    ``subskill`` for countersong / distraction)."""
 
-    kind: str = "inspire_courage"
+    mode: str = "inspire_courage"
+    options: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -725,7 +728,7 @@ def enumerate_legal_actions(
             actions.append(EscapeWeb(actor_id=actor.id))
         if actor.resources.get("bardic_performance_rounds", 0) > 0:
             actions.append(BardicPerformance(
-                actor_id=actor.id, kind="inspire_courage",
+                actor_id=actor.id, mode="inspire_courage",
             ))
         for power in actor.domain_spells.keys() if isinstance(
             getattr(actor, "domain_spells", None), dict,
@@ -1091,9 +1094,9 @@ def apply_action(
 
     if isinstance(action, BardicPerformance):
         from .turn_executor import _do_bardic_performance
+        args = {"mode": action.mode, **dict(action.options)}
         _do_bardic_performance(
-            actor, {"kind": action.kind},
-            encounter, grid, {}, events,
+            actor, args, encounter, grid, {}, events,
         )
         slots.standard_used = True
         return ApplyResult(events=events)
@@ -1941,9 +1944,13 @@ def _compile_composite_intent(
         return ChannelEnergy(actor_id=actor.id,
                              mode=args.get("mode", "heal_living"))
     if name == "bardic_performance":
+        # Accept either "mode" (canonical) or legacy "kind".
+        mode = args.get("mode") or args.get("kind") or "inspire_courage"
+        # Pass through everything else (targets, subskill, …) as options.
+        opts = {k: v for k, v in args.items()
+                if k not in ("mode", "kind")}
         return BardicPerformance(
-            actor_id=actor.id,
-            kind=args.get("kind", "inspire_courage"),
+            actor_id=actor.id, mode=mode, options=opts,
         )
     if name == "stunning_fist":
         return StunningFist(actor_id=actor.id, target_id=tid)
