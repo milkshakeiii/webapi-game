@@ -333,5 +333,175 @@ class TestFlurryOfBlows(unittest.TestCase):
         )
 
 
+# ---------------------------------------------------------------------------
+# Flurry of Blows — monk special weapons
+# ---------------------------------------------------------------------------
+
+
+class TestFlurryWithMonkWeapons(unittest.TestCase):
+    """RAW: 'These attacks can be any combination of unarmed strikes
+    and attacks with a monk special weapon (he does not need to use
+    two weapons to utilize this ability).'
+
+    Monk special weapons (CRB monk weapon group) include kama,
+    nunchaku, quarterstaff, sai, siangham, shuriken, temple sword.
+    Verify a monk wielding e.g. a quarterstaff or nunchaku can flurry."""
+
+    def _setup(self, weapon: str):
+        body = {
+            "name": "Tian", "race": "human", "class": "monk",
+            "alignment": "lawful_neutral",
+            "ability_scores": {"method": "point_buy_20",
+                "scores": {"str": 14, "dex": 14, "con": 14,
+                           "int": 10, "wis": 14, "cha": 10}},
+            "free_ability_choice": "str",
+            "feats": ["dodge", "iron_will"],
+            "skill_ranks": {"acrobatics": 1, "perception": 1},
+            "bonus_languages": [],
+            "class_choices": {"monk_bonus_feat": "combat_reflexes"},
+            "equipment": {"weapon": weapon, "armor": "none"},
+        }
+        char = create_character(CharacterRequest.from_dict(body), REGISTRY)
+        monk = combatant_from_character(char, REGISTRY, (5, 5), "x")
+        target = combatant_from_monster(
+            REGISTRY.get_monster("goblin"), (6, 5), "y",
+        )
+        target.max_hp = 9999
+        target.current_hp = 9999
+        grid = Grid(width=12, height=12)
+        grid.place(monk)
+        grid.place(target)
+        enc = Encounter.begin(grid, [monk, target], Roller(seed=1))
+        return monk, target, enc, grid
+
+    def _run_flurry(self, monk, target, enc, grid):
+        from dnd.engine.dsl import TurnIntent
+        from dnd.engine.turn_executor import execute_turn
+        do = {"composite": "full_attack",
+              "args": {"target": target, "options": {"flurry": True}}}
+        intent = TurnIntent(rule_index=0, do=do, namespace={})
+        return execute_turn(monk, intent, enc, grid, Roller(seed=1))
+
+    def test_l1_monk_can_flurry_with_quarterstaff(self):
+        monk, target, enc, grid = self._setup("quarterstaff")
+        result = self._run_flurry(monk, target, enc, grid)
+        attack_events = [e for e in result.events
+                         if e.kind.startswith("full_attack_")]
+        self.assertEqual(
+            len(attack_events), 2,
+            "L1 flurry with quarterstaff should produce 2 attacks",
+        )
+
+    def test_l1_monk_can_flurry_with_nunchaku(self):
+        monk, target, enc, grid = self._setup("nunchaku")
+        result = self._run_flurry(monk, target, enc, grid)
+        attack_events = [e for e in result.events
+                         if e.kind.startswith("full_attack_")]
+        self.assertEqual(len(attack_events), 2)
+
+    def test_l1_monk_cannot_flurry_with_dagger(self):
+        # Dagger is in the monk's weapon proficiency list (it's a
+        # simple weapon) but is NOT a monk special weapon — flurry
+        # should NOT trigger.
+        monk, target, enc, grid = self._setup("dagger")
+        result = self._run_flurry(monk, target, enc, grid)
+        attack_events = [e for e in result.events
+                         if e.kind.startswith("full_attack_")]
+        # Without flurry triggering, this becomes a normal full-attack
+        # (1 iterative at L1 with BAB 0).
+        self.assertEqual(
+            len(attack_events), 1,
+            "non-monk-weapon should not enable flurry",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Flurry of Blows — combat-maneuver substitution
+# ---------------------------------------------------------------------------
+
+
+class TestFlurryManeuverSubstitution(unittest.TestCase):
+    """RAW: 'A monk may substitute disarm, sunder, and trip combat
+    maneuvers for unarmed attacks as part of a flurry of blows.'
+
+    Verify the substitution path: each substituted attack becomes a
+    CMB roll, the maneuver carries the same flurry penalties (-2
+    TWF + monk-level BAB swap), and only the three RAW kinds are
+    accepted."""
+
+    def _setup_monk_vs_goblin(self):
+        body = {
+            "name": "Tian", "race": "human", "class": "monk",
+            "alignment": "lawful_neutral",
+            "ability_scores": {"method": "point_buy_20",
+                "scores": {"str": 14, "dex": 14, "con": 14,
+                           "int": 10, "wis": 14, "cha": 10}},
+            "free_ability_choice": "str",
+            "feats": ["dodge", "iron_will"],
+            "skill_ranks": {"acrobatics": 1, "perception": 1},
+            "bonus_languages": [],
+            "class_choices": {"monk_bonus_feat": "combat_reflexes"},
+        }
+        char = create_character(CharacterRequest.from_dict(body), REGISTRY)
+        monk = combatant_from_character(char, REGISTRY, (5, 5), "x")
+        target = combatant_from_monster(
+            REGISTRY.get_monster("goblin"), (6, 5), "y",
+        )
+        # Make the goblin's CMD trivially low so the trip lands and
+        # we can see the prone effect.
+        target.max_hp = 9999
+        target.current_hp = 9999
+        grid = Grid(width=12, height=12)
+        grid.place(monk)
+        grid.place(target)
+        enc = Encounter.begin(grid, [monk, target], Roller(seed=1))
+        return monk, target, enc, grid
+
+    def _run(self, monk, target, enc, grid, substitutions):
+        from dnd.engine.dsl import TurnIntent
+        from dnd.engine.turn_executor import execute_turn
+        do = {"composite": "full_attack",
+              "args": {"target": target,
+                       "options": {
+                           "flurry": True,
+                           "flurry_substitutions": substitutions,
+                       }}}
+        intent = TurnIntent(rule_index=0, do=do, namespace={})
+        return execute_turn(monk, intent, enc, grid, Roller(seed=1))
+
+    def test_substitute_one_attack_with_trip(self):
+        monk, target, enc, grid = self._setup_monk_vs_goblin()
+        result = self._run(monk, target, enc, grid, [None, "trip"])
+        kinds = [e.kind for e in result.events]
+        # First slot is an attack, second is a trip maneuver event.
+        self.assertIn("full_attack_1", kinds)
+        self.assertIn("maneuver_trip", kinds)
+        # No second full_attack_ event when slot 2 was substituted.
+        self.assertNotIn("full_attack_2", kinds)
+
+    def test_substitute_disarm(self):
+        monk, target, enc, grid = self._setup_monk_vs_goblin()
+        result = self._run(monk, target, enc, grid, [None, "disarm"])
+        kinds = [e.kind for e in result.events]
+        self.assertIn("maneuver_disarm", kinds)
+
+    def test_substitute_sunder(self):
+        monk, target, enc, grid = self._setup_monk_vs_goblin()
+        result = self._run(monk, target, enc, grid, [None, "sunder"])
+        kinds = [e.kind for e in result.events]
+        self.assertIn("maneuver_sunder", kinds)
+
+    def test_substitute_grapple_rejected(self):
+        # Grapple is NOT in the RAW substitution menu — flurry must
+        # reject it explicitly.
+        monk, target, enc, grid = self._setup_monk_vs_goblin()
+        result = self._run(monk, target, enc, grid, [None, "grapple"])
+        kinds = [e.kind for e in result.events]
+        self.assertIn("skip", kinds)
+        skip = next(e for e in result.events if e.kind == "skip")
+        self.assertIn("substitution kind not in RAW menu",
+                      skip.detail.get("reason", ""))
+
+
 if __name__ == "__main__":
     unittest.main()

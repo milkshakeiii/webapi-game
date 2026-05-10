@@ -1261,15 +1261,17 @@ def _do_full_attack(
     # RAW (Flurry of Blows): full-attack with one extra attack at the
     # top BAB and -2 to all attack rolls (TWF-style). The monk's
     # base attack bonus from his monk class levels is treated as equal
-    # to his monk level for these attacks. Unarmed-strike-only in v1
-    # (RAW also allows monk-special weapons; deferred). At higher
-    # levels: 2 extra attacks at L8, 3 at L15.
+    # to his monk level for these attacks. RAW: "These attacks can be
+    # any combination of unarmed strikes and attacks with a monk
+    # special weapon" — gated on _MONK_FLURRY_WEAPONS below.
+    # At higher levels: 2 extra attacks at L8, 3 at L15.
     flurry_active = (
         bool(options and options.get("flurry"))
         and bool(actor.attack_options)
-        and actor.attack_options[0].get("weapon_id") == "unarmed_strike"
+        and actor.attack_options[0].get("weapon_id") in _MONK_FLURRY_WEAPONS
         and actor.class_levels.get("monk", 0) > 0
     )
+    flurry_substitutions: list = []
     if flurry_active:
         monk_level = actor.class_levels["monk"]
         # RAW: "the monk's base attack bonus from his monk class levels
@@ -1293,6 +1295,23 @@ def _do_full_attack(
         # Apply the -2 TWF-style penalty + BAB swap-in to all flurry
         # attacks.
         primary_deltas = [d + flurry_bab_bonus - 2 for d in primary_deltas]
+        # RAW: "A monk may substitute disarm, sunder, and trip combat
+        # maneuvers for unarmed attacks as part of a flurry of blows."
+        # ``options.flurry_substitutions`` is a per-position list of
+        # maneuver kinds (or None for "normal attack"). Validated
+        # against the RAW menu of three.
+        raw_subs = list(options.get("flurry_substitutions") or [])
+        for i, sub in enumerate(raw_subs):
+            if sub is None:
+                continue
+            if sub not in _FLURRY_SUBSTITUTABLE_MANEUVERS:
+                events.append(TurnEvent(actor.id, "skip", {
+                    "reason": "flurry: substitution kind not in RAW "
+                              "menu (trip/disarm/sunder)",
+                    "kind": sub, "position": i,
+                }))
+                return
+        flurry_substitutions = raw_subs
 
     twf_active = (
         bool(options and options.get("two_weapon_fighting"))
@@ -1328,11 +1347,15 @@ def _do_full_attack(
     # Natural-attack chain: when every melee attack option is flagged
     # is_natural, each one fires once (PF1 RAW: primary at full BAB,
     # secondary at BAB-5; v1 simplification fires all at full BAB).
+    # RAW (Flurry of Blows): "A monk with natural weapons cannot use
+    # such weapons as part of a flurry of blows, nor can he make
+    # natural attacks in addition to his flurry of blows attacks."
+    # Suppress the natural-attack chain entirely when flurry is active.
     natural_indices = [
         i for i, opt in enumerate(actor.attack_options or [])
         if opt.get("type") == "melee" and opt.get("is_natural")
     ]
-    if len(natural_indices) > 1:
+    if len(natural_indices) > 1 and not flurry_active:
         schedule: list[tuple[int, int]] = [(0, i) for i in natural_indices]
     else:
         schedule = [(d + twf_primary_pen, 0) for d in primary_deltas]
@@ -1403,12 +1426,29 @@ def _do_full_attack(
             if not target.is_alive() or target.current_hp <= 0:
                 break
         hp_before = target.current_hp
-        _do_attack(actor, target, grid, roller, events,
-                   attack_bonus_delta=delta,
-                   label=f"full_attack_{i+1}",
-                   encounter=encounter,
-                   script_options=options,
-                   attack_index=idx)
+        # RAW (Flurry of Blows): "A monk may substitute disarm, sunder,
+        # and trip combat maneuvers for unarmed attacks as part of a
+        # flurry of blows." When a position has a substitution, dispatch
+        # _do_combat_maneuver instead of _do_attack — the same flurry
+        # delta is fed in as cmb_delta so the maneuver's CMB roll
+        # carries the BAB swap-in and -2 TWF penalty.
+        sub_kind = (flurry_substitutions[i]
+                    if (flurry_active and i < len(flurry_substitutions))
+                    else None)
+        if sub_kind is not None:
+            _do_combat_maneuver(
+                actor, sub_kind,
+                {"target": target},
+                encounter, grid, roller, ns={}, events=events,
+                cmb_delta=delta,
+            )
+        else:
+            _do_attack(actor, target, grid, roller, events,
+                       attack_bonus_delta=delta,
+                       label=f"full_attack_{i+1}",
+                       encounter=encounter,
+                       script_options=options,
+                       attack_index=idx)
         # Track claw hits per-target for the rend rider (troll, etc.).
         # A claw is any attack option whose ``name`` starts with "claw".
         if has_rend and idx < len(actor.attack_options):
@@ -4114,6 +4154,7 @@ def _resolve_maneuver(
     target: Combatant,
     kind: str,
     roller: Roller,
+    cmb_delta: int = 0,
 ) -> tuple[bool, int, int, int]:
     """Roll d20 + actor.cmb vs target.cmd(context={"maneuver": kind}).
 
@@ -4125,8 +4166,12 @@ def _resolve_maneuver(
     Trip-CMB bonus from the wielded weapon (whip, scythe, flail = +2)
     is layered on for ``kind == "trip"``. The Improved-X feat for
     the matching maneuver adds +2 CMB.
+
+    ``cmb_delta`` is a flat per-attempt bonus/penalty. Used by
+    flurry-of-blows substitution to apply the monk-level BAB swap-in
+    and the -2 TWF-style flurry penalty to the maneuver's CMB roll.
     """
-    cmb = actor.cmb()
+    cmb = actor.cmb() + cmb_delta
     if kind == "trip" and actor.attack_options:
         weapon_id = actor.attack_options[0].get("weapon_id")
         if weapon_id:
@@ -4155,6 +4200,20 @@ def _resolve_maneuver(
 _MANEUVER_KINDS = frozenset({
     "trip", "disarm", "sunder", "bull_rush", "grapple",
     "drag", "overrun", "reposition", "steal", "dirty_trick",
+})
+
+# RAW (Flurry of Blows): "A monk may substitute disarm, sunder, and
+# trip combat maneuvers for unarmed attacks as part of a flurry of
+# blows." Only these three kinds qualify.
+_FLURRY_SUBSTITUTABLE_MANEUVERS = frozenset({"trip", "disarm", "sunder"})
+
+# RAW: weapons usable in a flurry — unarmed strike plus the monk's
+# special-weapon group (CRB monk class entry — kama, nunchaku,
+# quarterstaff, sai, shuriken, siangham, temple sword). Other weapons
+# the monk is proficient with (club, dagger, etc.) are NOT flurryable.
+_MONK_FLURRY_WEAPONS = frozenset({
+    "unarmed_strike", "kama", "nunchaku", "quarterstaff", "sai",
+    "shuriken", "siangham", "temple_sword",
 })
 
 # Per-maneuver mapping to the Improved-X feat that grants:
@@ -4188,6 +4247,7 @@ def _do_combat_maneuver(
     roller: Roller,
     ns: dict[str, Any],
     events: list[TurnEvent],
+    cmb_delta: int = 0,
 ) -> None:
     """Standalone combat-maneuver composite.
 
@@ -4197,6 +4257,10 @@ def _do_combat_maneuver(
     also grants +2 CMB on that maneuver (applied in _resolve_maneuver).
 
     Effects on success vary by kind — see ``_apply_maneuver_effect``.
+
+    ``cmb_delta`` is forwarded to _resolve_maneuver. Used by flurry of
+    blows substitution: the maneuver's CMB roll inherits the flurry's
+    monk-level BAB swap-in and -2 TWF-style penalty.
     """
     if kind not in _MANEUVER_KINDS:
         raise ValueError(f"unknown maneuver kind {kind!r}")
@@ -4229,7 +4293,9 @@ def _do_combat_maneuver(
         if actor.current_hp <= 0:
             return  # actor incapacitated by AoO; skip the maneuver
 
-    passed, nat, total, margin = _resolve_maneuver(actor, target, kind, roller)
+    passed, nat, total, margin = _resolve_maneuver(
+        actor, target, kind, roller, cmb_delta=cmb_delta,
+    )
     detail = {
         "kind": kind, "target_id": target.id,
         "natural": nat, "total": total, "margin": margin,
