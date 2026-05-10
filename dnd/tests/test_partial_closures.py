@@ -18,7 +18,8 @@ from dnd.engine.combatant import combatant_from_monster
 from dnd.engine.content import default_registry
 from dnd.engine.dice import Roller
 from dnd.engine.dsl import BehaviorScript, Interpreter, Rule
-from dnd.engine.encounter import Encounter, Turn, TurnValidationError, validate_turn
+from dnd.engine.actions import _validate_intent
+from dnd.engine.encounter import Encounter
 from dnd.engine.grid import Grid
 from dnd.engine.modifiers import Modifier, compute_with_context
 from dnd.engine.turn_executor import execute_turn
@@ -38,20 +39,16 @@ class TestFatiguedRunBan(unittest.TestCase):
         c.add_condition("fatigued")
         grid = Grid(width=20, height=10)
         grid.place(c)
-        turn = Turn(full_round={"composite": "charge",
-                                "args": {"target": "enemy.closest"}})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(turn, c, grid)
+        do = {"composite": "charge", "args": {"target": "enemy.closest"}}
+        self.assertIsNotNone(_validate_intent(c, do, grid))
 
     def test_exhausted_cannot_run(self):
         c = combatant_from_monster(REGISTRY.get_monster("orc"), (3, 5), "x")
         c.add_condition("exhausted")
         grid = Grid(width=20, height=10)
         grid.place(c)
-        turn = Turn(full_round={"composite": "run",
-                                "args": {"direction": "east"}})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(turn, c, grid)
+        do = {"composite": "run", "args": {"direction": "east"}}
+        self.assertIsNotNone(_validate_intent(c, do, grid))
 
 
 # ---------------------------------------------------------------------------

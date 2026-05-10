@@ -7,14 +7,12 @@ import unittest
 from dnd.engine.combatant import combatant_from_monster
 from dnd.engine.content import default_registry
 from dnd.engine.dice import Roller
+from dnd.engine.actions import _validate_intent
 from dnd.engine.encounter import (
     Encounter,
-    Turn,
-    TurnValidationError,
     aoo_triggers_for_movement,
     aoo_triggers_for_provoking_action,
     roll_initiative,
-    validate_turn,
 )
 from dnd.engine.grid import Grid
 
@@ -31,113 +29,102 @@ def _orc(pos, team="enemies"):
 
 
 # ---------------------------------------------------------------------------
-# Turn validation
+# Intent legality (action economy + actor-state pre-flight check used by
+# the v1 sugar path through ``run_intent_via_substrate``)
 # ---------------------------------------------------------------------------
 
 
-class TestTurnValidation(unittest.TestCase):
+class TestIntentLegality(unittest.TestCase):
     def setUp(self) -> None:
         self.grid = Grid(width=10, height=10)
         self.actor = _orc((5, 5), team="patrons")
         self.grid.place(self.actor)
 
+    def _ok(self, do):
+        self.assertIsNone(_validate_intent(self.actor, do, self.grid))
+
+    def _err(self, do):
+        err = _validate_intent(self.actor, do, self.grid)
+        self.assertIsNotNone(err, f"expected error for {do!r}")
+        return err
+
     def test_valid_standard_and_move(self):
-        t = Turn(
-            standard={"type": "attack", "target": "enemy.closest"},
-            move={"type": "move_to", "target": (6, 5)},
-        )
-        validate_turn(t, self.actor, self.grid)  # no raise
+        self._ok({
+            "standard": {"type": "attack", "target": "enemy.closest"},
+            "move": {"type": "move_to", "target": (6, 5)},
+        })
 
     def test_full_round_excludes_standard(self):
-        t = Turn(
-            full_round={"type": "charge", "target": "enemy.closest"},
-            standard={"type": "attack", "target": "x"},
-        )
-        with self.assertRaises(TurnValidationError):
-            validate_turn(t, self.actor, self.grid)
+        self._err({
+            "slots": {
+                "full_round": {"type": "charge", "target": "enemy.closest"},
+                "standard": {"type": "attack", "target": "x"},
+            },
+        })
 
     def test_full_round_excludes_move(self):
-        t = Turn(
-            full_round={"type": "full_attack", "target": "x"},
-            move={"type": "move_to", "target": (6, 5)},
-        )
-        with self.assertRaises(TurnValidationError):
-            validate_turn(t, self.actor, self.grid)
+        self._err({
+            "slots": {
+                "full_round": {"type": "full_attack", "target": "x"},
+                "move": {"type": "move_to", "target": (6, 5)},
+            },
+        })
 
     def test_5ft_step_excludes_movement_in_move_slot(self):
-        t = Turn(
-            standard={"type": "attack", "target": "x"},
-            move={"type": "move_to", "target": (6, 5)},
-            five_foot_step=(5, 6),
-        )
-        with self.assertRaises(TurnValidationError):
-            validate_turn(t, self.actor, self.grid)
+        self._err({
+            "standard": {"type": "attack", "target": "x"},
+            "move": {"type": "move_to", "target": (6, 5)},
+            "five_foot_step": (5, 6),
+        })
 
     def test_5ft_step_excludes_charge(self):
-        t = Turn(
-            full_round={"type": "charge", "target": "x"},
-            five_foot_step=(5, 6),
-        )
-        with self.assertRaises(TurnValidationError):
-            validate_turn(t, self.actor, self.grid)
+        self._err({
+            "composite": "charge",
+            "args": {"target": "x"},
+            "five_foot_step": (5, 6),
+        })
 
     def test_5ft_step_must_be_adjacent(self):
-        t = Turn(
-            standard={"type": "attack", "target": "x"},
-            five_foot_step=(7, 7),  # not adjacent to (5, 5)
-        )
-        with self.assertRaises(TurnValidationError):
-            validate_turn(t, self.actor, self.grid)
+        self._err({
+            "standard": {"type": "attack", "target": "x"},
+            "five_foot_step": (7, 7),  # not adjacent to (5, 5)
+        })
 
     def test_5ft_step_with_non_movement_move_slot_ok(self):
-        # Drawing a weapon in the move slot doesn't consume movement.
-        t = Turn(
-            standard={"type": "attack", "target": "x"},
-            move={"type": "draw_weapon", "weapon": "longsword"},
-            five_foot_step=(5, 6),
-        )
-        validate_turn(t, self.actor, self.grid)
+        self._ok({
+            "standard": {"type": "attack", "target": "x"},
+            "move": {"type": "draw_weapon", "weapon": "longsword"},
+            "five_foot_step": (5, 6),
+        })
 
     def test_illegal_free_action(self):
-        t = Turn(free=({"type": "throw_brick"},))
-        with self.assertRaises(TurnValidationError):
-            validate_turn(t, self.actor, self.grid)
+        self._err({"free": [{"type": "throw_brick"}]})
 
     def test_legal_free_action(self):
-        t = Turn(free=({"type": "drop_item", "item": "torch"},))
-        validate_turn(t, self.actor, self.grid)
+        self._ok({"free": [{"type": "drop_item", "item": "torch"}]})
 
     def test_unconscious_cannot_act(self):
         self.actor.add_condition("unconscious")
-        t = Turn(standard={"type": "attack", "target": "x"})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(t, self.actor, self.grid)
+        self._err({"standard": {"type": "attack", "target": "x"}})
 
     def test_staggered_blocks_full_round(self):
         self.actor.add_condition("staggered")
-        t = Turn(full_round={"type": "full_attack", "target": "x"})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(t, self.actor, self.grid)
+        self._err({"composite": "full_attack", "args": {"target": "x"}})
 
     def test_staggered_blocks_standard_plus_move(self):
         self.actor.add_condition("staggered")
-        t = Turn(
-            standard={"type": "attack", "target": "x"},
-            move={"type": "move_to", "target": (6, 5)},
-        )
-        with self.assertRaises(TurnValidationError):
-            validate_turn(t, self.actor, self.grid)
+        self._err({
+            "standard": {"type": "attack", "target": "x"},
+            "move": {"type": "move_to", "target": (6, 5)},
+        })
 
     def test_staggered_allows_single_action(self):
         self.actor.add_condition("staggered")
-        t = Turn(standard={"type": "attack", "target": "x"})
-        validate_turn(t, self.actor, self.grid)
+        self._ok({"standard": {"type": "attack", "target": "x"}})
 
     def test_grappled_blocks_drink(self):
         self.actor.add_condition("grappled")
-        t = Turn(standard={"type": "drink", "item": "potion"})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(t, self.actor, self.grid)
+        self._err({"standard": {"type": "drink", "item": "potion"}})
 
 
 # ---------------------------------------------------------------------------

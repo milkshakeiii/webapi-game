@@ -46,7 +46,7 @@ data.
 - `SANDBOX_DESIGN.md` — the live world / continuous-tick architecture.
 - `CHARACTER_OPTIONS.md` — what character builds the engine supports.
 - `BEHAVIOR_VOCABULARY.md` — the DSL patrons write hero scripts in. Active-turn rules (existing v1 surface) plus reactive/sub-action rules (v2 additions: `react: aoo` / `brace` / `cleave`, `sub: full_attack`).
-- `DECISION_POINT_DSL.md` — design + migration tracker for the DSL/execution-model rework. Phases 1–5a closed; the substrate is the only execution path; Phase 5b (delete `Turn` / `validate_turn` / `_intent_to_turn`) is the only remaining piece.
+- `DECISION_POINT_DSL.md` — design + migration tracker for the DSL/execution-model rework. All five phases closed; the substrate is the only execution path. Action-economy validation for the v1 sugar path lives in `actions._validate_intent`.
 - `WORK_QUEUE.md` — pending phases and follow-ups.
 - `PF1_COVERAGE.md` — narrative of `coverage.py`.
 - `README.md` — public-facing overview + run/test instructions.

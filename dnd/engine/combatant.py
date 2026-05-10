@@ -759,7 +759,7 @@ class Combatant:
         elif condition_id == "fascinated":
             # PF1: a fascinated creature stands transfixed; takes a -4
             # penalty on Perception. Action restriction enforced in
-            # validate_turn.
+            # ``actions._validate_intent``.
             self.modifiers.add(Modifier(value=-4, type="untyped",
                                         target="skill:perception",
                                         source="fascinated"))

@@ -1269,7 +1269,7 @@ def apply_action(
 
 def _can_take_actions(actor: Combatant) -> bool:
     """Conservative liveness check. Mirrors the gates that
-    ``execute_turn`` applies via ``validate_turn``."""
+    ``_validate_intent`` applies for the v1 sugar path."""
     if not actor.is_alive():
         return False
     if "dead" in actor.conditions:
@@ -1421,6 +1421,269 @@ def _chargeable_targets(
             continue
         out.append(other)
     return out
+
+
+# ---------------------------------------------------------------------------
+# Intent-translation seam: validate a v1 do dict against PF1 action
+# economy + actor state, before translate_intent compiles it to
+# substrate Actions.
+# ---------------------------------------------------------------------------
+
+
+# Free-action types the engine accepts in a v1 ``free`` slot. Anything
+# outside this set must go in a real action slot.
+_LEGAL_FREE_ACTIONS = frozenset({
+    "drop_item",
+    "fall_prone",
+    "speak",
+    "signal",
+    "end_concentration",
+    "drop_held_charge",
+    "cease_concentration",
+    "drop_to_floor",
+    "release_grapple",
+    "press_attack",
+    "speak_briefly",
+    "use_extraordinary_ability",
+})
+
+
+# Move-slot ``type`` values that consume movement (and so block a
+# 5-ft step in the same turn).
+_MOVEMENT_MOVE_SLOT_TYPES = frozenset({
+    "move_to", "move_toward", "move_away",
+})
+
+
+# Full-round action ``type`` values that include movement.
+_MOVEMENT_FULL_ROUND_TYPES = frozenset({
+    "charge", "withdraw", "run",
+})
+
+
+# Composites that occupy the full-round slot (block both standard and
+# move). The ``hold`` composite is a no-op and bypasses validation
+# entirely.
+_FULL_ROUND_COMPOSITES = frozenset({
+    "charge", "full_attack", "withdraw", "run", "partial_charge",
+    "trample", "coup_de_grace", "tail_spike_volley",
+})
+
+
+# Composites that are free actions per RAW (don't consume the action
+# economy).
+_FREE_COMPOSITES = frozenset({
+    "rage_start", "rage_end",
+})
+
+
+def _normalize_do(do: dict) -> dict:
+    """Project a v1 ``do`` dict into normalized slot keys.
+
+    The DSL emits ``do`` in three shapes — composite, ``slots`` wrapper,
+    or inline slot keys. This collapses all three into a single dict
+    keyed by ``full_round`` / ``standard`` / ``move`` / ``swift`` /
+    ``five_foot_step`` / ``free`` so validation can run against one
+    shape.
+    """
+    if "composite" in do:
+        name = do["composite"]
+        args = do.get("args") or {}
+        composite_dict = {"composite": name, **args}
+        if name in _FULL_ROUND_COMPOSITES:
+            return {
+                "full_round": composite_dict,
+                "standard": None, "move": None,
+                "swift": do.get("swift"),
+                "five_foot_step": do.get("five_foot_step"),
+                "free": tuple(do.get("free") or ()),
+            }
+        if name in _FREE_COMPOSITES:
+            # rage_start / rage_end don't consume the economy. We
+            # don't synthesize a free-action entry for them — the
+            # legal-as-free set covers true RAW free actions like
+            # drop_item / fall_prone, not composites.
+            return {
+                "full_round": None, "standard": None, "move": None,
+                "swift": do.get("swift"),
+                "five_foot_step": do.get("five_foot_step"),
+                "free": tuple(do.get("free") or ()),
+            }
+        return {
+            "full_round": None,
+            "standard": composite_dict,
+            "move": do.get("move"),
+            "swift": do.get("swift"),
+            "five_foot_step": do.get("five_foot_step"),
+            "free": tuple(do.get("free") or ()),
+        }
+
+    slots = do.get("slots") or do
+    return {
+        "full_round": slots.get("full_round"),
+        "standard": slots.get("standard"),
+        "move": slots.get("move"),
+        "swift": slots.get("swift") or do.get("swift"),
+        "five_foot_step": slots.get("five_foot_step"),
+        "free": tuple(slots.get("free") or do.get("free") or ()),
+    }
+
+
+def _validate_intent(
+    actor: Combatant, do: dict, grid: Grid,
+) -> str | None:
+    """Check a v1 ``do`` dict against PF1's action economy and the
+    actor's current state. Returns ``None`` on legal, an error message
+    on illegal.
+
+    Operates on the do dict directly. The substrate's
+    ``enumerate_legal_actions`` enforces the same rules when a picker
+    drives the loop; this helper covers the v1 intent-translation seam
+    where translate_intent → apply_action skips enumeration.
+    """
+    n = _normalize_do(do)
+    full_round = n["full_round"]
+    standard = n["standard"]
+    move = n["move"]
+    swift = n["swift"]
+    five_foot_step = n["five_foot_step"]
+    free = n["free"]
+
+    # 1) Action exclusivity: full_round forbids standard and move.
+    if full_round is not None:
+        if standard is not None:
+            return "full_round action set; standard slot must be null"
+        if move is not None:
+            return "full_round action set; move slot must be null"
+
+    # 2) Five-foot-step exclusivity.
+    if five_foot_step is not None:
+        if move is not None and move.get("type") in _MOVEMENT_MOVE_SLOT_TYPES:
+            return "five_foot_step set; move slot also provides movement"
+        if full_round is not None:
+            fr_kind = (full_round.get("composite")
+                       or full_round.get("type"))
+            if fr_kind in _MOVEMENT_FULL_ROUND_TYPES:
+                return ("five_foot_step set; full_round action also "
+                        "provides movement")
+        ax, ay = actor.position
+        tx, ty = five_foot_step
+        if max(abs(tx - ax), abs(ty - ay)) != 1:
+            return (f"five_foot_step destination {five_foot_step} is not "
+                    f"adjacent to current position {actor.position}")
+        if not grid.in_bounds(tx, ty):
+            return (f"five_foot_step destination {five_foot_step} "
+                    "out of bounds")
+
+    # 3) Free-action legality.
+    for fa in free:
+        ftype = fa.get("type") if isinstance(fa, dict) else None
+        if ftype not in _LEGAL_FREE_ACTIONS:
+            return (f"free action {fa!r} not in legal-as-free list "
+                    f"({sorted(_LEGAL_FREE_ACTIONS)})")
+
+    # 4) Actor-state legality.
+    return _check_actor_intent_legality(
+        actor, full_round, standard, move, swift, five_foot_step, free,
+    )
+
+
+def _check_actor_intent_legality(
+    actor: Combatant,
+    full_round, standard, move, swift, five_foot_step, free,
+) -> str | None:
+    """State-aware checks that ``_validate_intent`` delegates to.
+
+    Mirrors v1's ``_check_actor_legality`` but takes the normalized
+    slot values directly. Returns the first violation's message, or
+    ``None``.
+    """
+    conds = actor.conditions
+
+    if "dead" in conds or "unconscious" in conds:
+        if any(s is not None for s in (
+            full_round, standard, move, swift, five_foot_step,
+        )) or free:
+            blocking = conds & {"dead", "unconscious"}
+            return f"combatant {actor.id} cannot act ({blocking})"
+
+    if "paralyzed" in conds or "petrified" in conds:
+        if any(s is not None for s in (
+            full_round, standard, move, five_foot_step,
+        )):
+            blocking = conds & {"paralyzed", "petrified"}
+            return (f"combatant {actor.id} cannot take physical actions "
+                    f"({blocking})")
+
+    if "staggered" in conds:
+        if full_round is not None:
+            return "staggered combatant cannot take a full-round action"
+        if standard is not None and move is not None:
+            return ("staggered combatant can take a single move OR "
+                    "standard action, not both")
+
+    if "disabled" in conds:
+        if full_round is not None:
+            return "disabled combatant cannot take a full-round action"
+        if standard is not None and move is not None:
+            return ("disabled combatant can take a single move OR "
+                    "standard action, not both")
+
+    if "grappled" in conds:
+        if move is not None:
+            mtype = move.get("type")
+            if mtype in ("move_to", "move_toward", "move_away"):
+                return ("grappled combatant cannot move "
+                        "(must escape grapple first)")
+        if full_round is not None:
+            full_kind = (full_round.get("composite")
+                         or full_round.get("type"))
+            if full_kind in ("charge", "withdraw", "run"):
+                return f"grappled combatant cannot take {full_kind!r} action"
+        if five_foot_step is not None:
+            return "grappled combatant cannot take a 5-ft step"
+        if standard is not None and standard.get("type") == "drink":
+            return "can't drink potion while grappled (needs free hand)"
+
+    if "dazed" in conds or "fascinated" in conds or "cowering" in conds:
+        if any(s is not None for s in (
+            full_round, standard, move, swift, five_foot_step,
+        )) or free:
+            blocking = conds & {"dazed", "fascinated", "cowering"}
+            return f"combatant {actor.id} cannot act ({blocking})"
+
+    if "nauseated" in conds:
+        if any(s is not None for s in (
+            full_round, standard, swift, five_foot_step,
+        )) or free:
+            return "nauseated combatant can only take a single move action"
+
+    if "entangled" in conds and full_round is not None:
+        kind = full_round.get("composite") or full_round.get("type")
+        if kind in ("charge", "run"):
+            return f"entangled combatant cannot take {kind!r} action"
+
+    if ("fatigued" in conds or "exhausted" in conds) and full_round is not None:
+        kind = full_round.get("composite") or full_round.get("type")
+        if kind in ("charge", "run"):
+            state = "exhausted" if "exhausted" in conds else "fatigued"
+            return f"{state} combatant cannot take {kind!r} action"
+
+    if "panicked" in conds:
+        for val in (standard, full_round):
+            if val is None:
+                continue
+            kind = val.get("composite") or val.get("type")
+            if kind in (
+                "attack", "cast", "charge", "full_attack",
+                "cleave", "stunning_fist", "smite_evil",
+                "ready_brace", "rage_start", "trample",
+                "grapple_start", "grapple_damage", "grapple_pin",
+                "grapple_move", "grapple_reverse",
+            ):
+                return f"panicked combatant cannot take {kind!r} action"
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -1756,7 +2019,7 @@ def run_intent_via_substrate(
     Mirrored from execute_turn:
       - hold / no rule matched → skip with reason; still tick aura
         end-of-turn riders.
-      - validate_turn before dispatch; on error skip with
+      - ``_validate_intent`` before dispatch; on error skip with
         ``invalid_turn`` reason.
       - confusion d% substitutes the do-block.
       - free actions emitted as ``free`` events (or ``fall_prone``).
@@ -1767,15 +2030,8 @@ def run_intent_via_substrate(
         TurnEvent,
         _apply_end_of_turn_racial_effects,
         _apply_post_damage_state,
-        _intent_to_turn,
         _resolve_confusion,
         _turn_used_standard_action,
-    )
-    from .dsl import TurnIntent  # noqa: F401 — typing only
-    from .encounter import (
-        Turn as _Turn,  # noqa: F401
-        TurnValidationError,
-        validate_turn,
     )
 
     # Local import of TurnResult to avoid a top-level cycle.
@@ -1797,13 +2053,12 @@ def run_intent_via_substrate(
         )
         return TurnResult(actor.id, rule_index, events)
 
-    # Action-economy validation (same as execute_turn).
-    try:
-        validate_turn(_intent_to_turn(intent.do), actor, grid)
-    except TurnValidationError as exc:
+    # Action-economy + actor-state pre-flight on the v1 do dict.
+    err = _validate_intent(actor, intent.do, grid)
+    if err is not None:
         events.append(TurnEvent(actor.id, "skip", {
             "reason": "invalid_turn",
-            "detail": str(exc),
+            "detail": err,
         }))
         _apply_end_of_turn_racial_effects(
             actor, grid, roller, events, encounter=encounter,

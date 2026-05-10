@@ -6,13 +6,9 @@ from __future__ import annotations
 
 import unittest
 
+from dnd.engine.actions import _validate_intent
 from dnd.engine.combatant import combatant_from_monster
 from dnd.engine.content import default_registry
-from dnd.engine.encounter import (
-    Turn,
-    TurnValidationError,
-    validate_turn,
-)
 from dnd.engine.grid import Grid
 from dnd.engine.modifiers import compute as _compute
 
@@ -95,18 +91,17 @@ class TestFearChain(unittest.TestCase):
         grid = Grid(width=10, height=10)
         grid.place(c)
         c.add_condition("panicked")
-        attack_turn = Turn(standard={"type": "attack",
-                                     "args": {"target": "enemy.closest"}})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(attack_turn, c, grid)
+        do = {"standard": {"type": "attack",
+                           "args": {"target": "enemy.closest"}}}
+        self.assertIsNotNone(_validate_intent(c, do, grid))
 
     def test_panicked_allows_movement(self):
         c = _g()
         grid = Grid(width=10, height=10)
         grid.place(c)
         c.add_condition("panicked")
-        flee_turn = Turn(move={"type": "move_to", "target": (5, 5)})
-        validate_turn(flee_turn, c, grid)  # no raise
+        do = {"move": {"type": "move_to", "target": (5, 5)}}
+        self.assertIsNone(_validate_intent(c, do, grid))
 
 
 # ---------------------------------------------------------------------------
@@ -174,10 +169,8 @@ class TestEntangled(unittest.TestCase):
         grid = Grid(width=20, height=20)
         grid.place(c)
         c.add_condition("entangled")
-        charge = Turn(full_round={"composite": "charge",
-                                  "args": {"target": "enemy.closest"}})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(charge, c, grid)
+        do = {"composite": "charge", "args": {"target": "enemy.closest"}}
+        self.assertIsNotNone(_validate_intent(c, do, grid))
 
 
 # ---------------------------------------------------------------------------
@@ -192,26 +185,23 @@ class TestActionRestrictedConditions(unittest.TestCase):
         grid.place(c)
         c.add_condition("dazed")
         for slot in ("standard", "move", "swift", "five_foot_step"):
-            kwargs = {slot: ((1, 0) if slot == "five_foot_step"
-                             else {"type": "attack",
-                                   "args": {"target": "enemy.closest"}})}
-            t = Turn(**kwargs)
-            with self.assertRaises(TurnValidationError):
-                validate_turn(t, c, grid)
+            value = ((1, 0) if slot == "five_foot_step"
+                     else {"type": "attack",
+                           "args": {"target": "enemy.closest"}})
+            do = {slot: value}
+            self.assertIsNotNone(_validate_intent(c, do, grid),
+                                 f"slot={slot}")
 
     def test_nauseated_allows_only_move(self):
         c = _g()
         grid = Grid(width=10, height=10)
         grid.place(c)
         c.add_condition("nauseated")
-        # Attack standard: blocked.
-        std = Turn(standard={"type": "attack",
-                             "args": {"target": "enemy.closest"}})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(std, c, grid)
-        # Move alone: allowed.
-        mv = Turn(move={"type": "move_to", "target": (5, 5)})
-        validate_turn(mv, c, grid)
+        std = {"standard": {"type": "attack",
+                            "args": {"target": "enemy.closest"}}}
+        self.assertIsNotNone(_validate_intent(c, std, grid))
+        mv = {"move": {"type": "move_to", "target": (5, 5)}}
+        self.assertIsNone(_validate_intent(c, mv, grid))
 
     def test_fascinated_blocks_actions_and_perception_penalty(self):
         c = _g()
@@ -220,10 +210,9 @@ class TestActionRestrictedConditions(unittest.TestCase):
         before_perc = c.skill_total("perception")
         c.add_condition("fascinated")
         self.assertEqual(c.skill_total("perception"), before_perc - 4)
-        attack_turn = Turn(standard={"type": "attack",
-                                     "args": {"target": "enemy.closest"}})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(attack_turn, c, grid)
+        do = {"standard": {"type": "attack",
+                           "args": {"target": "enemy.closest"}}}
+        self.assertIsNotNone(_validate_intent(c, do, grid))
 
 
 # ---------------------------------------------------------------------------

@@ -35,10 +35,10 @@ deleting in the next cleanup pass.
 
 ---
 
-## DSL v2 migration (mostly closed — only Phase 5b remains)
+## DSL v2 migration (CLOSED)
 
 Decision-point execution model replacing the turn-building DSL.
-Design lives in `DECISION_POINT_DSL.md`; status snapshot:
+Design lives in `DECISION_POINT_DSL.md`; all five phases shipped:
 
 - ✅ **Phase 1** — substrate (`enumerate_legal_actions`,
   `apply_action`, `Action` hierarchy across move / attack / cast /
@@ -57,16 +57,14 @@ Design lives in `DECISION_POINT_DSL.md`; status snapshot:
 - ✅ **Phase 5a** — v1 dispatch deleted (`_execute_composite`,
   `_execute_slots`, `_do_standard`, `EXECUTE_VIA_SUBSTRATE` flag all
   gone). `execute_turn` is now a thin wrapper.
-- ⏳ **Phase 5b** — delete `Turn` / `validate_turn` /
-  `_intent_to_turn`. Still load-bearing because the substrate's
-  intent-translation seam needs them to validate v1-shape intents.
-  They go away when patrons stop authoring active-turn rules via
-  `BehaviorScript` and write pickers directly. Not blocking; defer
-  until there's a forcing function.
+- ✅ **Phase 5b** — `Turn` / `validate_turn` / `TurnValidationError`
+  / `_intent_to_turn` deleted. Action-economy + actor-state pre-flight
+  for the v1 sugar path lives now in `actions._validate_intent`,
+  operating directly on the do dict (no Turn intermediate).
 
-1265 tests passing as of phase-4 close. Open design questions in §7
-of the doc remain (continuous-tick world interaction, ready actions,
-random-outcome reactives like Lucky-style rerolls).
+1255 tests passing. Open design questions in §7 of the doc remain
+(continuous-tick world interaction, ready actions, random-outcome
+reactives like Lucky-style rerolls).
 
 ---
 
@@ -85,8 +83,8 @@ is just the prioritized roll-up.
   CMB vs stunned target. `coverage.CONDITIONS["stunned"]`.
 - Cowering: add -2 AC modifier. `coverage.CONDITIONS["cowering"]`.
 - Pinned: add -4 AC modifier. `coverage.CONDITIONS["pinned"]`.
-- Stunned action ban also via validate_turn (not just the
-  stunned_until_round rider). Externally-applied stun currently
+- Stunned action ban also via the intent-legality check (not just
+  the stunned_until_round rider). Externally-applied stun currently
   doesn't block actions.
 - Combat maneuver: Tiny-or-smaller use Dex (not Str) for CMB.
   `coverage.combat_mechanics["combat.combat_maneuver_basic"]`.

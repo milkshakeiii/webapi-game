@@ -9,12 +9,8 @@ from dnd.engine.combatant import combatant_from_monster
 from dnd.engine.content import default_registry
 from dnd.engine.dice import Roller
 from dnd.engine.dsl import BehaviorScript, Interpreter, Rule
-from dnd.engine.encounter import (
-    Encounter,
-    Turn,
-    TurnValidationError,
-    validate_turn,
-)
+from dnd.engine.actions import _validate_intent
+from dnd.engine.encounter import Encounter
 from dnd.engine.grid import Grid
 from dnd.engine.modifiers import compute as _compute
 from dnd.engine.turn_executor import execute_turn
@@ -119,28 +115,24 @@ class TestGrappled(unittest.TestCase):
         grid = Grid(width=10, height=10)
         grid.place(g)
         g.add_condition("grappled")
-        turn = Turn(move={"type": "move_to", "target": (5, 0)})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(turn, g, grid)
+        do = {"move": {"type": "move_to", "target": (5, 0)}}
+        self.assertIsNotNone(_validate_intent(g, do, grid))
 
     def test_validation_blocks_5ft_step(self):
         g = combatant_from_monster(REGISTRY.get_monster("orc"), (0, 0), "x")
         grid = Grid(width=10, height=10)
         grid.place(g)
         g.add_condition("grappled")
-        turn = Turn(five_foot_step=(1, 0))
-        with self.assertRaises(TurnValidationError):
-            validate_turn(turn, g, grid)
+        do = {"five_foot_step": (1, 0)}
+        self.assertIsNotNone(_validate_intent(g, do, grid))
 
     def test_validation_blocks_charge(self):
         g = combatant_from_monster(REGISTRY.get_monster("orc"), (0, 0), "x")
         grid = Grid(width=10, height=10)
         grid.place(g)
         g.add_condition("grappled")
-        turn = Turn(full_round={"composite": "charge",
-                                "args": {"target": "enemy.closest"}})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(turn, g, grid)
+        do = {"composite": "charge", "args": {"target": "enemy.closest"}}
+        self.assertIsNotNone(_validate_intent(g, do, grid))
 
 
 class TestBlindedMissChance(unittest.TestCase):

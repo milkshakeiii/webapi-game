@@ -627,13 +627,20 @@ have been removed (~190 LOC). The v1 per-action helpers
 ``_do_cast``, etc.) live on — they're called from ``apply_action``,
 not from the dead dispatchers.
 
-**5b — Turn / validate_turn / _intent_to_turn deletion (DEFERRED).**
-These are still used by the substrate's intent-translation path
-(`run_intent_via_substrate` validates the v1-shape intent dict
-before walking it). They become removable once Phase 4's DSL syntax
-lets patrons author pickers directly without going through
-TurnIntent. Until then they earn their keep as the action-economy
-validator on the intent-translation seam.
+**5b — Turn / validate_turn / _intent_to_turn deletion (DONE).**
+The v1 ``Turn`` dataclass, ``validate_turn`` function,
+``TurnValidationError`` exception, and ``_intent_to_turn`` helper
+are gone. The action-economy + actor-state pre-flight that the v1
+sugar path needs lives now in ``actions._validate_intent`` — it
+operates directly on the do dict (no Turn intermediate) and returns
+``None`` or an error message that ``run_intent_via_substrate`` turns
+into the same ``invalid_turn`` skip event. The constants the v1
+validator carried (LEGAL_FREE_ACTIONS, MOVEMENT_ACTIONS_IN_MOVE_SLOT,
+MOVEMENT_FULL_ROUND_ACTIONS, _FULL_ROUND_COMPOSITES, _FREE_COMPOSITES)
+moved with it into ``actions.py`` as private module-level frozensets.
+Tests that exercised the validator's behavior were migrated to call
+``_validate_intent`` directly; pure validator-unit-tests of a
+function that no longer exists were deleted.
 
 The old DSL syntax stays. With the v1 dispatch gone, it provably has
 no separate execution path — it's already just sugar that
@@ -644,8 +651,9 @@ substrate.
 ``_execute_composite`` / ``_execute_slots`` / ``_do_standard`` no
 longer exist; all 1243 tests still pass.
 
-**Exit criterion (5b)**: ``git grep validate_turn`` returns zero
-hits. Pending Phase 4.
+**Exit criterion (5b, met)**: ``git grep validate_turn`` returns
+zero hits in code (the design doc itself still references the
+historical name for context). 1255 tests pass.
 
 ## 6. Test strategy
 

@@ -15,11 +15,7 @@ from dnd.engine.combatant import (
     combatant_from_monster,
 )
 from dnd.engine.content import default_registry
-from dnd.engine.encounter import (
-    Turn,
-    TurnValidationError,
-    validate_turn,
-)
+from dnd.engine.actions import _validate_intent
 from dnd.engine.grid import Grid
 from dnd.engine.turn_executor import _apply_post_damage_state
 
@@ -208,35 +204,32 @@ class TestDisabledValidation(unittest.TestCase):
         g = self._disabled_goblin()
         grid = Grid(width=5, height=5)
         grid.place(g)
-        turn = Turn(full_round={"type": "charge", "target": (4, 4)})
-        with self.assertRaises(TurnValidationError):
-            validate_turn(turn, g, grid)
+        do = {"slots": {"full_round": {"type": "charge", "target": (4, 4)}}}
+        self.assertIsNotNone(_validate_intent(g, do, grid))
 
     def test_disabled_cannot_combine_standard_and_move(self):
         g = self._disabled_goblin()
         grid = Grid(width=5, height=5)
         grid.place(g)
-        turn = Turn(
-            standard={"type": "attack", "target": "enemy.closest"},
-            move={"type": "move_toward", "target": "enemy.closest"},
-        )
-        with self.assertRaises(TurnValidationError):
-            validate_turn(turn, g, grid)
+        do = {
+            "standard": {"type": "attack", "target": "enemy.closest"},
+            "move": {"type": "move_toward", "target": "enemy.closest"},
+        }
+        self.assertIsNotNone(_validate_intent(g, do, grid))
 
     def test_disabled_can_take_a_single_standard(self):
         g = self._disabled_goblin()
         grid = Grid(width=5, height=5)
         grid.place(g)
-        turn = Turn(standard={"type": "attack", "target": "enemy.closest"})
-        # Should not raise.
-        validate_turn(turn, g, grid)
+        do = {"standard": {"type": "attack", "target": "enemy.closest"}}
+        self.assertIsNone(_validate_intent(g, do, grid))
 
     def test_disabled_can_take_a_single_move(self):
         g = self._disabled_goblin()
         grid = Grid(width=5, height=5)
         grid.place(g)
-        turn = Turn(move={"type": "move_toward", "target": "enemy.closest"})
-        validate_turn(turn, g, grid)
+        do = {"move": {"type": "move_toward", "target": "enemy.closest"}}
+        self.assertIsNone(_validate_intent(g, do, grid))
 
 
 if __name__ == "__main__":
