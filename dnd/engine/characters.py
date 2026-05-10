@@ -348,9 +348,13 @@ def validate_feats(
                 )
 
 
+# RAW (Foundry monk Bonus Feat): "Catch Off-Guard, Combat Reflexes,
+# Deflect Arrows, Dodge, Improved Grapple, Scorpion Style, and Throw
+# Anything." Improved Unarmed Strike is NOT on the L1 menu — the monk
+# gets it free as part of the Unarmed Strike feature.
 _MONK_L1_BONUS_FEAT_LIST: frozenset[str] = frozenset({
     "catch_off_guard", "combat_reflexes", "deflect_arrows",
-    "dodge", "improved_grapple", "improved_unarmed_strike",
+    "dodge", "improved_grapple",
     "scorpion_style", "throw_anything",
 })
 
@@ -399,6 +403,10 @@ def _extract_class_bonus_feats(
                 f"(allowed: {sorted(_MONK_L1_BONUS_FEAT_LIST)})"
             )
         bonus.append(feat_id)
+        # RAW (Unarmed Strike, Foundry pack): "At 1st level, a monk
+        # gains Improved Unarmed Strike as a bonus feat." Auto-add it
+        # in addition to the chosen feat.
+        bonus.append("improved_unarmed_strike")
     elif class_.id == "wizard":
         bonus.append("scribe_scroll")
     elif class_.id == "sorcerer":

@@ -1258,6 +1258,42 @@ def _do_full_attack(
         primary_deltas = [0] + primary_deltas
         primary_deltas = [d - 2 for d in primary_deltas]
 
+    # RAW (Flurry of Blows): full-attack with one extra attack at the
+    # top BAB and -2 to all attack rolls (TWF-style). The monk's
+    # base attack bonus from his monk class levels is treated as equal
+    # to his monk level for these attacks. Unarmed-strike-only in v1
+    # (RAW also allows monk-special weapons; deferred). At higher
+    # levels: 2 extra attacks at L8, 3 at L15.
+    flurry_active = (
+        bool(options and options.get("flurry"))
+        and bool(actor.attack_options)
+        and actor.attack_options[0].get("weapon_id") == "unarmed_strike"
+        and actor.class_levels.get("monk", 0) > 0
+    )
+    if flurry_active:
+        monk_level = actor.class_levels["monk"]
+        # RAW: "the monk's base attack bonus from his monk class levels
+        # is equal to his monk level" — for these attacks. The
+        # attack-option's attack_bonus was computed using the actor's
+        # actual BAB, so we apply a per-attack delta of (monk_level -
+        # actor_bab) to swap in the flurry BAB. For pure-class monks
+        # past L8 this is +0; below L8 it's a positive bump.
+        flurry_bab_bonus = monk_level - bab
+        primary_deltas = [
+            -5 * i for i in range(_iterative_attack_count(monk_level))
+        ]
+        # Extra flurry attacks: 1 at L1-7, 2 at L8-14, 3 at L15+.
+        if monk_level >= 15:
+            extras = 3
+        elif monk_level >= 8:
+            extras = 2
+        else:
+            extras = 1
+        primary_deltas = [0] * extras + primary_deltas
+        # Apply the -2 TWF-style penalty + BAB swap-in to all flurry
+        # attacks.
+        primary_deltas = [d + flurry_bab_bonus - 2 for d in primary_deltas]
+
     twf_active = (
         bool(options and options.get("two_weapon_fighting"))
         and bool(actor.attack_options)

@@ -329,7 +329,7 @@ class TestMonkFeatPool(unittest.TestCase):
             "feats": ["dodge", "iron_will"],
             "skill_ranks": {"acrobatics": 1, "perception": 1},
             "bonus_languages": [],
-            "class_choices": {"monk_bonus_feat": "improved_unarmed_strike"},
+            "class_choices": {"monk_bonus_feat": "combat_reflexes"},
         }
         create_character(CharacterRequest.from_dict(body), REGISTRY)
 

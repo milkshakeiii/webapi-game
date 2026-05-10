@@ -175,6 +175,13 @@ class Combatant:
     # penalty as a flat attack penalty.
     armor_proficiency_categories: set[str] = field(default_factory=set)
 
+    # Per-class level totals for character combatants. Populated at
+    # construction from cumulative.class_levels. Empty for monsters
+    # (which don't have a class progression). Read by class-feature
+    # action handlers — e.g., monk flurry of blows uses the monk-class
+    # level for its BAB-equal-to-monk-level rule.
+    class_levels: dict[str, int] = field(default_factory=dict)
+
     # Generic bleed damage: HP lost per round (top of the actor's
     # turn) until healed. Stops when the combatant receives any
     # healing or successful Heal-skill DC 15 stabilization. Set
@@ -1207,6 +1214,38 @@ class Combatant:
 # ---------------------------------------------------------------------------
 
 
+# Monk Unarmed Damage table (Foundry pack RAW; matches CRB Table:
+# Monk and Table: Small or Large Monk Unarmed Damage). Dice scale per
+# 4-level band, with one-step-down dice for Small and one-step-up for
+# Large. Indexed by [size][band], where band = 0..5 mapping
+# L1-3 / L4-7 / L8-11 / L12-15 / L16-19 / L20.
+_MONK_UNARMED_DAMAGE = {
+    "small":  ["1d4", "1d6", "1d8",  "1d10", "2d6", "2d8"],
+    "medium": ["1d6", "1d8", "1d10", "2d6",  "2d8", "2d10"],
+    "large":  ["1d8", "2d6", "2d8",  "3d6",  "3d8", "4d8"],
+}
+
+
+def _monk_unarmed_damage_dice(monk_level: int, size: str) -> str:
+    """Return the unarmed-strike damage dice for a monk of ``monk_level``
+    and ``size``. The first band (L1-3) is three levels wide; every
+    subsequent band is four levels wide; L20 is its own row."""
+    if monk_level >= 20:
+        band = 5
+    elif monk_level >= 16:
+        band = 4
+    elif monk_level >= 12:
+        band = 3
+    elif monk_level >= 8:
+        band = 2
+    elif monk_level >= 4:
+        band = 1
+    else:
+        band = 0
+    row = _MONK_UNARMED_DAMAGE.get(size, _MONK_UNARMED_DAMAGE["medium"])
+    return row[band]
+
+
 def _new_id() -> str:
     return f"combatant_{uuid.uuid4().hex[:8]}"
 
@@ -1824,13 +1863,23 @@ def combatant_from_character(
             attack_bonus = bab + dex_mod + size_mod_atk
             damage_bonus = 0
             attack_type = "ranged"
+        # RAW (Monk Unarmed Strike): a monk's unarmed damage scales by
+        # monk level and size — a Medium L1 monk's unarmed_strike does
+        # 1d6 instead of the base 1d3. Override the dice here when the
+        # primary weapon is unarmed_strike and the actor has monk levels.
+        damage_dice = weapon_data.damage_dice
+        if (weapon_data.id == "unarmed_strike"
+                and cumulative.class_levels.get("monk", 0) > 0):
+            damage_dice = _monk_unarmed_damage_dice(
+                cumulative.class_levels["monk"], race.size,
+            )
         attack_options.append({
             "type": attack_type,
             "name": weapon_data.name,
             "weapon_id": weapon_data.id,
             "weapon_category": weapon_data.category,
             "attack_bonus": attack_bonus,
-            "damage": weapon_data.damage_dice,
+            "damage": damage_dice,
             "damage_bonus": damage_bonus,
             "damage_type": weapon_data.damage_type,
             "crit_range": list(weapon_data.crit_range),
@@ -2223,4 +2272,5 @@ def combatant_from_character(
             (character.class_choices or {}).get("domains") or []
         ),
         domain_spells={lvl: set(ids) for lvl, ids in cleric_domain_spells.items()},
+        class_levels=dict(cumulative.class_levels),
     )

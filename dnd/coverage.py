@@ -186,10 +186,10 @@ CLASS_FEATURES_L1: dict[str, Entry] = {
 
     # Monk
     "ac_bonus_monk":          (IMPLEMENTED,    "+Wis to AC + monk_level/4; gated on armor.category != 'medium'/'heavy'. Wired in combatant_from_character"),
-    "flurry_of_blows":        (NOT_IMPLEMENTED, "extra unarmed attacks at -2/-2"),
+    "flurry_of_blows":        (PARTIAL,         "full_attack composite accepts options.flurry: True. When set on a monk wielding unarmed_strike, _do_full_attack swaps in monk-level as the BAB-from-monk-class-levels (RAW), adds +1/+2/+3 extra attacks at L1/8/15, and applies -2 to all attack rolls (TWF-like). Full Strength on damage for every flurry attack (using attack_options[0], whose damage_bonus is full Str for monk unarmed). GAP: substitution of disarm/sunder/trip combat maneuvers for unarmed attacks (RAW) not modeled; flurry with monk special weapons (kama, nunchaku, etc.) not modeled — unarmed-only for v1."),
     "stunning_fist_1day":     (IMPLEMENTED,     "stunning_fist composite: declares + attacks; on hit target rolls Fort vs DC 10 + 1/2 level + Wis or stunned 1 round; use consumed regardless of hit"),
-    "unarmed_strike":         (NOT_IMPLEMENTED, "improved unarmed strike auto-feat + scaling damage"),
-    "monk_bonus_feat_1":      (IMPLEMENTED,     "extra feat at L1; selected via class_choices. Validated against the RAW menu: catch_off_guard / combat_reflexes / deflect_arrows / dodge / improved_grapple / improved_unarmed_strike / scorpion_style / throw_anything (in _extract_class_bonus_feats)."),
+    "unarmed_strike":         (IMPLEMENTED,     "Auto-grants Improved Unarmed Strike at L1 (in _extract_class_bonus_feats). Damage scales by monk level + size via _monk_unarmed_damage_dice (Medium L1 = 1d6, L4 = 1d8, ..., L20 = 2d10; Small drops one die-step, Large gains one). Full Strength on damage. Override applied to attack_options[0] in combatant_from_character when the equipped weapon is unarmed_strike and class_levels[monk] > 0."),
+    "monk_bonus_feat_1":      (IMPLEMENTED,     "extra feat at L1; selected via class_choices. Validated against the RAW menu: catch_off_guard / combat_reflexes / deflect_arrows / dodge / improved_grapple / scorpion_style / throw_anything (in _extract_class_bonus_feats). Improved Unarmed Strike NOT in the menu — granted free by the Unarmed Strike class feature."),
 
     # Paladin
     "aura_of_good":           (OUT_OF_SCOPE,    "tag-only"),
@@ -357,7 +357,7 @@ FEATS: dict[str, Entry] = {
     "eschew_materials":      (NOT_IMPLEMENTED, "skip cheap material components"),
     "great_fortitude":       (IMPLEMENTED,     "+2 fort save"),
     "improved_initiative":   (IMPLEMENTED,     "+4 initiative"),
-    "improved_unarmed_strike": (NOT_IMPLEMENTED, "treats unarmed as armed; lethal damage option"),
+    "improved_unarmed_strike": (PARTIAL,         "Granted free by the monk's Unarmed Strike class feature at L1 (in _extract_class_bonus_feats). The feat is data-only — it currently doesn't add separate combat modifiers (the per-class scaling and full-Str-on-damage live in combatant_from_character's monk override). GAP: the 'unarmed strikes count as armed' rule for non-monk holders of the feat (e.g., a fighter who picks Improved Unarmed Strike) is not separately wired."),
     "iron_will":             (IMPLEMENTED,     "+2 will save"),
     "lightning_reflexes":    (IMPLEMENTED,     "+2 ref save"),
     "persuasive":            (IMPLEMENTED,     "+2 diplomacy/intimidate"),

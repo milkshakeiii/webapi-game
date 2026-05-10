@@ -15,7 +15,7 @@
       "knowledge_history", "knowledge_religion", "perception",
       "perform", "profession", "ride", "sense_motive", "stealth", "swim"
     ],
-    "weapon_proficiencies": "club_crossbow_dagger_handaxe_javelin_kama_nunchaku_quarterstaff_sai_shortspear_short_sword_shuriken_siangham_sling_spear_temple_sword_unarmed",
+    "weapon_proficiencies": "club_crossbow_dagger_handaxe_javelin_kama_nunchaku_quarterstaff_sai_shortspear_short_sword_shuriken_siangham_sling_spear_temple_sword_unarmed_strike",
     "armor_proficiencies": "none",
     "class_features": [
       {"id": "ac_bonus_monk", "name": "AC Bonus", "summary": "When unarmored and unencumbered: add Wis bonus (if positive) and +1/4 levels above 1 to AC and CMD."},
