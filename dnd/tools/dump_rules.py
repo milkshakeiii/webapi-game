@@ -60,6 +60,12 @@ PAGES: list[tuple[str, str, str]] = [
     ("exploration-movement",
      "https://www.d20pfsrd.com/gamemastering/exploration-movement",
      "Exploration and Movement"),
+    ("animal-companions",
+     "https://www.d20pfsrd.com/classes/core-classes/druid/animal-companions/",
+     "Animal Companions"),
+    ("familiars",
+     "https://www.d20pfsrd.com/classes/core-classes/wizard/familiar",
+     "Familiars"),
 ]
 
 USER_AGENT = "Mozilla/5.0 (compatible; webapi-game/dump_rules)"
