@@ -1,0 +1,31 @@
+{
+  "id": "water",
+  "name": "Water",
+  "summary": "You can manipulate water and mist and ice, conjure creatures of water, and resist cold.",
+  "granted_power_l1": {
+    "id": "icicle",
+    "name": "Icicle",
+    "summary": "As a standard action, you can fire an icicle from your finger, targeting any foe within 30 feet as a ranged touch attack. The icicle deals 1d6 points of cold damage + 1 point for every two cleric levels you possess. You can use this ability a number of times per day equal to 3 + your Wisdom modifier.",
+    "kind": "active_icicle_ranged_touch",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "range_squares": 6,
+    "damage_dice": "1d6",
+    "damage_plus_per_two_levels": 1,
+    "damage_type": "cold"
+  },
+  "spells_per_level": {
+    "1": "obscuring_mist",
+    "2": "fog_cloud",
+    "3": "water_breathing",
+    "4": "control_water",
+    "5": "ice_storm",
+    "6": "cone_of_cold",
+    "7": "elemental_body_iv_water",
+    "8": "horrid_wilting",
+    "9": "elemental_swarm_water"
+  },
+  "higher_level_powers": [
+    {"level": 6, "id": "cold_resistance",
+     "summary": "Resist cold 10; increases to 20 at L12; immunity at L20."}
+  ]
+}

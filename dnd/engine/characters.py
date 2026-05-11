@@ -428,6 +428,71 @@ _ARCANE_BOND_TYPES: frozenset[str] = frozenset({
 })
 
 
+# RAW (Foundry pack ``Nature Bond``): druids pick one cleric domain
+# from a restricted list (Air, Animal, Earth, Fire, Plant, Water, or
+# Weather) or instead bond with an animal companion.
+_DRUID_NATURE_BOND_DOMAINS: frozenset[str] = frozenset({
+    "air", "animal", "earth", "fire", "plant", "water", "weather",
+})
+
+_DRUID_NATURE_BOND_TYPES: frozenset[str] = frozenset({
+    "domain", "animal_companion",
+})
+
+
+def validate_druid_nature_bond(
+    class_choices: dict,
+    registry: ContentRegistry | None = None,
+) -> None:
+    """Validate ``nature_bond_type`` per RAW.
+
+    RAW (Foundry pack ``Nature Bond``):
+
+    > At 1st level, a druid forms a bond with nature. This bond can
+    > take one of two forms. The first is a close tie to the natural
+    > world, granting the druid one of the following cleric domains:
+    > Air, Animal, Earth, Fire, Plant, Water, or Weather. ... The
+    > second option is to form a close bond with an animal companion.
+
+    - ``class_choices.nature_bond_type`` must be 'domain' or
+      'animal_companion'. Defaults to 'animal_companion' when omitted.
+    - If 'domain': ``class_choices.domains`` must be a list of exactly
+      one element from the druid-allowed CRB list.
+    - If 'animal_companion': ``class_choices.animal_companion_base_animal``
+      is required (the actual stat block / Combatant materialization
+      happens in a later phase).
+    """
+    # Default to animal_companion (the second RAW option) when
+    # omitted — and then enforce its companion-base-animal requirement
+    # below. Patrons who don't pick must still satisfy the chosen-form
+    # constraints.
+    bond = (class_choices or {}).get("nature_bond_type") or "animal_companion"
+    if bond not in _DRUID_NATURE_BOND_TYPES:
+        raise CharacterCreationError(
+            f"nature_bond_type {bond!r} not in the RAW menu "
+            f"(allowed: {sorted(_DRUID_NATURE_BOND_TYPES)})"
+        )
+    if bond == "domain":
+        domains = list((class_choices or {}).get("domains") or [])
+        if len(domains) != 1:
+            raise CharacterCreationError(
+                "druid nature bond (domain): exactly one domain is "
+                f"required (got {len(domains)})"
+            )
+        d = domains[0]
+        if d not in _DRUID_NATURE_BOND_DOMAINS:
+            raise CharacterCreationError(
+                f"druid domain {d!r} not in the RAW druid-allowed list "
+                f"(allowed: {sorted(_DRUID_NATURE_BOND_DOMAINS)})"
+            )
+    elif bond == "animal_companion":
+        if not (class_choices or {}).get("animal_companion_base_animal"):
+            raise CharacterCreationError(
+                "druid nature bond (animal_companion): "
+                "class_choices.animal_companion_base_animal required"
+            )
+
+
 def validate_wizard_arcane_bond(
     class_choices: dict,
     registry: ContentRegistry | None = None,
@@ -852,6 +917,8 @@ def create_character(
         validate_wizard_arcane_bond(request.class_choices, registry)
     elif class_.id == "sorcerer":
         validate_sorcerer_bloodline_choices(request.class_choices, registry)
+    elif class_.id == "druid":
+        validate_druid_nature_bond(request.class_choices, registry)
 
     # Skill ranks.
     validate_skill_ranks(class_, race, final_scores, request.skill_ranks, registry)

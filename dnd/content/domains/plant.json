@@ -1,0 +1,28 @@
+{
+  "id": "plant",
+  "name": "Plant",
+  "summary": "You find solace in the green, can grow defensive thorns, and can communicate with plants.",
+  "granted_power_l1": {
+    "id": "wooden_fist",
+    "name": "Wooden Fist",
+    "summary": "As a free action, your hands can become as hard as wood, covered in tiny thorns. While you have wooden fists, your unarmed strikes do not provoke attacks of opportunity, deal lethal damage, and gain a bonus on damage rolls equal to 1/2 your cleric level (minimum +1). You can use this ability for a number of rounds per day equal to 3 + your Wisdom modifier.",
+    "kind": "active_wooden_fist_pool",
+    "uses_per_day_formula": "3_plus_wis_mod",
+    "deferred_handler": true
+  },
+  "spells_per_level": {
+    "1": "entangle",
+    "2": "barkskin",
+    "3": "plant_growth",
+    "4": "command_plants",
+    "5": "wall_of_thorns",
+    "6": "repel_wood",
+    "7": "animate_plants",
+    "8": "control_plants",
+    "9": "shambler"
+  },
+  "higher_level_powers": [
+    {"level": 8, "id": "bramble_armor",
+     "summary": "Thorny growth provides +1 AC + 1/4 levels; attackers in melee take 1d6+1/2 level piercing."}
+  ]
+}

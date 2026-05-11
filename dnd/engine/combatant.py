@@ -2081,6 +2081,66 @@ def combatant_from_character(
             picked = sorted(ids)[0] if ids else None
             if picked and picked not in existing:
                 existing.append(picked)
+    # Druid nature bond (domain path): re-uses the cleric domain
+    # pipeline. Druid picks one CRB domain (Air/Animal/Earth/Fire/
+    # Plant/Water/Weather) via class_choices.domains; the resulting
+    # domain spells + bonus slot + L1 granted-power pool are applied
+    # the same way as for a cleric, with the druid's wisdom modifier
+    # filling the 3+wis_mod formula. The animal-companion path is
+    # validated but its Combatant materialization is deferred to
+    # slice 3.
+    druid_levels_dom = cumulative.class_levels.get("druid", 0)
+    if druid_levels_dom > 0:
+        bond = ((character.class_choices or {}).get("nature_bond_type")
+                or "animal_companion")
+        if bond == "domain":
+            wis_mod = final_scores.modifier("wis")
+            domain_ids = list(
+                (character.class_choices or {}).get("domains") or []
+            )
+            for did in domain_ids:
+                try:
+                    dom = registry.get_domain(did)
+                except Exception:
+                    continue
+                pwr = dom.granted_power_l1 or {}
+                pid = pwr.get("id")
+                if pid and not pwr.get("deferred_handler"):
+                    formula = pwr.get(
+                        "uses_per_day_formula", "3_plus_wis_mod",
+                    )
+                    if formula == "3_plus_wis_mod":
+                        uses = max(0, 3 + wis_mod)
+                    elif formula == "3_plus_class_level":
+                        uses = max(0, 3 + druid_levels_dom)
+                    else:
+                        uses = 0
+                    spell_slot_resources[f"domain_{pid}_uses"] = uses
+                # Fold domain spells into the druid's spell pool.
+                for lvl_str, sid in (dom.spells_per_level or {}).items():
+                    try:
+                        lvl = int(lvl_str)
+                    except ValueError:
+                        continue
+                    if sid not in registry.spells:
+                        continue
+                    cleric_domain_spells.setdefault(lvl, set()).add(sid)
+            # Bonus domain spell slot at each spell level the druid
+            # can cast.
+            for lvl in list(cleric_domain_spells.keys()):
+                slot_key = f"spell_slot_{lvl}"
+                if slot_key in spell_slot_resources:
+                    spell_slot_resources[f"domain_slot_{lvl}"] = 1
+            # Auto-prepare one domain spell per accessible level so
+            # the bonus slot has a spell to fill. RAW: "She must
+            # prepare the spell from her domain in this slot."
+            for lvl, ids in cleric_domain_spells.items():
+                castable.update(ids)
+                existing = prepared_spells.setdefault(lvl, [])
+                picked = sorted(ids)[0] if ids else None
+                if picked and picked not in existing:
+                    existing.append(picked)
+
     if bard_levels > 0:
         # Bardic Performance: 4 + Cha + 2/level beyond 1st rounds/day.
         spell_slot_resources["performance_rounds"] = (

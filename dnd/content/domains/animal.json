@@ -1,0 +1,28 @@
+{
+  "id": "animal",
+  "name": "Animal",
+  "summary": "You can speak with and befriend animals with ease. In addition, you treat Knowledge (nature) as a class skill.",
+  "granted_power_l1": {
+    "id": "speak_with_animals_domain",
+    "name": "Speak with Animals",
+    "summary": "You can speak with animals, as per the spell, for a number of rounds per day equal to 3 + your cleric level. (For druids: 3 + druid level.)",
+    "kind": "active_speak_with_animals_pool",
+    "uses_per_day_formula": "3_plus_class_level",
+    "deferred_handler": true
+  },
+  "spells_per_level": {
+    "1": "calm_animals",
+    "2": "hold_animal",
+    "3": "dominate_animal",
+    "4": "summon_natures_ally_iv",
+    "5": "beast_shape_iii",
+    "6": "antilife_shell",
+    "7": "animal_shapes",
+    "8": "summon_natures_ally_viii",
+    "9": "shapechange"
+  },
+  "higher_level_powers": [
+    {"level": 4, "id": "animal_companion_domain",
+     "summary": "Gain an animal companion using cleric-level - 3 / druid-level as effective druid level."}
+  ]
+}

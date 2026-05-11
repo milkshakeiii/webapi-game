@@ -30,6 +30,9 @@ def _make(class_id: str) -> object:
         alignment = "lawful_neutral"
     elif class_id == "sorcerer":
         class_choices = {"sorcerer_bloodline": "arcane"}
+    elif class_id == "druid":
+        class_choices = {"nature_bond_type": "animal_companion",
+                         "animal_companion_base_animal": "wolf"}
     elif class_id == "paladin":
         alignment = "lawful_good"
     elif class_id == "barbarian":
