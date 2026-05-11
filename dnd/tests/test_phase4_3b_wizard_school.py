@@ -284,5 +284,68 @@ class TestAbjurationResistance(unittest.TestCase):
         self.assertNotIn("fire", c.energy_resistance)
 
 
+# ---------------------------------------------------------------------------
+# Opposition-school cost-doubling at spell prep
+# ---------------------------------------------------------------------------
+
+
+class TestOppositionPrepCost(unittest.TestCase):
+    """RAW (Arcane School): 'A wizard who prepares spells from his
+    opposition schools must use two spell slots of that level to
+    prepare the spell.'"""
+
+    def _wiz_with_prep(self, school: str, opposition, prepared) -> object:
+        body = {
+            "name": "Mira", "race": "human", "class": "wizard",
+            "alignment": "true_neutral",
+            "ability_scores": {"method": "point_buy_20",
+                "scores": {"str": 10, "dex": 14, "con": 14,
+                           "int": 14, "wis": 10, "cha": 14}},
+            "free_ability_choice": "int",
+            "feats": ["dodge", "iron_will"],
+            "skill_ranks": {"spellcraft": 1, "knowledge_arcana": 1},
+            "bonus_languages": [],
+            "class_choices": {"wizard_school": school,
+                              "wizard_opposition_schools": opposition},
+            "spells_prepared": prepared,
+        }
+        return create_character(CharacterRequest.from_dict(body), REGISTRY)
+
+    def test_preparing_an_opposition_spell_consumes_two_slots(self):
+        # Evoker with abjuration opposition. Magic Missile is an
+        # evocation L1, so it costs 1 slot. Shield is an abjuration
+        # L1 — opposition for this evoker — so it should consume two
+        # L1 slots.
+        # Base L1 slots: 1 (class) + 1 (Int bonus) + 1 (specialist) = 3.
+        # Preparing Shield uses 2 → leaves 1 cast-capacity.
+        char = self._wiz_with_prep(
+            "evocation", ["abjuration", "necromancy"],
+            {"1": ["shield"]},
+        )
+        c = combatant_from_character(char, REGISTRY, (0, 0), "x")
+        self.assertEqual(c.resources.get("spell_slot_1"), 2)
+
+    def test_preparing_non_opposition_spell_costs_one_slot(self):
+        # Same evoker prepping Magic Missile (evocation, the
+        # specialty) costs 1 slot → 3 - 0 (no extra cost) = 3.
+        char = self._wiz_with_prep(
+            "evocation", ["abjuration", "necromancy"],
+            {"1": ["magic_missile"]},
+        )
+        c = combatant_from_character(char, REGISTRY, (0, 0), "x")
+        self.assertEqual(c.resources.get("spell_slot_1"), 3)
+
+    def test_universalist_pays_no_opposition_cost(self):
+        # Universalists have no opposition schools, so they shouldn't
+        # be penalized for prepping any school's spell. Universalist
+        # gets 2 L1 slots total (1 class + 1 Int bonus).
+        char = self._wiz_with_prep(
+            "universalist", [],
+            {"1": ["shield"]},  # Abjuration spell.
+        )
+        c = combatant_from_character(char, REGISTRY, (0, 0), "x")
+        self.assertEqual(c.resources.get("spell_slot_1"), 2)
+
+
 if __name__ == "__main__":
     unittest.main()

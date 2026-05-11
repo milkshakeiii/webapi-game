@@ -2113,6 +2113,30 @@ def combatant_from_character(
                     "wizard_opposition_schools",
                 ) or ()
             )
+            # RAW (Arcane School): "A wizard who prepares spells from
+            # his opposition schools must use two spell slots of that
+            # level to prepare the spell." We model this by deducting
+            # one extra spell_slot_<L> per opposition spell in
+            # prepared_spells — the spell still consumes one cast,
+            # but the daily pool shrinks by one for each opposition
+            # prep.
+            if wizard_opposition:
+                opp_set = set(wizard_opposition)
+                for lvl, sids in prepared_spells.items():
+                    extra_cost = 0
+                    for sid in sids:
+                        try:
+                            sp_obj = registry.get_spell(sid)
+                        except Exception:
+                            continue
+                        if (sp_obj.school or "").lower() in opp_set:
+                            extra_cost += 1
+                    slot_key = f"spell_slot_{lvl}"
+                    if (extra_cost > 0
+                            and slot_key in spell_slot_resources):
+                        spell_slot_resources[slot_key] = max(
+                            0, spell_slot_resources[slot_key] - extra_cost,
+                        )
             # L1 active power uses/day pool. RAW: most are
             # 3 + Int mod (Protective Ward / Acid Dart / Diviner's
             # Fortune / Dazing Touch / Force Missile / Blinding Ray /
