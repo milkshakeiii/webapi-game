@@ -5784,6 +5784,58 @@ def _do_cast(
             }))
             return
     spell_level = base_spell_level + metamagic_bump
+
+    # RAW (Arcane Bond, Foundry pack ``Arcane Bond``): "A bonded
+    # object can be used once per day to cast any one spell that the
+    # wizard has in his spellbook and is capable of casting, even if
+    # the spell is not prepared. ... This spell cannot be modified
+    # by metamagic feats or other abilities. The bonded object
+    # cannot be used to cast spells from the wizard's opposition
+    # schools." Gate first so the metamagic / opposition / use-pool
+    # rejections fire before the slot-count check.
+    use_bond = bool(args.get("use_arcane_bond"))
+    if use_bond:
+        if actor.template_kind != "character" or actor.template is None:
+            events.append(TurnEvent(actor.id, "skip", {
+                "reason": "use_arcane_bond: actor is not a player character",
+            }))
+            return
+        if int(actor.class_levels.get("wizard", 0)) <= 0:
+            events.append(TurnEvent(actor.id, "skip", {
+                "reason": "use_arcane_bond: actor has no wizard levels",
+            }))
+            return
+        if metamagic:
+            events.append(TurnEvent(actor.id, "skip", {
+                "reason": "use_arcane_bond: spell cannot be modified "
+                          "by metamagic per RAW",
+                "metamagic": metamagic,
+            }))
+            return
+        opposition = tuple(
+            (actor.template.class_choices or {}).get(
+                "wizard_opposition_schools",
+            ) or ()
+        )
+        if (spell.school or "").lower() in opposition:
+            events.append(TurnEvent(actor.id, "skip", {
+                "reason": "use_arcane_bond: cannot cast spells from "
+                          "opposition schools per RAW",
+                "spell_school": spell.school,
+                "opposition_schools": list(opposition),
+            }))
+            return
+        if actor.resources.get("arcane_bond_uses", 0) <= 0:
+            events.append(TurnEvent(actor.id, "skip", {
+                "reason": "use_arcane_bond: 1/day already spent",
+            }))
+            return
+        actor.resources["arcane_bond_uses"] = (
+            actor.resources.get("arcane_bond_uses", 0) - 1
+        )
+        # The bonded cast still consumes a slot (RAW: "treated like any
+        # other spell"). Falls through to the slot check below.
+
     slot_key = f"spell_slot_{spell_level}"
     remaining = actor.resources.get(slot_key, 0)
     # Cleric domain bonus slot: if the spell qualifies (cast at base
@@ -5840,10 +5892,13 @@ def _do_cast(
                 "reason": "spontaneous_cure: target spell must be a cure_X",
             }))
             return
+    use_bond = bool(args.get("use_arcane_bond"))
+
     if (
         actor.casting_type == "prepared"
         and has_any_prep
         and not spontaneous_cure
+        and not use_bond
     ):
         prep_list = actor.prepared_spells.get(base_spell_level, [])
         if spell_id not in prep_list:

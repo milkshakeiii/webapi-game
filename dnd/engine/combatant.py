@@ -2119,6 +2119,24 @@ def combatant_from_character(
                 # ``character.class_choices["sorcerer_dragon_type"]``,
                 # so no Combatant-level caching is needed here.
 
+    # Wizard arcane bond: pick from class_choices.arcane_bond_type
+    # (defaults to "amulet"). Seeds the 1/day "cast any spellbook
+    # spell" pool. RAW (Foundry pack ``Arcane Bond``, p. 78):
+    # "A bonded object can be used once per day to cast any one spell
+    # that the wizard has in his spellbook ... even if the spell is
+    # not prepared. This spell cannot be modified by metamagic feats
+    # or other abilities. The bonded object cannot be used to cast
+    # spells from the wizard's opposition schools."
+    # Familiar bond is deferred (handled with the animal-companion
+    # work). For the familiar form we skip seeding ``arcane_bond_uses``
+    # since the daily-cast power belongs to the bonded-object form.
+    if cumulative.class_levels.get("wizard", 0) > 0:
+        bond_type = ((character.class_choices or {}).get(
+            "arcane_bond_type",
+        ) or "amulet")
+        if bond_type != "familiar":
+            spell_slot_resources["arcane_bond_uses"] = 1
+
     # Wizard arcane school: pick from class_choices.wizard_school
     # (defaults to universalist), validate at character creation,
     # apply L1 passive power and seed the L1 active power's uses/day.

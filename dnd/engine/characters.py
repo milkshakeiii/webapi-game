@@ -421,6 +421,39 @@ def validate_sorcerer_bloodline_choices(
             )
 
 
+# RAW (Foundry pack ``Arcane Bond``): five bonded-object categories
+# plus the familiar form.
+_ARCANE_BOND_TYPES: frozenset[str] = frozenset({
+    "amulet", "ring", "staff", "wand", "weapon", "familiar",
+})
+
+
+def validate_wizard_arcane_bond(
+    class_choices: dict,
+    registry: ContentRegistry | None = None,
+) -> None:
+    """Validate ``arcane_bond_type`` per RAW.
+
+    RAW: "Objects that are the subject of an arcane bond must fall
+    into one of the following categories: amulet, ring, staff, wand,
+    or weapon. ... A familiar is a magical pet..."
+
+    Required at L1 per RAW; defaults to ``amulet`` at sheet build
+    when omitted (same defaulting style as ``wizard_school`` →
+    universalist). Explicit values must be in the RAW menu. Familiar
+    form requires an additional ``familiar_animal`` choice from the
+    familiar list (validated separately when bond_type == 'familiar').
+    """
+    bond = (class_choices or {}).get("arcane_bond_type")
+    if bond is None:
+        return  # defaults to "amulet" at sheet build
+    if bond not in _ARCANE_BOND_TYPES:
+        raise CharacterCreationError(
+            f"arcane_bond_type {bond!r} not in the RAW menu "
+            f"(allowed: {sorted(_ARCANE_BOND_TYPES)})"
+        )
+
+
 def validate_wizard_school_choices(
     class_choices: dict,
     registry: ContentRegistry | None = None,
@@ -816,6 +849,7 @@ def create_character(
     # Class-specific class_choices validation.
     if class_.id == "wizard":
         validate_wizard_school_choices(request.class_choices, registry)
+        validate_wizard_arcane_bond(request.class_choices, registry)
     elif class_.id == "sorcerer":
         validate_sorcerer_bloodline_choices(request.class_choices, registry)
 
