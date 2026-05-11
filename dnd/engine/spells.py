@@ -390,6 +390,8 @@ def cast_spell(
     cl = caster_level(caster)
     dc = save_dc_for(caster, spell_level, registry)
     metamagic = list(metamagic or [])
+    # Sorcerer bloodline arcana DC bonuses (fey / infernal / arcane).
+    dc += _bloodline_dc_bonus(caster, spell, metamagic)
 
     outcome = SpellOutcome(
         spell_id=spell.id,
@@ -581,6 +583,7 @@ def _handle_magic_missile(
     ranged = bool(eff.get("ranged_touch_attack"))
     total_damage = 0
     hit_count = 0
+    total_dice = 0  # for draconic bloodline arcana per-die accounting
     for i in range(count):
         if requires_touch:
             hit, log_lines = resolve_spell_touch_attack(
@@ -593,6 +596,12 @@ def _handle_magic_missile(
         r = roller.roll(dmg_dice, take_max=take_max)
         total_damage += r.total
         hit_count += 1
+        # Count dice rolled in this missile so draconic arcana can
+        # apply +1 per die. ``r.terms[0]`` holds the rolled-dice list
+        # when the expression contains a die term; we sum dice across
+        # all terms defensively.
+        for term in r.terms:
+            total_dice += len(getattr(term, "rolls", []) or [])
         out.log.append(f"  missile {i+1}: {r.breakdown}")
     # Intense Spells (Evocation school L1 passive): once per spell,
     # add max(1, wiz_lvl // 2) to evocation damage.
@@ -601,6 +610,15 @@ def _handle_magic_missile(
         if intense:
             total_damage += intense
             out.log.append(f"  intense_spells +{intense}")
+    # Draconic Bloodline arcana: +1 damage per die rolled on a
+    # matching-energy spell (RAW: "deals +1 point of damage per die
+    # rolled").
+    if hit_count > 0:
+        draconic = _draconic_damage_bonus_per_die(caster, spell)
+        if draconic and total_dice:
+            extra = draconic * total_dice
+            total_damage += extra
+            out.log.append(f"  draconic_arcana +{extra} ({total_dice}×{draconic})")
     damage_type = str(eff.get("damage_type", "force")) or None
     spell_tags = _spell_attack_tags(spell, damage_type)
     applied, energy_note = apply_typed_damage(
@@ -687,6 +705,15 @@ def _handle_scaling_damage(
         if intense:
             final += intense
             out.log.append(f"  intense_spells +{intense}")
+        # Draconic Bloodline arcana: +1 damage per die rolled on a
+        # matching-energy spell. For scaling-damage spells we know
+        # the die count from ``n_dice`` (set above).
+        draconic = _draconic_damage_bonus_per_die(caster, spell)
+        if draconic:
+            extra = draconic * n_dice
+            final += extra
+            out.log.append(f"  draconic_arcana +{extra} "
+                           f"({n_dice}×{draconic})")
     damage_type = str(eff.get("damage_type", "")) or None
     spell_tags = _spell_attack_tags(spell, damage_type)
     applied, energy_note = apply_typed_damage(
@@ -828,6 +855,88 @@ def resolve_spell_touch_attack(
         f"vs touch AC {target_ac} → {'HIT' if hit else 'MISS'}"
     ]
     return hit, log
+
+
+def _sorcerer_bloodline_id(caster: Combatant) -> str:
+    """Return the caster's sorcerer bloodline id, or empty if not a
+    sorcerer."""
+    if caster.template_kind != "character" or caster.template is None:
+        return ""
+    return str((caster.template.class_choices or {}).get(
+        "sorcerer_bloodline", "",
+    ))
+
+
+def _bloodline_dc_bonus(
+    caster: Combatant, spell: Spell, metamagic: list[str],
+) -> int:
+    """Bloodline arcana save-DC bonuses (Phase 4.3c).
+
+    - Fey (RAW Foundry pack ``Fey Bloodline``): +2 DC on
+      compulsion-subschool spells.
+    - Infernal (RAW ``Infernal Bloodline``): +2 DC on charm-
+      subschool spells.
+    - Arcane (RAW ``Arcane Bloodline``): +1 DC when at least one
+      applied metamagic raises the spell's slot level (does not
+      stack with itself; excludes Heighten Spell, which is the only
+      Heighten-style we model).
+
+    Other bloodlines: 0.
+    """
+    bl = _sorcerer_bloodline_id(caster)
+    if not bl:
+        return 0
+    if caster.class_levels.get("sorcerer", 0) <= 0:
+        return 0
+    subschool = (spell.subschool or "").lower()
+    if bl == "fey" and subschool == "compulsion":
+        return 2
+    if bl == "infernal" and subschool == "charm":
+        return 2
+    if bl == "arcane":
+        # Slot-increasing metamagic (per RAW: any feat that increases
+        # slot used by ≥1; ``heighten_spell`` is excluded). We
+        # currently model empower_spell (+2 slot), maximize_spell
+        # (+3 slot), extend_spell (+1 slot), quicken_spell (+4),
+        # still_spell (+1), silent_spell (+1).
+        slot_raising = {"empower_spell", "maximize_spell",
+                        "extend_spell", "quicken_spell",
+                        "still_spell", "silent_spell"}
+        if any(m in slot_raising for m in (metamagic or [])):
+            return 1
+    return 0
+
+
+def _draconic_damage_bonus_per_die(
+    caster: Combatant, spell: Spell,
+) -> int:
+    """Draconic Bloodline arcana: +1 damage per die rolled when the
+    spell's energy descriptor matches the sorcerer's chosen dragon
+    type. Matching is done via the bloodline JSON's
+    ``dragon_energy_by_type`` table.
+    """
+    bl = _sorcerer_bloodline_id(caster)
+    if bl != "draconic":
+        return 0
+    if caster.class_levels.get("sorcerer", 0) <= 0:
+        return 0
+    descriptors = {str(d).lower() for d in (spell.descriptors or [])}
+    if not descriptors:
+        return 0
+    dragon_type = (caster.template.class_choices or {}).get(
+        "sorcerer_dragon_type", "",
+    )
+    # Reuse the bloodline JSON's mapping rather than hardcoding here.
+    from .content import default_registry
+    try:
+        bl_data = default_registry().get_sorcerer_bloodline("draconic")
+    except Exception:
+        return 0
+    energy_map = (bl_data.raw or {}).get("dragon_energy_by_type", {})
+    matching = energy_map.get(dragon_type)
+    if matching and matching.lower() in descriptors:
+        return 1
+    return 0
 
 
 def _intense_spells_bonus(caster: Combatant, spell: Spell) -> int:

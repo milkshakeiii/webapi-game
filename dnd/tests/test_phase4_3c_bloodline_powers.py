@@ -263,5 +263,128 @@ class TestCorruptingTouch(unittest.TestCase):
         self.assertEqual(ev.detail.get("duration_rounds"), 2)
 
 
+# ---------------------------------------------------------------------------
+# Bloodline arcana — save DC bonuses (fey / infernal / arcane)
+# ---------------------------------------------------------------------------
+
+
+class TestBloodlineArcanaDC(unittest.TestCase):
+    """RAW: fey arcana → +2 DC on compulsion-subschool spells;
+    infernal arcana → +2 DC on charm-subschool spells; arcane arcana
+    → +1 DC when a slot-raising metamagic is applied."""
+
+    def test_fey_charm_person_no_bonus(self):
+        # Charm Person is charm subschool, not compulsion → fey gets
+        # no bonus.
+        from dnd.engine.spells import _bloodline_dc_bonus
+        char = _sorc("fey")
+        sorc = combatant_from_character(char, REGISTRY, (0, 0), "x")
+        spell = REGISTRY.get_spell("charm_person")
+        self.assertEqual(_bloodline_dc_bonus(sorc, spell, []), 0)
+
+    def test_fey_hold_person_gets_plus_2(self):
+        # Hold Person is enchantment/compulsion → fey +2.
+        from dnd.engine.spells import _bloodline_dc_bonus
+        char = _sorc("fey")
+        sorc = combatant_from_character(char, REGISTRY, (0, 0), "x")
+        spell = REGISTRY.get_spell("hold_person")
+        self.assertEqual(_bloodline_dc_bonus(sorc, spell, []), 2)
+
+    def test_infernal_charm_person_gets_plus_2(self):
+        # Charm Person is enchantment/charm → infernal +2.
+        from dnd.engine.spells import _bloodline_dc_bonus
+        char = _sorc("infernal")
+        sorc = combatant_from_character(char, REGISTRY, (0, 0), "x")
+        spell = REGISTRY.get_spell("charm_person")
+        self.assertEqual(_bloodline_dc_bonus(sorc, spell, []), 2)
+
+    def test_infernal_hold_person_no_bonus(self):
+        # Hold Person is compulsion, not charm → infernal no bonus.
+        from dnd.engine.spells import _bloodline_dc_bonus
+        char = _sorc("infernal")
+        sorc = combatant_from_character(char, REGISTRY, (0, 0), "x")
+        spell = REGISTRY.get_spell("hold_person")
+        self.assertEqual(_bloodline_dc_bonus(sorc, spell, []), 0)
+
+    def test_arcane_metamagic_dc_bonus(self):
+        # Empower Spell raises slot → arcane +1 DC.
+        from dnd.engine.spells import _bloodline_dc_bonus
+        char = _sorc("arcane")
+        sorc = combatant_from_character(char, REGISTRY, (0, 0), "x")
+        spell = REGISTRY.get_spell("magic_missile")
+        self.assertEqual(
+            _bloodline_dc_bonus(sorc, spell, ["empower_spell"]), 1,
+        )
+        # No metamagic → no bonus.
+        self.assertEqual(_bloodline_dc_bonus(sorc, spell, []), 0)
+
+
+# ---------------------------------------------------------------------------
+# Draconic bloodline arcana — +1 damage per die on matching energy
+# ---------------------------------------------------------------------------
+
+
+class TestDraconicArcanaDamage(unittest.TestCase):
+    """RAW: 'Whenever you cast a spell with an energy descriptor that
+    matches your draconic bloodline's energy type, that spell deals
+    +1 point of damage per die rolled.'"""
+
+    def _setup(self, dragon_type: str):
+        char = _sorc("draconic", sorcerer_dragon_type=dragon_type)
+        sorc = combatant_from_character(char, REGISTRY, (5, 5), "x")
+        goblin = combatant_from_monster(
+            REGISTRY.get_monster("goblin"), (7, 5), "y",
+        )
+        goblin.max_hp = 9999
+        goblin.current_hp = 9999
+        return sorc, goblin
+
+    def test_red_dragon_burning_hands_gets_bonus(self):
+        # Red dragon → fire energy. Burning Hands is fire-descriptor
+        # → +1 per die. Burning Hands at L1 rolls 1d4 → +1 total.
+        from dnd.engine.spells import cast_spell
+        sorc, goblin = self._setup("red")
+        spell = REGISTRY.get_spell("burning_hands")
+        outcome = cast_spell(
+            sorc, spell, [goblin], spell_level=1,
+            registry=REGISTRY, roller=Roller(seed=1),
+        )
+        arcana_lines = [line for line in outcome.log
+                        if "draconic_arcana" in line]
+        self.assertEqual(len(arcana_lines), 1)
+        self.assertIn("+1", arcana_lines[0])
+
+    def test_white_dragon_burning_hands_no_bonus(self):
+        # White dragon → cold energy. Burning Hands is fire → no bonus.
+        from dnd.engine.spells import cast_spell
+        sorc, goblin = self._setup("white")
+        spell = REGISTRY.get_spell("burning_hands")
+        outcome = cast_spell(
+            sorc, spell, [goblin], spell_level=1,
+            registry=REGISTRY, roller=Roller(seed=1),
+        )
+        arcana_lines = [line for line in outcome.log
+                        if "draconic_arcana" in line]
+        self.assertEqual(arcana_lines, [])
+
+    def test_non_draconic_sorcerer_no_bonus(self):
+        from dnd.engine.spells import cast_spell
+        char = _sorc("fey")
+        sorc = combatant_from_character(char, REGISTRY, (5, 5), "x")
+        goblin = combatant_from_monster(
+            REGISTRY.get_monster("goblin"), (7, 5), "y",
+        )
+        goblin.max_hp = 9999
+        goblin.current_hp = 9999
+        spell = REGISTRY.get_spell("burning_hands")
+        outcome = cast_spell(
+            sorc, spell, [goblin], spell_level=1,
+            registry=REGISTRY, roller=Roller(seed=1),
+        )
+        arcana_lines = [line for line in outcome.log
+                        if "draconic_arcana" in line]
+        self.assertEqual(arcana_lines, [])
+
+
 if __name__ == "__main__":
     unittest.main()
