@@ -594,6 +594,13 @@ def _handle_magic_missile(
         total_damage += r.total
         hit_count += 1
         out.log.append(f"  missile {i+1}: {r.breakdown}")
+    # Intense Spells (Evocation school L1 passive): once per spell,
+    # add max(1, wiz_lvl // 2) to evocation damage.
+    if hit_count > 0:
+        intense = _intense_spells_bonus(caster, spell)
+        if intense:
+            total_damage += intense
+            out.log.append(f"  intense_spells +{intense}")
     damage_type = str(eff.get("damage_type", "force")) or None
     spell_tags = _spell_attack_tags(spell, damage_type)
     applied, energy_note = apply_typed_damage(
@@ -672,6 +679,14 @@ def _handle_scaling_damage(
             final = raw_damage // 2
         elif passed and semantic in ("negates", "harmless_negates"):
             final = 0
+    # Intense Spells (Evocation school L1 passive): adds once per
+    # spell. Applied after save-halving so the bonus contributes
+    # cleanly to both half-damage and full-damage outcomes.
+    if final > 0:
+        intense = _intense_spells_bonus(caster, spell)
+        if intense:
+            final += intense
+            out.log.append(f"  intense_spells +{intense}")
     damage_type = str(eff.get("damage_type", "")) or None
     spell_tags = _spell_attack_tags(spell, damage_type)
     applied, energy_note = apply_typed_damage(
@@ -813,6 +828,31 @@ def resolve_spell_touch_attack(
         f"vs touch AC {target_ac} → {'HIT' if hit else 'MISS'}"
     ]
     return hit, log
+
+
+def _intense_spells_bonus(caster: Combatant, spell: Spell) -> int:
+    """Evoker's Intense Spells passive: when an evocation spell deals
+    hit-point damage, add max(1, wiz_lvl // 2) to the damage (once per
+    spell, not once per missile / ray). Other classes / non-evocation
+    spells: 0.
+
+    RAW (Foundry pack ``Intense Spells``): "Whenever you cast an
+    evocation spell that deals hit point damage, add 1/2 your wizard
+    level to the damage (minimum +1). This bonus only applies once to
+    a spell, not once per missile or ray ..."
+    """
+    if (spell.school or "").lower() != "evocation":
+        return 0
+    if caster.template_kind != "character" or caster.template is None:
+        return 0
+    school = ((caster.template.class_choices or {}).get("wizard_school")
+              or "")
+    if school != "evocation":
+        return 0
+    wl = int(caster.class_levels.get("wizard", 0))
+    if wl <= 0:
+        return 0
+    return max(1, wl // 2)
 
 
 def _spell_save_context(spell: Spell) -> dict:

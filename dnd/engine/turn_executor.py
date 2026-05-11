@@ -3523,6 +3523,511 @@ def _bardic_save_intercept(
     return best_total
 
 
+# ---------------------------------------------------------------------------
+# Wizard arcane-school L1 active powers
+# ---------------------------------------------------------------------------
+
+
+def _wizard_level(actor: Combatant) -> int:
+    return int(actor.class_levels.get("wizard", 0))
+
+
+def _intense_spells_bonus(actor: Combatant) -> int:
+    """Evoker's Intense Spells passive: +max(1, wiz_lvl // 2) damage on
+    an evocation hit-point-damage spell, applied once per spell."""
+    if actor.template_kind != "character" or actor.template is None:
+        return 0
+    school = ((actor.template.class_choices or {}).get("wizard_school")
+              or "universalist")
+    if school != "evocation":
+        return 0
+    wl = _wizard_level(actor)
+    if wl <= 0:
+        return 0
+    return max(1, wl // 2)
+
+
+def _do_wizard_school_power(
+    actor: Combatant,
+    power_id: str,
+    target: Combatant | None,
+    options: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    events: list[TurnEvent],
+) -> None:
+    """Dispatch a wizard arcane-school L1 active power.
+
+    All powers share the daily-pool gate (``wizard_school_<pid>_uses``
+    seeded as 3 + Int mod at character build) and are standard
+    actions. Per-power resolution lives in ``_WIZARD_POWER_HANDLERS``.
+    """
+    if _wizard_level(actor) <= 0:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "wizard_school_power: actor has no wizard levels",
+        }))
+        return
+    res_key = f"wizard_school_{power_id}_uses"
+    uses = actor.resources.get(res_key, 0)
+    if uses <= 0:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "wizard_school_power: no uses remaining",
+            "power_id": power_id,
+        }))
+        return
+    handler = _WIZARD_POWER_HANDLERS.get(power_id)
+    if handler is None:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "wizard_school_power: unknown power_id",
+            "power_id": power_id,
+        }))
+        return
+    # Consume one use up-front (RAW: per-day pool decrements
+    # regardless of hit/miss for SLA-style abilities).
+    actor.resources[res_key] = uses - 1
+    handler(actor, target, options, encounter, grid, roller, events)
+
+
+def _make_school_attack_profile(
+    actor: Combatant,
+    *,
+    weapon_name: str,
+    damage_dice: str,
+    damage_bonus: int,
+    damage_type: str,
+    crit_range: tuple[int, int] = (20, 20),
+    attack_bonus: int | None = None,
+    attack_tags: frozenset = frozenset(),
+) -> AttackProfile:
+    if attack_bonus is None:
+        # Default to BAB + Dex + size mod (standard ranged-touch math).
+        dex_mod = _ability_modifier(actor, "dex")
+        size_mod = _compute_mod(
+            0, actor.modifiers.for_target("size_attack")
+        )
+        attack_bonus = actor.bases.get("bab", 0) + dex_mod + size_mod
+    return AttackProfile(
+        attack_bonus=attack_bonus,
+        damage_dice=damage_dice,
+        damage_bonus=damage_bonus,
+        crit_range=crit_range,
+        crit_multiplier=2,
+        damage_type=damage_type,
+        name=weapon_name,
+        precision_damage_dice="0d0",
+        attack_tags=attack_tags,
+    )
+
+
+def _power_acid_dart(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Conjuration L1: ranged touch attack within 30 ft; 1d6 acid + 1 per
+    2 wizard levels. Ignores SR."""
+    _ranged_touch_damage(
+        actor, target, encounter, grid, roller, events,
+        power_id="acid_dart", range_squares=6, dice="1d6",
+        plus_per_two_levels=1, damage_type="acid",
+        attack_tags=frozenset({"magic", "acid"}),
+    )
+
+
+def _power_telekinetic_fist(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Transmutation L1: ranged touch within 30 ft; 1d4 bludgeoning + 1
+    per 2 wizard levels."""
+    _ranged_touch_damage(
+        actor, target, encounter, grid, roller, events,
+        power_id="telekinetic_fist", range_squares=6, dice="1d4",
+        plus_per_two_levels=1, damage_type="B",
+        attack_tags=frozenset({"magic"}),
+    )
+
+
+def _ranged_touch_damage(
+    actor: Combatant, target: Combatant | None, encounter, grid: Grid,
+    roller: Roller, events: list[TurnEvent], *,
+    power_id: str, range_squares: int, dice: str,
+    plus_per_two_levels: int, damage_type: str,
+    attack_tags: frozenset,
+) -> None:
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": f"{power_id}: no target"}))
+        return
+    if grid.distance_squares(actor.position, target.position) > range_squares:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": f"{power_id}: target out of range"}))
+        return
+    wl = _wizard_level(actor)
+    damage_bonus = plus_per_two_levels * (wl // 2)
+    profile = _make_school_attack_profile(
+        actor, weapon_name=power_id, damage_dice=dice,
+        damage_bonus=damage_bonus, damage_type=damage_type,
+        attack_tags=attack_tags,
+    )
+    outcome = resolve_attack(
+        profile, target.defense_profile(), roller, situation="touch",
+    )
+    detail = {
+        "power_id": power_id, "target_id": target.id,
+        "hit": outcome.hit, "crit": outcome.crit,
+        "damage": outcome.damage,
+        "trace": outcome.log,
+    }
+    if outcome.hit:
+        target.take_damage(outcome.damage)
+        _apply_post_damage_state(target)
+    events.append(TurnEvent(actor.id, f"wizard_power_{power_id}", detail))
+
+
+def _power_force_missile(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Evocation L1: automatic-hit force missile, 1d4 + intense_spells
+    bonus, force type, no save. ``As Magic Missile`` means auto-hit,
+    bypasses miss chance / cover."""
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "force_missile: no target"}))
+        return
+    if grid.distance_squares(actor.position, target.position) > 24:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "force_missile: out of range"}))
+        return
+    base_roll = roller.roll("1d4")
+    bonus = _intense_spells_bonus(actor)
+    total = int(base_roll.total) + bonus
+    target.take_damage(total)
+    _apply_post_damage_state(target)
+    events.append(TurnEvent(actor.id, "wizard_power_force_missile", {
+        "power_id": "force_missile",
+        "target_id": target.id,
+        "hit": True,  # automatic
+        "damage": total,
+        "intense_spells_bonus": bonus,
+        "die_roll": int(base_roll.total),
+    }))
+
+
+def _roll_touch_attack(
+    actor: Combatant, target: Combatant, *,
+    attack_bonus: int, roller: Roller,
+) -> tuple[bool, int, int]:
+    """Resolve a damage-less touch attack: d20 + attack_bonus vs touch
+    AC. Returns (hit, natural, total). Nat-1 auto-misses; nat-20
+    auto-hits. Used by school-power handlers that deliver only a
+    condition (Blinding Ray, Dazing Touch, Grave Touch)."""
+    touch_ac = target.ac("touch")
+    r = roller.roll("1d20")
+    nat = r.terms[0].rolls[0]
+    total = nat + attack_bonus
+    if nat == 1:
+        return False, nat, total
+    if nat == 20:
+        return True, nat, total
+    return total >= touch_ac, nat, total
+
+
+def _power_blinding_ray(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Illusion L1: ranged touch within 30 ft. On hit, blinded for 1
+    round; or dazzled for 1 round if the target has more HD than the
+    wizard's level."""
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "blinding_ray: no target"}))
+        return
+    if grid.distance_squares(actor.position, target.position) > 6:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "blinding_ray: out of range"}))
+        return
+    dex_mod = _ability_modifier(actor, "dex")
+    size_mod = _compute_mod(0, actor.modifiers.for_target("size_attack"))
+    attack_bonus = actor.bases.get("bab", 0) + dex_mod + size_mod
+    hit, nat, total = _roll_touch_attack(
+        actor, target, attack_bonus=attack_bonus, roller=roller,
+    )
+    detail = {
+        "power_id": "blinding_ray", "target_id": target.id,
+        "hit": hit, "natural": nat, "total": total,
+        "touch_ac": target.ac("touch"),
+    }
+    if hit:
+        target_hd = _target_hd(target)
+        wl = _wizard_level(actor)
+        cur_round = encounter.round_number if encounter else 1
+        condition = "dazzled" if target_hd > wl else "blinded"
+        target.add_condition(condition)
+        target.modifiers.add(Modifier(
+            value=0, type="untyped", target="_marker",
+            source=f"blinding_ray:{actor.id}",
+            expires_round=cur_round + 1,
+        ))
+        detail["condition"] = condition
+    events.append(TurnEvent(
+        actor.id, "wizard_power_blinding_ray", detail,
+    ))
+
+
+def _target_hd(target: Combatant) -> int:
+    """Total HD of ``target`` for the HD-cap comparison used by several
+    school powers (dazing/grave touch, blinding ray)."""
+    if target.template_kind == "character" and target.template is not None:
+        return int(getattr(target.template, "level", 1))
+    return _monster_hd(target)
+
+
+def _power_hand_of_the_apprentice(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Universalist L1: wielded melee weapon flies and strikes a foe up
+    to 30 ft away. Treated as a ranged attack with a thrown weapon, but
+    to-hit uses Int (not Dex); damage uses Str. Cannot perform a
+    combat maneuver."""
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "hand_of_the_apprentice: no target",
+        }))
+        return
+    if grid.distance_squares(actor.position, target.position) > 6:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "hand_of_the_apprentice: target out of range",
+        }))
+        return
+    if not actor.attack_options:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "hand_of_the_apprentice: no melee weapon wielded",
+        }))
+        return
+    primary = actor.attack_options[0]
+    if primary.get("type") != "melee":
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "hand_of_the_apprentice: primary weapon is not melee",
+        }))
+        return
+    int_mod = _ability_modifier(actor, "int")
+    size_mod = _compute_mod(
+        0, actor.modifiers.for_target("size_attack")
+    )
+    attack_bonus = actor.bases.get("bab", 0) + int_mod + size_mod
+    profile = AttackProfile(
+        attack_bonus=attack_bonus,
+        damage_dice=str(primary["damage"]),
+        damage_bonus=int(primary.get("damage_bonus", 0)),
+        crit_range=tuple(primary.get("crit_range", [20, 20])),
+        crit_multiplier=int(primary.get("crit_multiplier", 2)),
+        damage_type=str(primary.get("damage_type", "")),
+        name=f"hand_of_the_apprentice({primary.get('name', 'weapon')})",
+        precision_damage_dice="0d0",
+        attack_tags=frozenset({"magic"}),
+    )
+    outcome = resolve_attack(
+        profile, target.defense_profile(), roller, situation="normal",
+    )
+    detail = {
+        "power_id": "hand_of_the_apprentice",
+        "target_id": target.id,
+        "hit": outcome.hit, "crit": outcome.crit,
+        "damage": outcome.damage,
+        "trace": outcome.log,
+    }
+    if outcome.hit:
+        target.take_damage(outcome.damage)
+        _apply_post_damage_state(target)
+    events.append(TurnEvent(
+        actor.id, "wizard_power_hand_of_the_apprentice", detail,
+    ))
+
+
+def _power_diviners_fortune(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Divination L1: standard-action touch (any creature). Grants
+    insight +max(1, wiz_lvl // 2) on attack rolls, skill checks,
+    ability checks, and saving throws for 1 round."""
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "diviners_fortune: no target"}))
+        return
+    if not grid.is_adjacent(actor, target):
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "diviners_fortune: target not adjacent",
+        }))
+        return
+    wl = _wizard_level(actor)
+    bonus = max(1, wl // 2)
+    cur_round = encounter.round_number if encounter else 1
+    src = f"diviners_fortune:{actor.id}"
+    target.modifiers.remove_by_source(src)
+    for tgt in ("attack", "fort_save", "ref_save", "will_save",
+                "skill_check", "ability_check"):
+        target.modifiers.add(Modifier(
+            value=bonus, type="insight", target=tgt, source=src,
+            expires_round=cur_round + 1,
+        ))
+    events.append(TurnEvent(actor.id, "wizard_power_diviners_fortune", {
+        "power_id": "diviners_fortune",
+        "target_id": target.id,
+        "bonus": bonus,
+        "duration_rounds": 1,
+    }))
+
+
+def _power_dazing_touch(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Enchantment L1: melee touch attack. On hit, target dazed for 1
+    round. Creatures with more HD than wizard level are unaffected."""
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "dazing_touch: no target"}))
+        return
+    if not grid.is_adjacent(actor, target):
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "dazing_touch: target not adjacent",
+        }))
+        return
+    attack_bonus = (actor.bases.get("bab", 0)
+                    + _ability_modifier(actor, "str"))
+    hit, nat, total = _roll_touch_attack(
+        actor, target, attack_bonus=attack_bonus, roller=roller,
+    )
+    detail = {
+        "power_id": "dazing_touch", "target_id": target.id,
+        "hit": hit, "natural": nat, "total": total,
+        "touch_ac": target.ac("touch"),
+    }
+    if hit:
+        target_hd = _target_hd(target)
+        wl = _wizard_level(actor)
+        if target_hd > wl:
+            detail["condition"] = "unaffected_hd_cap"
+        else:
+            cur_round = encounter.round_number if encounter else 1
+            target.add_condition("dazed")
+            target.modifiers.add(Modifier(
+                value=0, type="untyped", target="_marker",
+                source=f"dazing_touch:{actor.id}",
+                expires_round=cur_round + 1,
+            ))
+            detail["condition"] = "dazed"
+    events.append(TurnEvent(
+        actor.id, "wizard_power_dazing_touch", detail,
+    ))
+
+
+def _power_grave_touch(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Necromancy L1: melee touch attack. On hit, target shaken for
+    max(1, wiz_lvl // 2) rounds. If target was already shaken from this
+    power, and has fewer HD than wizard level, it becomes frightened
+    for 1 round."""
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "grave_touch: no target"}))
+        return
+    if not grid.is_adjacent(actor, target):
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "grave_touch: target not adjacent",
+        }))
+        return
+    attack_bonus = (actor.bases.get("bab", 0)
+                    + _ability_modifier(actor, "str"))
+    hit, nat, total = _roll_touch_attack(
+        actor, target, attack_bonus=attack_bonus, roller=roller,
+    )
+    detail = {
+        "power_id": "grave_touch", "target_id": target.id,
+        "hit": hit, "natural": nat, "total": total,
+        "touch_ac": target.ac("touch"),
+    }
+    if hit:
+        wl = _wizard_level(actor)
+        cur_round = encounter.round_number if encounter else 1
+        was_shaken = "shaken" in target.conditions
+        if was_shaken and _target_hd(target) < wl:
+            target.add_condition("frightened")
+            target.modifiers.add(Modifier(
+                value=0, type="untyped", target="_marker",
+                source=f"grave_touch:{actor.id}",
+                expires_round=cur_round + 1,
+            ))
+            detail["condition"] = "frightened"
+        else:
+            target.add_condition("shaken")
+            duration = max(1, wl // 2)
+            target.modifiers.add(Modifier(
+                value=0, type="untyped", target="_marker",
+                source=f"grave_touch:{actor.id}",
+                expires_round=cur_round + duration,
+            ))
+            detail["condition"] = "shaken"
+            detail["duration_rounds"] = duration
+    events.append(TurnEvent(
+        actor.id, "wizard_power_grave_touch", detail,
+    ))
+
+
+def _power_protective_ward(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Abjuration L1: 10-ft radius centered on self, lasts Int-mod
+    rounds. All allies in area (including caster) gain +1 deflection
+    AC, +1 per 5 wizard levels."""
+    int_mod = _ability_modifier(actor, "int")
+    wl = _wizard_level(actor)
+    bonus = 1 + (wl // 5)
+    duration = max(0, int_mod)
+    cur_round = encounter.round_number if encounter else 1
+    src = f"protective_ward:{actor.id}"
+    affected: list[str] = []
+    for ir in encounter.initiative:
+        c = ir.combatant
+        if c.team != actor.team:
+            continue
+        if grid.distance_squares(actor.position, c.position) > 2:
+            continue
+        c.modifiers.remove_by_source(src)
+        c.modifiers.add(Modifier(
+            value=bonus, type="deflection", target="ac", source=src,
+            expires_round=cur_round + duration,
+        ))
+        affected.append(c.id)
+    events.append(TurnEvent(actor.id, "wizard_power_protective_ward", {
+        "power_id": "protective_ward",
+        "bonus": bonus,
+        "duration_rounds": duration,
+        "affected_ids": affected,
+    }))
+
+
+_WIZARD_POWER_HANDLERS = {
+    "acid_dart": _power_acid_dart,
+    "telekinetic_fist": _power_telekinetic_fist,
+    "force_missile": _power_force_missile,
+    "blinding_ray": _power_blinding_ray,
+    "hand_of_the_apprentice": _power_hand_of_the_apprentice,
+    "diviners_fortune": _power_diviners_fortune,
+    "dazing_touch": _power_dazing_touch,
+    "grave_touch": _power_grave_touch,
+    "protective_ward": _power_protective_ward,
+}
+
+
 def _character_level(actor: Combatant) -> int:
     """Total character level for the actor; 1 for monsters / unknowns."""
     if actor.template_kind != "character" or actor.template is None:

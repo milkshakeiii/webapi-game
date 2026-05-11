@@ -363,6 +363,24 @@ class BardicPerformance(Action):
 
 
 @dataclass(frozen=True)
+class WizardSchoolPower(Action):
+    """Standard action: invoke a wizard arcane-school L1 active power.
+
+    ``power_id`` is the school-power id from
+    ``ContentRegistry.arcane_schools[...].granted_power_l1_active``
+    (e.g., ``acid_dart``, ``force_missile``, ``protective_ward``).
+    ``target_id`` is the foe / ally target (empty for self-area
+    powers like Protective Ward). ``options`` carries per-power
+    extras (e.g., the ``energy_type`` choice for Resistance — though
+    that's a passive, this hook is reserved for any active power
+    that grows a parameter later)."""
+
+    power_id: str = ""
+    target_id: str = ""
+    options: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class DetectEvil(Action):
     """Standard action: detect alignment auras in a cone. ``target_id``
     is the focused-target form of the SLA (paladin AI's primary use
@@ -1097,6 +1115,16 @@ def apply_action(
         args = {"mode": action.mode, **dict(action.options)}
         _do_bardic_performance(
             actor, args, encounter, grid, {}, events,
+        )
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
+    if isinstance(action, WizardSchoolPower):
+        from .turn_executor import _do_wizard_school_power
+        target = grid.combatants.get(action.target_id) if action.target_id else None
+        _do_wizard_school_power(
+            actor, action.power_id, target, dict(action.options),
+            encounter, grid, roller, events,
         )
         slots.standard_used = True
         return ApplyResult(events=events)
@@ -1951,6 +1979,15 @@ def _compile_composite_intent(
                 if k not in ("mode", "kind")}
         return BardicPerformance(
             actor_id=actor.id, mode=mode, options=opts,
+        )
+    if name == "wizard_school_power":
+        opts = {k: v for k, v in args.items()
+                if k not in ("power", "power_id", "target")}
+        return WizardSchoolPower(
+            actor_id=actor.id,
+            power_id=str(args.get("power") or args.get("power_id") or ""),
+            target_id=(tid if target is not None else ""),
+            options=opts,
         )
     if name == "stunning_fist":
         return StunningFist(actor_id=actor.id, target_id=tid)
