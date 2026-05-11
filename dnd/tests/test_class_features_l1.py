@@ -28,6 +28,8 @@ def _make(class_id: str) -> object:
     elif class_id == "monk":
         class_choices = {"monk_bonus_feat": "combat_reflexes"}
         alignment = "lawful_neutral"
+    elif class_id == "sorcerer":
+        class_choices = {"sorcerer_bloodline": "arcane"}
     elif class_id == "paladin":
         alignment = "lawful_good"
     elif class_id == "barbarian":

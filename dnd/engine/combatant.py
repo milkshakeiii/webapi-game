@@ -1818,6 +1818,19 @@ def combatant_from_character(
                 class_skills.update(registry.get_class(cid).level_1.class_skills)
             except Exception:
                 pass
+    # RAW (Sorcerer Bloodline): each bloodline adds one class skill
+    # to the sorcerer's class-skill list. Read from the bloodline
+    # content selected via class_choices.sorcerer_bloodline.
+    if (cumulative.class_levels.get("sorcerer", 0) > 0
+            and registry is not None):
+        bl_id = (character.class_choices or {}).get("sorcerer_bloodline")
+        if bl_id:
+            try:
+                bl_data = registry.get_sorcerer_bloodline(bl_id)
+                if bl_data.class_skill:
+                    class_skills.add(bl_data.class_skill)
+            except Exception:
+                pass
     for skill_id, ranks in cumulative.skill_ranks.items():
         if ranks <= 0:
             continue
@@ -2076,6 +2089,35 @@ def combatant_from_character(
     if monk_levels > 0:
         # Stunning Fist: monk level + 1 (other classes can have it via feat).
         spell_slot_resources["stunning_fist_uses"] = monk_levels
+
+    # Sorcerer bloodline: pick from class_choices.sorcerer_bloodline,
+    # validated at character creation. Seeds the L1 active power's
+    # uses/day pool (3 + Cha mod) and records the dragon type for
+    # the draconic bloodline.
+    sorcerer_levels = cumulative.class_levels.get("sorcerer", 0)
+    if sorcerer_levels > 0 and registry is not None:
+        bl_id = (character.class_choices or {}).get("sorcerer_bloodline")
+        if bl_id:
+            try:
+                bl_data = registry.get_sorcerer_bloodline(bl_id)
+            except Exception:
+                bl_data = None
+            if bl_data is not None:
+                # L1 active power uses/day = 3 + Cha mod (RAW for the
+                # four CRB active powers: heavenly_fire, draconic_claws,
+                # laughing_touch, corrupting_touch).
+                active = bl_data.granted_power_l1_active or {}
+                apid = active.get("id")
+                if apid and active.get(
+                    "uses_per_day_formula"
+                ) == "3_plus_cha_mod":
+                    spell_slot_resources[f"sorcerer_bloodline_{apid}_uses"] = (
+                        max(0, 3 + cha_mod)
+                    )
+                # Draconic: the dragon type + matching energy are
+                # read at handler time from
+                # ``character.class_choices["sorcerer_dragon_type"]``,
+                # so no Combatant-level caching is needed here.
 
     # Wizard arcane school: pick from class_choices.wizard_school
     # (defaults to universalist), validate at character creation,

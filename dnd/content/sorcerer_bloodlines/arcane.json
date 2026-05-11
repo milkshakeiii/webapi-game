@@ -1,0 +1,36 @@
+{
+  "id": "arcane",
+  "name": "Arcane",
+  "summary": "Your family has always been skilled in the eldritch art of magic. While many of your relatives were accomplished wizards, your powers developed without the need for study and practice.",
+  "class_skill": "knowledge_arcana",
+  "bloodline_arcana": {
+    "id": "arcane_arcana_metamagic_dc",
+    "name": "Arcane Arcana",
+    "summary": "Whenever you apply a metamagic feat to a spell that increases the slot used by at least one level, increase the spell's DC by +1. This bonus does not stack with itself and does not apply to spells modified by the Heighten Spell feat.",
+    "kind": "passive_metamagic_dc_bonus",
+    "bonus": 1
+  },
+  "granted_power_l1_active": {
+    "id": "arcane_bond_sor",
+    "name": "Arcane Bond (Sorcerer)",
+    "summary": "At 1st level, you gain an arcane bond, as a wizard equal to your sorcerer level. Your sorcerer levels stack with any wizard levels you possess when determining the powers of your familiar or bonded object. Once per day, your bonded item allows you to cast any one of your spells known (unlike a wizard's bonded item, which allows him to cast any one spell in his spellbook). This ability does not allow you to have both a familiar and a bonded item.",
+    "kind": "passive_arcane_bond_deferred"
+  },
+  "bonus_spells": {
+    "3": "identify",
+    "5": "invisibility",
+    "7": "dispel_magic",
+    "9": "dimension_door",
+    "11": "overland_flight",
+    "13": "true_seeing",
+    "15": "greater_teleport",
+    "17": "power_word_stun",
+    "19": "wish"
+  },
+  "higher_level_powers": [
+    {"level": 3, "id": "metamagic_adept", "summary": "Apply a metamagic feat without increasing the casting time, X+1 times per day."},
+    {"level": 9, "id": "new_arcana", "summary": "Add one spell of your choice (up to highest level castable)."},
+    {"level": 15, "id": "school_power_arcane", "summary": "Pick a school; +2 DC vs that school."},
+    {"level": 20, "id": "arcane_apotheosis", "summary": "Consume magic-item charges to power a spell."}
+  ]
+}

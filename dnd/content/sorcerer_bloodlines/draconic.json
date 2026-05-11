@@ -1,0 +1,58 @@
+{
+  "id": "draconic",
+  "name": "Draconic",
+  "summary": "At some point in your family's history, a dragon interbred with your bloodline, and now its ancient power flows through your veins.",
+  "class_skill": "perception",
+  "requires_choice": "dragon_type",
+  "dragon_type_options": [
+    "black", "blue", "green", "red", "white",
+    "brass", "bronze", "copper", "gold", "silver"
+  ],
+  "dragon_energy_by_type": {
+    "black": "acid", "copper": "acid",
+    "blue": "electricity", "bronze": "electricity",
+    "green": "acid",
+    "red": "fire", "gold": "fire", "brass": "fire",
+    "silver": "cold", "white": "cold"
+  },
+  "bloodline_arcana": {
+    "id": "draconic_arcana_energy_damage",
+    "name": "Draconic Arcana",
+    "summary": "Whenever you cast a spell with an energy descriptor that matches your draconic bloodline's energy type, that spell deals +1 point of damage per die rolled.",
+    "kind": "passive_matching_energy_damage_per_die",
+    "bonus_per_die": 1
+  },
+  "granted_power_l1_active": {
+    "id": "draconic_claws",
+    "name": "Claws",
+    "summary": "Starting at 1st level, you can grow claws as a free action. These claws are treated as natural weapons, allowing you to make two claw attacks as a full attack action using your full base attack bonus. Each of these attacks deals 1d4 points of damage plus your Strength modifier (1d3 if you are Small). At 5th level, these claws are considered magic weapons for the purpose of overcoming DR. At 7th level, the damage increases by one step to 1d6 points of damage (1d4 if you are Small). At 11th level, these claws deal an additional 1d6 points of damage of your energy type on a successful hit. You can use your claws for a number of rounds per day equal to 3 + your Charisma modifier. These rounds do not need to be consecutive.",
+    "kind": "active_grow_claws",
+    "uses_per_day_formula": "3_plus_cha_mod",
+    "claw_damage_dice_by_size": {
+      "small": "1d3", "medium": "1d4", "large": "1d6"
+    },
+    "claw_damage_dice_at_l7_by_size": {
+      "small": "1d4", "medium": "1d6", "large": "1d8"
+    },
+    "magic_at_level": 5,
+    "energy_bonus_at_level": 11,
+    "energy_bonus_dice": "1d6"
+  },
+  "bonus_spells": {
+    "3": "mage_armor",
+    "5": "resist_energy",
+    "7": "fly",
+    "9": "fear",
+    "11": "spell_resistance",
+    "13": "form_of_the_dragon_i",
+    "15": "form_of_the_dragon_ii",
+    "17": "form_of_the_dragon_iii",
+    "19": "wish"
+  },
+  "higher_level_powers": [
+    {"level": 3, "id": "dragon_resistances", "summary": "Energy resistance 5 vs dragon-type energy; +1 natural armor."},
+    {"level": 9, "id": "breath_weapon", "summary": "60-ft cone or 30-ft line, 1d6/sorc level matching-energy damage."},
+    {"level": 15, "id": "wings", "summary": "Leathery wings, fly speed."},
+    {"level": 20, "id": "power_of_wyrms", "summary": "Immunity to dragon-type energy, paralysis, sleep."}
+  ]
+}

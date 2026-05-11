@@ -45,6 +45,7 @@ def _sorcerer_request(spells_known: dict | None = None) -> dict:
         "feats": ["combat_expertise"],
         "skill_ranks": {"spellcraft": 1, "knowledge_arcana": 1},
         "bonus_languages": [],
+        "class_choices": {"sorcerer_bloodline": "arcane"},
         "spells_known": spells_known,
     }
 

@@ -1,0 +1,40 @@
+{
+  "id": "infernal",
+  "name": "Infernal",
+  "summary": "Somewhere in your family's history, a relative made a deal with a devil, and that pact has influenced your family line ever since.",
+  "class_skill": "diplomacy",
+  "bloodline_arcana": {
+    "id": "infernal_arcana_charm_dc",
+    "name": "Infernal Arcana",
+    "summary": "Whenever you cast a spell of the charm subschool, increase the spell's DC by +2.",
+    "kind": "passive_subschool_dc_bonus",
+    "subschool": "charm",
+    "bonus": 2
+  },
+  "granted_power_l1_active": {
+    "id": "corrupting_touch",
+    "name": "Corrupting Touch",
+    "summary": "At 1st level, you can cause a creature to become shaken as a melee touch attack. This effect persists for a number of rounds equal to 1/2 your sorcerer level (minimum 1). Creatures shaken by this ability radiate an aura of evil, as if they were an evil outsider (see Detect Evil). Multiple touches do not stack, but they do add to the duration. You can use this ability a number of times per day equal to 3 + your Charisma modifier.",
+    "kind": "active_touch_shaken",
+    "uses_per_day_formula": "3_plus_cha_mod",
+    "duration_rounds_formula": "max(1, sorc_level // 2)",
+    "multiple_touches_add_duration": true
+  },
+  "bonus_spells": {
+    "3": "protection_from_good",
+    "5": "scorching_ray",
+    "7": "suggestion",
+    "9": "charm_monster",
+    "11": "dominate_person",
+    "13": "planar_binding",
+    "15": "greater_teleport",
+    "17": "power_word_stun",
+    "19": "meteor_swarm"
+  },
+  "higher_level_powers": [
+    {"level": 3, "id": "infernal_resistances", "summary": "Energy resistance 5 to fire; +2 vs poison; both increase at higher levels."},
+    {"level": 9, "id": "on_dark_wings", "summary": "Bat-like wings, fly speed 60 ft (good)."},
+    {"level": 15, "id": "power_of_the_pit", "summary": "Darkvision 60 ft; immune to fire; +4 vs poison."},
+    {"level": 20, "id": "pit_fiends_resilience", "summary": "DR 10/good; constant magic circle vs good."}
+  ]
+}

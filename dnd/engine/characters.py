@@ -367,6 +367,60 @@ _WIZARD_SPECIALTY_SCHOOLS: frozenset[str] = frozenset({
 })
 
 
+# RAW (Foundry pack ``Sorcerer Bloodline``): the five CRB bloodlines.
+_SORCERER_BLOODLINES_CRB: frozenset[str] = frozenset({
+    "arcane", "celestial", "draconic", "fey", "infernal",
+})
+
+# RAW (Foundry pack ``Draconic Bloodline``): "At 1st level, you must
+# select one of the chromatic or metallic dragon types. This choice
+# cannot be changed." Ten options (5 chromatic + 5 metallic).
+_DRACONIC_DRAGON_TYPES: frozenset[str] = frozenset({
+    "black", "blue", "green", "red", "white",
+    "brass", "bronze", "copper", "gold", "silver",
+})
+
+
+def validate_sorcerer_bloodline_choices(
+    class_choices: dict,
+    registry: ContentRegistry | None = None,
+) -> None:
+    """Validate ``sorcerer_bloodline`` + ``sorcerer_dragon_type`` per RAW.
+
+    RAW (Foundry pack ``Sorcerer Bloodline``):
+    > A sorcerer must pick one bloodline upon taking her first level
+    > of sorcerer. Once made, this choice cannot be changed.
+
+    Rules enforced:
+    - ``sorcerer_bloodline`` is required and must be in the 5 CRB
+      bloodlines.
+    - Draconic specifically requires ``sorcerer_dragon_type`` (any of
+      the 10 chromatic/metallic dragons).
+    """
+    bloodline = (class_choices or {}).get("sorcerer_bloodline")
+    if not bloodline:
+        raise CharacterCreationError(
+            "sorcerer requires class_choices.sorcerer_bloodline at L1"
+        )
+    if bloodline not in _SORCERER_BLOODLINES_CRB:
+        raise CharacterCreationError(
+            f"sorcerer_bloodline {bloodline!r} is not a recognized CRB "
+            f"bloodline (allowed: {sorted(_SORCERER_BLOODLINES_CRB)})"
+        )
+    if bloodline == "draconic":
+        dragon = (class_choices or {}).get("sorcerer_dragon_type")
+        if not dragon:
+            raise CharacterCreationError(
+                "draconic bloodline requires "
+                "class_choices.sorcerer_dragon_type at L1"
+            )
+        if dragon not in _DRACONIC_DRAGON_TYPES:
+            raise CharacterCreationError(
+                f"sorcerer_dragon_type {dragon!r} not in the RAW menu "
+                f"(allowed: {sorted(_DRACONIC_DRAGON_TYPES)})"
+            )
+
+
 def validate_wizard_school_choices(
     class_choices: dict,
     registry: ContentRegistry | None = None,
@@ -762,6 +816,8 @@ def create_character(
     # Class-specific class_choices validation.
     if class_.id == "wizard":
         validate_wizard_school_choices(request.class_choices, registry)
+    elif class_.id == "sorcerer":
+        validate_sorcerer_bloodline_choices(request.class_choices, registry)
 
     # Skill ranks.
     validate_skill_ranks(class_, race, final_scores, request.skill_ranks, registry)

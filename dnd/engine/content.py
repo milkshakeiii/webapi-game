@@ -188,6 +188,32 @@ class Domain:
 
 
 @dataclass
+class SorcererBloodline:
+    """Sorcerer bloodline (CRB).
+
+    A sorcerer picks one bloodline at L1 and cannot change it. The
+    bloodline grants:
+    - A bonus class skill (added to the sorcerer's class-skill list).
+    - A passive ``bloodline_arcana`` effect that modifies the
+      sorcerer's spellcasting (e.g., draconic +1 dmg/die on
+      matching-energy spells; fey +2 DC on compulsion).
+    - A series of L1+ bloodline powers (the L1 active power is the
+      one wired for v1).
+    - Bonus spells starting at L3 and bonus feats starting at L7
+      (deferred to higher-level work).
+    """
+    id: str
+    name: str
+    summary: str
+    class_skill: str               # canonical Skill id this bloodline adds
+    bloodline_arcana: dict         # {kind, ...}
+    granted_power_l1_active: dict
+    bonus_spells: dict[str, str] = field(default_factory=dict)
+    higher_level_powers: list[dict] = field(default_factory=list)
+    raw: dict = field(default_factory=dict)
+
+
+@dataclass
 class ArcaneSchool:
     """Wizard arcane school (CRB).
 
@@ -402,6 +428,20 @@ def _spell_from_dict(d: dict) -> Spell:
     )
 
 
+def _sorcerer_bloodline_from_dict(d: dict) -> SorcererBloodline:
+    return SorcererBloodline(
+        id=d["id"],
+        name=d["name"],
+        summary=d.get("summary", ""),
+        class_skill=d.get("class_skill", ""),
+        bloodline_arcana=dict(d.get("bloodline_arcana") or {}),
+        granted_power_l1_active=dict(d.get("granted_power_l1_active") or {}),
+        bonus_spells=dict(d.get("bonus_spells") or {}),
+        higher_level_powers=list(d.get("higher_level_powers") or []),
+        raw=d,
+    )
+
+
 def _arcane_school_from_dict(d: dict) -> ArcaneSchool:
     return ArcaneSchool(
         id=d["id"],
@@ -483,6 +523,7 @@ class ContentRegistry:
     spells: dict[str, Spell] = field(default_factory=dict)
     domains: dict[str, Domain] = field(default_factory=dict)
     arcane_schools: dict[str, ArcaneSchool] = field(default_factory=dict)
+    sorcerer_bloodlines: dict[str, SorcererBloodline] = field(default_factory=dict)
 
     @classmethod
     def from_directory(cls, content_dir: str | Path) -> ContentRegistry:
@@ -504,6 +545,7 @@ class ContentRegistry:
         registry._load_spells(root / "spells")
         registry._load_domains(root / "domains")
         registry._load_arcane_schools(root / "wizard_schools")
+        registry._load_sorcerer_bloodlines(root / "sorcerer_bloodlines")
         return registry
 
     def _load_domains(self, dirpath: Path) -> None:
@@ -521,6 +563,14 @@ class ContentRegistry:
             data = _load_json(path)
             school = _arcane_school_from_dict(data)
             self.arcane_schools[school.id] = school
+
+    def _load_sorcerer_bloodlines(self, dirpath: Path) -> None:
+        if not dirpath.is_dir():
+            return
+        for path in sorted(dirpath.glob("*.json")):
+            data = _load_json(path)
+            bl = _sorcerer_bloodline_from_dict(data)
+            self.sorcerer_bloodlines[bl.id] = bl
 
     def _load_races(self, dirpath: Path) -> None:
         if not dirpath.is_dir():
@@ -681,6 +731,17 @@ class ContentRegistry:
 
     def all_arcane_schools(self) -> Iterable[ArcaneSchool]:
         return self.arcane_schools.values()
+
+    def get_sorcerer_bloodline(self, bid: str) -> SorcererBloodline:
+        try:
+            return self.sorcerer_bloodlines[bid]
+        except KeyError:
+            raise ContentNotFoundError(
+                f"sorcerer bloodline not found: {bid!r}"
+            )
+
+    def all_sorcerer_bloodlines(self) -> Iterable[SorcererBloodline]:
+        return self.sorcerer_bloodlines.values()
 
     def get_domain(self, domain_id: str) -> Domain:
         try:

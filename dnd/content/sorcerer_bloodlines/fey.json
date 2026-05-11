@@ -1,0 +1,42 @@
+{
+  "id": "fey",
+  "name": "Fey",
+  "summary": "The capricious nature of the fey runs in your family due to some intermingling of fey blood or magic. You are more emotional than most, prone to bouts of joy and rage.",
+  "class_skill": "knowledge_nature",
+  "bloodline_arcana": {
+    "id": "fey_arcana_compulsion_dc",
+    "name": "Fey Arcana",
+    "summary": "Whenever you cast a spell of the compulsion subschool, increase the spell's DC by +2.",
+    "kind": "passive_subschool_dc_bonus",
+    "subschool": "compulsion",
+    "bonus": 2
+  },
+  "granted_power_l1_active": {
+    "id": "laughing_touch",
+    "name": "Laughing Touch",
+    "summary": "At 1st level, you can cause a creature to burst out laughing for 1 round as a melee touch attack. A laughing creature can only take a move action but can defend itself normally. Once a creature has been affected by laughing touch, it is immune to its effects for 24 hours. You can use this ability a number of times per day equal to 3 + your Charisma modifier. This is a mind-affecting effect.",
+    "kind": "active_touch_laughing",
+    "uses_per_day_formula": "3_plus_cha_mod",
+    "duration_rounds": 1,
+    "applies_condition": "laughing_touch",
+    "mind_affecting": true,
+    "immunity_hours": 24
+  },
+  "bonus_spells": {
+    "3": "entangle",
+    "5": "hideous_laughter",
+    "7": "deep_slumber",
+    "9": "poison",
+    "11": "tree_stride",
+    "13": "mislead",
+    "15": "phase_door",
+    "17": "irresistible_dance",
+    "19": "shapechange"
+  },
+  "higher_level_powers": [
+    {"level": 3, "id": "woodland_stride", "summary": "Move through brush at normal speed without taking damage."},
+    {"level": 9, "id": "fleeting_glance", "summary": "Invisibility for sorc-level rounds/day, breakable like greater invisibility."},
+    {"level": 15, "id": "fey_magic", "summary": "Reroll caster-level checks; pick area for advantage."},
+    {"level": 20, "id": "soul_of_the_fey", "summary": "Animals don't attack unless provoked; DR 10/cold iron; immune to poison; tree stride."}
+  ]
+}

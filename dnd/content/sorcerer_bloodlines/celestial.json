@@ -1,0 +1,44 @@
+{
+  "id": "celestial",
+  "name": "Celestial",
+  "summary": "Your bloodline is blessed by a celestial power, either from a celestial ancestor or through divine intervention.",
+  "class_skill": "heal",
+  "bloodline_arcana": {
+    "id": "celestial_arcana_summon_dr",
+    "name": "Celestial Arcana",
+    "summary": "Whenever you cast a spell of the summoning subschool, the creatures summoned gain DR/evil equal to 1/2 your sorcerer level (minimum 1). This does not stack with any DR the creature might have.",
+    "kind": "passive_summon_dr_evil",
+    "amount_formula": "max(1, sorc_level // 2)"
+  },
+  "granted_power_l1_active": {
+    "id": "heavenly_fire",
+    "name": "Heavenly Fire",
+    "summary": "Starting at 1st level, you can unleash a ray of heavenly fire as a standard action, targeting any foe within 30 feet as a ranged touch attack. Against evil creatures, this ray deals 1d4 points of damage + 1 for every two sorcerer levels you possess. This damage is divine and not subject to energy resistance or immunity. This ray heals good creatures of 1d4 points of damage + 1 for every two sorcerer levels you possess. A good creature cannot benefit from your heavenly fire more than once per day. Neutral creatures are neither harmed nor healed by this effect. You can use this ability a number of times per day equal to 3 + your Charisma modifier.",
+    "kind": "active_heavenly_fire",
+    "uses_per_day_formula": "3_plus_cha_mod",
+    "range_squares": 6,
+    "damage_dice": "1d4",
+    "damage_plus_per_two_levels": 1,
+    "damage_type": "divine",
+    "ignores_energy_resistance_and_immunity": true,
+    "heals_good_creatures": true,
+    "good_creature_once_per_day": true
+  },
+  "bonus_spells": {
+    "3": "bless",
+    "5": "resist_energy",
+    "7": "magic_circle_against_evil",
+    "9": "remove_curse",
+    "11": "flame_strike",
+    "13": "greater_dispel_magic",
+    "15": "banishment",
+    "17": "sunburst",
+    "19": "gate"
+  },
+  "higher_level_powers": [
+    {"level": 3, "id": "celestial_resistances", "summary": "Energy resistance 5 to acid and cold; increases at higher levels."},
+    {"level": 9, "id": "wings_of_heaven", "summary": "Feathered wings; fly speed 60 ft (good)."},
+    {"level": 15, "id": "conviction", "summary": "1/day reroll a save with +sorc-level."},
+    {"level": 20, "id": "ascension", "summary": "Immune to acid/cold/petrification; +4 vs poison; DR 10/evil."}
+  ]
+}
