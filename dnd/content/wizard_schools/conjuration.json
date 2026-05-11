@@ -1,0 +1,29 @@
+{
+  "id": "conjuration",
+  "name": "Conjuration",
+  "summary": "The conjurer focuses on the study of summoning monsters and magic alike to bend to his will.",
+  "is_universalist": false,
+  "granted_power_l1_passive": {
+    "id": "summoners_charm",
+    "name": "Summoner's Charm",
+    "summary": "Whenever you cast a conjuration (summoning) spell, increase the duration by a number of rounds equal to 1/2 your wizard level (minimum 1). This increase is not doubled by Extend Spell. At 20th level, you can change the duration of all summon monster spells to permanent.",
+    "kind": "passive_extend_summon_duration",
+    "extra_rounds_formula": "max(1, wizard_level // 2)"
+  },
+  "granted_power_l1_active": {
+    "id": "acid_dart",
+    "name": "Acid Dart",
+    "summary": "As a standard action you can unleash an acid dart targeting any foe within 30 feet as a ranged touch attack. The acid dart deals 1d6 points of acid damage + 1 for every two wizard levels you possess. You can use this ability a number of times per day equal to 3 + your Intelligence modifier. This attack ignores spell resistance.",
+    "kind": "active_ranged_touch_damage",
+    "uses_per_day_formula": "3_plus_int_mod",
+    "range_squares": 6,
+    "damage_dice": "1d6",
+    "damage_plus_per_two_levels": 1,
+    "damage_type": "acid",
+    "ignores_spell_resistance": true
+  },
+  "higher_level_powers": [
+    {"level": 8, "id": "dimensional_steps",
+     "summary": "Teleport up to 30 ft per wizard level per day in 5-ft increments, no AoO."}
+  ]
+}

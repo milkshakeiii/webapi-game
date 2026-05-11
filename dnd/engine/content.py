@@ -188,6 +188,28 @@ class Domain:
 
 
 @dataclass
+class ArcaneSchool:
+    """Wizard arcane school (CRB).
+
+    A specialist wizard picks one school at L1 plus two opposition
+    schools (RAW: any non-specialty school may be an opposition
+    school). Each school grants two L1 powers — typically one active
+    SLA-style ability (uses/day = 3 + Int mod) and one passive bonus —
+    plus a higher-level power (L8 in CRB, deferred). The
+    ``universalist`` school has no opposition schools and no bonus
+    spell slot, but gains its own L1 active power.
+    """
+    id: str
+    name: str
+    summary: str
+    is_universalist: bool
+    granted_power_l1_active: dict   # {id, name, summary, kind, ...}
+    granted_power_l1_passive: dict  # {id, name, summary, kind, ...}
+    higher_level_powers: list[dict] = field(default_factory=list)
+    raw: dict = field(default_factory=dict)
+
+
+@dataclass
 class Monster:
     id: str
     name: str
@@ -380,6 +402,19 @@ def _spell_from_dict(d: dict) -> Spell:
     )
 
 
+def _arcane_school_from_dict(d: dict) -> ArcaneSchool:
+    return ArcaneSchool(
+        id=d["id"],
+        name=d["name"],
+        summary=d.get("summary", ""),
+        is_universalist=bool(d.get("is_universalist", False)),
+        granted_power_l1_active=dict(d.get("granted_power_l1_active") or {}),
+        granted_power_l1_passive=dict(d.get("granted_power_l1_passive") or {}),
+        higher_level_powers=list(d.get("higher_level_powers") or []),
+        raw=d,
+    )
+
+
 def _domain_from_dict(d: dict) -> Domain:
     return Domain(
         id=d["id"],
@@ -447,6 +482,7 @@ class ContentRegistry:
     shields: dict[str, Shield] = field(default_factory=dict)
     spells: dict[str, Spell] = field(default_factory=dict)
     domains: dict[str, Domain] = field(default_factory=dict)
+    arcane_schools: dict[str, ArcaneSchool] = field(default_factory=dict)
 
     @classmethod
     def from_directory(cls, content_dir: str | Path) -> ContentRegistry:
@@ -467,6 +503,7 @@ class ContentRegistry:
         registry._load_shields(root / "shields")
         registry._load_spells(root / "spells")
         registry._load_domains(root / "domains")
+        registry._load_arcane_schools(root / "wizard_schools")
         return registry
 
     def _load_domains(self, dirpath: Path) -> None:
@@ -476,6 +513,14 @@ class ContentRegistry:
             data = _load_json(path)
             domain = _domain_from_dict(data)
             self.domains[domain.id] = domain
+
+    def _load_arcane_schools(self, dirpath: Path) -> None:
+        if not dirpath.is_dir():
+            return
+        for path in sorted(dirpath.glob("*.json")):
+            data = _load_json(path)
+            school = _arcane_school_from_dict(data)
+            self.arcane_schools[school.id] = school
 
     def _load_races(self, dirpath: Path) -> None:
         if not dirpath.is_dir():
@@ -625,6 +670,17 @@ class ContentRegistry:
             return self.spells[spell_id]
         except KeyError:
             raise ContentNotFoundError(f"spell not found: {spell_id!r}")
+
+    def get_arcane_school(self, school_id: str) -> ArcaneSchool:
+        try:
+            return self.arcane_schools[school_id]
+        except KeyError:
+            raise ContentNotFoundError(
+                f"arcane school not found: {school_id!r}"
+            )
+
+    def all_arcane_schools(self) -> Iterable[ArcaneSchool]:
+        return self.arcane_schools.values()
 
     def get_domain(self, domain_id: str) -> Domain:
         try:

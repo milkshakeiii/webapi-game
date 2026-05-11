@@ -1,0 +1,28 @@
+{
+  "id": "evocation",
+  "name": "Evocation",
+  "summary": "Evokers revel in the raw power of magic, and can use it to create and destroy with shocking ease.",
+  "is_universalist": false,
+  "granted_power_l1_passive": {
+    "id": "intense_spells",
+    "name": "Intense Spells",
+    "summary": "Whenever you cast an evocation spell that deals hit point damage, add 1/2 your wizard level to the damage (minimum +1). This bonus only applies once to a spell, not once per missile or ray, and cannot be split between multiple missiles or rays. This bonus damage is not increased by Empower Spell or similar effects. This damage is of the same type as the spell.",
+    "kind": "passive_evocation_damage_bonus",
+    "bonus_formula": "max(1, wizard_level // 2)"
+  },
+  "granted_power_l1_active": {
+    "id": "force_missile",
+    "name": "Force Missile",
+    "summary": "As a standard action you can unleash a force missile that automatically strikes a foe, as Magic Missile. The force missile deals 1d4 points of damage plus the damage from your intense spells evocation power. This is a force effect. You can use this ability a number of times per day equal to 3 + your Intelligence modifier.",
+    "kind": "active_auto_force_missile",
+    "uses_per_day_formula": "3_plus_int_mod",
+    "range_squares": 24,
+    "damage_dice": "1d4",
+    "applies_intense_spells": true,
+    "damage_type": "force"
+  },
+  "higher_level_powers": [
+    {"level": 8, "id": "elemental_wall",
+     "summary": "Wall of fire/cold/electricity/acid 1/day per 4 wizard levels."}
+  ]
+}

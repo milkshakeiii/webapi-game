@@ -28,7 +28,7 @@ from .characters import (
     racial_ability_modifiers,
 )
 from .combat import DefenseProfile
-from .content import ContentRegistry, Monster
+from .content import ArcaneSchool, ContentRegistry, Monster
 from .modifiers import Modifier, ModifierCollection, compute, mod
 from .sizes import get_size, size_modifiers
 
@@ -2077,6 +2077,124 @@ def combatant_from_character(
         # Stunning Fist: monk level + 1 (other classes can have it via feat).
         spell_slot_resources["stunning_fist_uses"] = monk_levels
 
+    # Wizard arcane school: pick from class_choices.wizard_school
+    # (defaults to universalist), validate at character creation,
+    # apply L1 passive power and seed the L1 active power's uses/day.
+    wizard_levels = cumulative.class_levels.get("wizard", 0)
+    wizard_school: ArcaneSchool | None = None
+    wizard_opposition: tuple[str, ...] = ()
+    wizard_school_energy_resistance: dict[str, int] = {}
+    if wizard_levels > 0:
+        int_mod = final_scores.modifier("int")
+        school_id = ((character.class_choices or {}).get("wizard_school")
+                     or "universalist")
+        try:
+            wizard_school = registry.get_arcane_school(school_id)
+        except Exception:
+            wizard_school = None
+        if wizard_school is not None:
+            # RAW (Arcane School): "specialist wizards receive an
+            # additional spell slot of each spell level he can cast,
+            # from 1st on up." Universalists do not.
+            if not wizard_school.is_universalist:
+                for slot_key, count in list(spell_slot_resources.items()):
+                    if not slot_key.startswith("spell_slot_"):
+                        continue
+                    try:
+                        slvl = int(slot_key.split("_")[-1])
+                    except ValueError:
+                        continue
+                    if slvl < 1:
+                        continue  # cantrips don't get the bonus
+                    if isinstance(count, int):
+                        spell_slot_resources[slot_key] = count + 1
+            wizard_opposition = tuple(
+                (character.class_choices or {}).get(
+                    "wizard_opposition_schools",
+                ) or ()
+            )
+            # L1 active power uses/day pool. RAW: most are
+            # 3 + Int mod (Protective Ward / Acid Dart / Diviner's
+            # Fortune / Dazing Touch / Force Missile / Blinding Ray /
+            # Grave Touch / Telekinetic Fist / Hand of the Apprentice).
+            active_pwr = wizard_school.granted_power_l1_active or {}
+            apid = active_pwr.get("id")
+            if apid and active_pwr.get(
+                "uses_per_day_formula"
+            ) == "3_plus_int_mod":
+                spell_slot_resources[f"wizard_school_{apid}_uses"] = (
+                    max(0, 3 + int_mod)
+                )
+            # L1 passive power: apply scalar modifiers per the
+            # passive's ``kind``. Other passives (extend-illusions,
+            # power-over-undead, etc.) are wired at handler time.
+            passive = wizard_school.granted_power_l1_passive or {}
+            kind = passive.get("kind", "")
+            src = f"wizard_school:{school_id}"
+            if kind == "passive_initiative_bonus":
+                # Forewarned: +max(1, wiz_lvl//2) to initiative.
+                init_bonus = max(1, wizard_levels // 2)
+                coll.add(mod(init_bonus, "untyped", "initiative", src))
+            elif kind == "passive_skill_bonus":
+                # Enchanting Smile: +2 enhancement to bluff/diplomacy/
+                # intimidate, +1 per 5 wizard levels, max +6.
+                bonus = min(
+                    int(passive.get("max_bonus", 6)),
+                    int(passive.get("bonus_at_l1", 2))
+                    + (wizard_levels // 5)
+                    * int(passive.get("bonus_per_5_levels", 1)),
+                )
+                btype = passive.get("bonus_type", "enhancement")
+                for skill_id in (passive.get("skills") or []):
+                    coll.add(mod(bonus, btype, f"skill:{skill_id}", src))
+            elif kind == "passive_physical_enhancement":
+                # Physical Enhancement: +1 enhancement to one physical
+                # ability (chosen daily). Default to Str if no choice.
+                # Scales +1 / 5 levels to max +5.
+                bonus = min(
+                    int(passive.get("max_bonus", 5)),
+                    int(passive.get("bonus_at_l1", 1))
+                    + (wizard_levels // 5)
+                    * int(passive.get("bonus_per_5_levels", 1)),
+                )
+                ability = ((character.class_choices or {}).get(
+                    "wizard_physical_enhancement_choice",
+                ) or "str")
+                if ability not in (passive.get("ability_options")
+                                   or ["str", "dex", "con"]):
+                    raise ValueError(
+                        f"wizard_physical_enhancement_choice "
+                        f"{ability!r} not in RAW menu"
+                    )
+                coll.add(mod(bonus, passive.get("bonus_type", "enhancement"),
+                             f"ability:{ability}", src))
+            elif kind == "passive_energy_resistance":
+                # Abjuration Resistance: 5 at L1 (+5 at L11; immunity
+                # at L20). Energy type chosen daily; default to fire.
+                # Tracked via Combatant.energy_resistance (a dict the
+                # spells module reads at damage time).
+                if wizard_levels >= 20:
+                    # Immunity tracked as a very large resistance value
+                    # — spells.apply_typed_damage already treats
+                    # immunity via the energy_immunity set; we'd add
+                    # to it here once that wiring exists. For now,
+                    # cap at the L11 value and note the L20-immunity
+                    # gap in coverage.
+                    amount = 10
+                else:
+                    amount = (10 if wizard_levels >= 11 else 5)
+                energy = ((character.class_choices or {}).get(
+                    "wizard_resistance_energy",
+                ) or passive.get("default_energy", "fire"))
+                wizard_school_energy_resistance[energy] = (
+                    wizard_school_energy_resistance.get(energy, 0)
+                    + amount
+                )
+            # Other passive kinds (extend-illusions, summoner's-charm,
+            # power-over-undead, extended-illusions, intense-spells,
+            # universalist-no-passive) require handler hooks rather
+            # than scalar modifiers — wired elsewhere.
+
     # ── Class-feature passive modifiers ─────────────────────────────
     druid_levels = cumulative.class_levels.get("druid", 0)
     ranger_levels = cumulative.class_levels.get("ranger", 0)
@@ -2264,6 +2382,7 @@ def combatant_from_character(
         castable_spells=castable,
         casting_type=casting_type,
         prepared_spells=prepared_spells,
+        energy_resistance=wizard_school_energy_resistance,
         death_threshold=-int(final_scores.get("con") or 10),
         weapon_proficiency_categories=weapon_profs,
         armor_proficiency_categories=armor_profs,

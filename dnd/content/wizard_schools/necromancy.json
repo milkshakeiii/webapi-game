@@ -1,0 +1,28 @@
+{
+  "id": "necromancy",
+  "name": "Necromancy",
+  "summary": "The dread and feared necromancer commands undead and uses the foul power of unlife against his enemies.",
+  "is_universalist": false,
+  "granted_power_l1_passive": {
+    "id": "power_over_undead",
+    "name": "Power over Undead",
+    "summary": "You receive Command Undead or Turn Undead as a bonus feat. You can channel energy a number of times per day equal to 3 + your Intelligence modifier, but only to use the selected feat. The DC to save against these feats is equal to 10 + 1/2 your wizard level + your Charisma modifier.",
+    "kind": "passive_bonus_feat_command_undead",
+    "bonus_feat_options": ["command_undead", "turn_undead"],
+    "uses_per_day_formula": "3_plus_int_mod",
+    "save_dc_formula": "10 + wizard_level // 2 + cha_mod"
+  },
+  "granted_power_l1_active": {
+    "id": "grave_touch",
+    "name": "Grave Touch",
+    "summary": "As a standard action, you can make a melee touch attack that causes a living creature to become shaken for a number of rounds equal to 1/2 your wizard level (minimum 1). If you touch a shaken creature with this ability, it becomes frightened for 1 round if it has fewer Hit Dice than your wizard level. You can use this ability a number of times per day equal to 3 + your Intelligence modifier.",
+    "kind": "active_touch_shaken",
+    "uses_per_day_formula": "3_plus_int_mod",
+    "duration_rounds_formula": "max(1, wizard_level // 2)",
+    "promote_to_frightened_when_already_shaken": true
+  },
+  "higher_level_powers": [
+    {"level": 8, "id": "life_sight",
+     "summary": "Blindsight 10 ft (living/undead only) for wizard level rounds/day."}
+  ]
+}

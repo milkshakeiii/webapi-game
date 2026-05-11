@@ -1,0 +1,28 @@
+{
+  "id": "illusion",
+  "name": "Illusion",
+  "summary": "Illusionists use magic to weave confounding images, figments, and phantoms to baffle and vex their foes.",
+  "is_universalist": false,
+  "granted_power_l1_passive": {
+    "id": "extended_illusions",
+    "name": "Extended Illusions",
+    "summary": "Any illusion spell you cast with a duration of \"concentration\" lasts a number of additional rounds equal to 1/2 your wizard level after you stop maintaining concentration (minimum +1 round).",
+    "kind": "passive_extend_concentration_illusions",
+    "extra_rounds_formula": "max(1, wizard_level // 2)"
+  },
+  "granted_power_l1_active": {
+    "id": "blinding_ray",
+    "name": "Blinding Ray",
+    "summary": "As a standard action you can fire a shimmering ray at any foe within 30 feet as a ranged touch attack. The ray causes creatures to be blinded for 1 round. Creatures with more Hit Dice than your wizard level are dazzled for 1 round instead. You can use this ability a number of times per day equal to 3 + your Intelligence modifier.",
+    "kind": "active_ranged_touch_blind",
+    "uses_per_day_formula": "3_plus_int_mod",
+    "range_squares": 6,
+    "duration_rounds": 1,
+    "blind_condition": "blinded",
+    "demote_condition_when_hd_exceeds_wizard_level": "dazzled"
+  },
+  "higher_level_powers": [
+    {"level": 8, "id": "invisibility_field",
+     "summary": "Greater invisibility on self for wizard level rounds/day."}
+  ]
+}

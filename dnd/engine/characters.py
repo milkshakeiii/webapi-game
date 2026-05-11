@@ -359,6 +359,75 @@ _MONK_L1_BONUS_FEAT_LIST: frozenset[str] = frozenset({
 })
 
 
+# RAW (Arcane School): the eight specialty schools + universalist.
+_WIZARD_SPECIALTY_SCHOOLS: frozenset[str] = frozenset({
+    "abjuration", "conjuration", "divination", "enchantment",
+    "evocation", "illusion", "necromancy", "transmutation",
+    "universalist",
+})
+
+
+def validate_wizard_school_choices(
+    class_choices: dict,
+    registry: ContentRegistry | None = None,
+) -> None:
+    """Validate ``wizard_school`` + ``wizard_opposition_schools`` per RAW.
+
+    RAW (Foundry pack ``Arcane School``):
+
+    > A wizard can choose to specialize in one school of magic ... A
+    > wizard that does not select a school receives the universalist
+    > school instead.
+
+    > A wizard that chooses to specialize in one school of magic must
+    > select two other schools as his opposition schools ...
+
+    Rules enforced:
+    - ``wizard_school`` must be in the 9 CRB schools (or absent, in
+      which case the wizard defaults to universalist at sheet-build).
+    - For specialists: exactly two opposition schools, neither being
+      the chosen specialty, both valid school ids.
+    - For universalists: opposition_schools must be empty / absent.
+    """
+    school = (class_choices or {}).get("wizard_school")
+    if school is None:
+        return  # defaults to universalist
+    if school not in _WIZARD_SPECIALTY_SCHOOLS:
+        raise CharacterCreationError(
+            f"wizard_school {school!r} is not a recognized school "
+            f"(allowed: {sorted(_WIZARD_SPECIALTY_SCHOOLS)})"
+        )
+    opposition_raw = (class_choices or {}).get("wizard_opposition_schools")
+    opposition = list(opposition_raw or [])
+    if school == "universalist":
+        if opposition:
+            raise CharacterCreationError(
+                "universalist wizards have no opposition schools; "
+                f"got {opposition!r}"
+            )
+        return
+    if len(opposition) != 2:
+        raise CharacterCreationError(
+            "specialist wizards must pick exactly two opposition "
+            f"schools (got {len(opposition)})"
+        )
+    if len(set(opposition)) != 2:
+        raise CharacterCreationError(
+            f"opposition schools must be distinct (got {opposition!r})"
+        )
+    for op in opposition:
+        if op not in _WIZARD_SPECIALTY_SCHOOLS or op == "universalist":
+            raise CharacterCreationError(
+                f"opposition school {op!r} is not a recognized "
+                f"specialty school"
+            )
+        if op == school:
+            raise CharacterCreationError(
+                f"opposition school {op!r} cannot equal the chosen "
+                f"specialty"
+            )
+
+
 def _extract_class_bonus_feats(
     class_: CharacterClass,
     class_choices: dict,
@@ -689,6 +758,10 @@ def create_character(
         if adaptability_feat not in all_feats:
             all_feats.append(adaptability_feat)
     validate_feats(all_feats, final_scores, class_, registry)
+
+    # Class-specific class_choices validation.
+    if class_.id == "wizard":
+        validate_wizard_school_choices(request.class_choices, registry)
 
     # Skill ranks.
     validate_skill_ranks(class_, race, final_scores, request.skill_ranks, registry)

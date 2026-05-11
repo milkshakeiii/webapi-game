@@ -1,0 +1,31 @@
+{
+  "id": "abjuration",
+  "name": "Abjuration",
+  "summary": "The abjurer uses magic against itself, and masters the art of defensive and warding magics.",
+  "is_universalist": false,
+  "granted_power_l1_passive": {
+    "id": "resistance_power",
+    "name": "Resistance",
+    "summary": "You gain resistance 5 to an energy type of your choice, chosen when you prepare spells. This resistance can be changed each day. At 11th level, this resistance increases to 10. At 20th level, this resistance changes to immunity to the chosen energy type.",
+    "kind": "passive_energy_resistance",
+    "default_energy": "fire",
+    "resistance_at_l1": 5,
+    "resistance_at_l11": 10,
+    "immunity_at_l20": true
+  },
+  "granted_power_l1_active": {
+    "id": "protective_ward",
+    "name": "Protective Ward",
+    "summary": "As a standard action, you can create a 10-foot-radius field of protective magic centered on you that lasts for a number of rounds equal to your Intelligence modifier. All allies in this area (including you) receive a +1 deflection bonus to their Armor Class. This bonus increases by +1 for every five wizard levels you possess. You can use this ability a number of times per day equal to 3 + your Intelligence modifier.",
+    "kind": "active_protective_ward",
+    "uses_per_day_formula": "3_plus_int_mod",
+    "radius_squares": 2,
+    "duration_rounds_formula": "int_mod",
+    "ac_bonus_at_l1": 1,
+    "ac_bonus_per_5_levels": 1
+  },
+  "higher_level_powers": [
+    {"level": 6, "id": "energy_absorption",
+     "summary": "3 × wizard level points of energy absorption per day, applied after immunity/vulnerability/resistance."}
+  ]
+}

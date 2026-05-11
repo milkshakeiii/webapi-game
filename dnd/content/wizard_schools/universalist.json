@@ -1,0 +1,27 @@
+{
+  "id": "universalist",
+  "name": "Universalist",
+  "summary": "Wizards who do not specialize (known as universalists) have the most diversity of all arcane spellcasters.",
+  "is_universalist": true,
+  "granted_power_l1_passive": {
+    "id": "universalist_no_passive",
+    "name": "(No passive L1 power)",
+    "summary": "Universalists do not gain a passive school power. Their only L1 power is the active Hand of the Apprentice.",
+    "kind": "passive_none"
+  },
+  "granted_power_l1_active": {
+    "id": "hand_of_the_apprentice",
+    "name": "Hand of the Apprentice",
+    "summary": "You cause your melee weapon to fly from your grasp and strike a foe before instantly returning to you. As a standard action, you can make a single attack using a melee weapon at a range of 30 feet. This attack is treated as a ranged attack with a thrown weapon, except that you add your Intelligence modifier on the attack roll instead of your Dexterity modifier (damage still relies on Strength). This ability cannot be used to perform a combat maneuver. You can use this ability a number of times per day equal to 3 + your Intelligence modifier.",
+    "kind": "active_thrown_melee_int_to_hit",
+    "uses_per_day_formula": "3_plus_int_mod",
+    "range_squares": 6,
+    "uses_int_for_attack_roll": true,
+    "uses_str_for_damage": true,
+    "cannot_perform_maneuver": true
+  },
+  "higher_level_powers": [
+    {"level": 8, "id": "metamagic_mastery",
+     "summary": "Apply a known metamagic feat once/day at L8, +1/day every 2 levels."}
+  ]
+}

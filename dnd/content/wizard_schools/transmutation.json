@@ -1,0 +1,32 @@
+{
+  "id": "transmutation",
+  "name": "Transmutation",
+  "summary": "Transmuters use magic to change the world around them.",
+  "is_universalist": false,
+  "granted_power_l1_passive": {
+    "id": "physical_enhancement",
+    "name": "Physical Enhancement",
+    "summary": "You gain a +1 enhancement bonus to one physical ability score (Strength, Dexterity, or Constitution). This bonus increases by +1 for every five wizard levels you possess to a maximum of +5 at 20th level. You can change this bonus to a new ability score when you prepare spells. At 20th level, this bonus applies to two physical ability scores of your choice.",
+    "kind": "passive_physical_enhancement",
+    "bonus_at_l1": 1,
+    "bonus_per_5_levels": 1,
+    "max_bonus": 5,
+    "bonus_type": "enhancement",
+    "ability_options": ["str", "dex", "con"]
+  },
+  "granted_power_l1_active": {
+    "id": "telekinetic_fist",
+    "name": "Telekinetic Fist",
+    "summary": "As a standard action you can strike with a telekinetic fist, targeting any foe within 30 feet as a ranged touch attack. The telekinetic fist deals 1d4 points of bludgeoning damage + 1 for every two wizard levels you possess. You can use this ability a number of times per day equal to 3 + your Intelligence modifier.",
+    "kind": "active_ranged_touch_damage",
+    "uses_per_day_formula": "3_plus_int_mod",
+    "range_squares": 6,
+    "damage_dice": "1d4",
+    "damage_plus_per_two_levels": 1,
+    "damage_type": "B"
+  },
+  "higher_level_powers": [
+    {"level": 8, "id": "change_shape",
+     "summary": "Polymorph self for wizard level rounds/day."}
+  ]
+}
