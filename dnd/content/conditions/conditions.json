@@ -20,6 +20,7 @@
   {"id": "helpless", "name": "Helpless", "summary": "Treated as having Dex 0; automatically fails Dex/Str saves; subject to coup de grace."},
   {"id": "incorporeal", "name": "Incorporeal", "summary": "No physical body. Immune to non-magical attacks; 50% chance to ignore most damage from corporeal sources, even magical."},
   {"id": "invisible", "name": "Invisible", "summary": "Cannot be seen. +2 to attack, ignores Dex bonus to AC of targets unaware. Reveals on attack (with most spells/effects)."},
+  {"id": "laughing", "name": "Laughing", "summary": "Bursts out laughing for 1 round. Can only take a move action; can defend normally. Source: Fey Bloodline (Laughing Touch)."},
   {"id": "nauseated", "name": "Nauseated", "summary": "Can take only a single move action per turn; cannot attack, cast, concentrate, or do anything requiring attention."},
   {"id": "panicked", "name": "Panicked", "summary": "Drops carried items, flees at full speed away from source. -2 saves and skills. No actions other than fleeing."},
   {"id": "paralyzed", "name": "Paralyzed", "summary": "Cannot move or act; treated as helpless. May still take purely mental actions."},

@@ -363,6 +363,22 @@ class BardicPerformance(Action):
 
 
 @dataclass(frozen=True)
+class SorcererBloodlinePower(Action):
+    """Standard action: invoke a sorcerer bloodline L1 active power.
+
+    ``power_id`` is the bloodline-power id from
+    ``ContentRegistry.sorcerer_bloodlines[...].granted_power_l1_active``
+    (heavenly_fire, draconic_claws, laughing_touch, corrupting_touch).
+    ``target_id`` is the foe / ally target (empty for self-area /
+    self-buff powers like Draconic Claws). ``options`` carries any
+    per-power extras."""
+
+    power_id: str = ""
+    target_id: str = ""
+    options: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class WizardSchoolPower(Action):
     """Standard action: invoke a wizard arcane-school L1 active power.
 
@@ -1129,6 +1145,16 @@ def apply_action(
         slots.standard_used = True
         return ApplyResult(events=events)
 
+    if isinstance(action, SorcererBloodlinePower):
+        from .turn_executor import _do_sorcerer_bloodline_power
+        target = grid.combatants.get(action.target_id) if action.target_id else None
+        _do_sorcerer_bloodline_power(
+            actor, action.power_id, target, dict(action.options),
+            encounter, grid, roller, events,
+        )
+        slots.standard_used = True
+        return ApplyResult(events=events)
+
     if isinstance(action, DetectEvil):
         from .turn_executor import _do_detect_evil
         args = {}
@@ -1689,6 +1715,15 @@ def _check_actor_intent_legality(
         )) or free:
             return "nauseated combatant can only take a single move action"
 
+    if "laughing" in conds:
+        # RAW (Fey Bloodline, Laughing Touch): "A laughing creature
+        # can only take a move action but can defend itself normally."
+        # Same shape as nauseated — only a move slot is allowed.
+        if any(s is not None for s in (
+            full_round, standard, swift, five_foot_step,
+        )) or free:
+            return "laughing combatant can only take a single move action"
+
     if "entangled" in conds and full_round is not None:
         kind = full_round.get("composite") or full_round.get("type")
         if kind in ("charge", "run"):
@@ -1984,6 +2019,15 @@ def _compile_composite_intent(
         opts = {k: v for k, v in args.items()
                 if k not in ("power", "power_id", "target")}
         return WizardSchoolPower(
+            actor_id=actor.id,
+            power_id=str(args.get("power") or args.get("power_id") or ""),
+            target_id=(tid if target is not None else ""),
+            options=opts,
+        )
+    if name == "sorcerer_bloodline_power":
+        opts = {k: v for k, v in args.items()
+                if k not in ("power", "power_id", "target")}
+        return SorcererBloodlinePower(
             actor_id=actor.id,
             power_id=str(args.get("power") or args.get("power_id") or ""),
             target_id=(tid if target is not None else ""),

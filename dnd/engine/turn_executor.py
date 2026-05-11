@@ -4028,6 +4028,332 @@ _WIZARD_POWER_HANDLERS = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Sorcerer bloodline L1 active powers
+# ---------------------------------------------------------------------------
+
+
+def _sorcerer_level(actor: Combatant) -> int:
+    return int(actor.class_levels.get("sorcerer", 0))
+
+
+def _do_sorcerer_bloodline_power(
+    actor: Combatant,
+    power_id: str,
+    target: Combatant | None,
+    options: dict,
+    encounter: Encounter,
+    grid: Grid,
+    roller: Roller,
+    events: list[TurnEvent],
+) -> None:
+    """Dispatch a sorcerer bloodline L1 active power.
+
+    Shared shape with the wizard-school dispatcher: daily-pool gate
+    on ``sorcerer_bloodline_<pid>_uses`` (seeded as 3 + Cha mod at
+    sheet build), per-power handler in ``_BLOODLINE_POWER_HANDLERS``.
+    """
+    if _sorcerer_level(actor) <= 0:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "sorcerer_bloodline_power: no sorcerer levels",
+        }))
+        return
+    res_key = f"sorcerer_bloodline_{power_id}_uses"
+    uses = actor.resources.get(res_key, 0)
+    if uses <= 0:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "sorcerer_bloodline_power: no uses remaining",
+            "power_id": power_id,
+        }))
+        return
+    handler = _BLOODLINE_POWER_HANDLERS.get(power_id)
+    if handler is None:
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "sorcerer_bloodline_power: unknown power_id",
+            "power_id": power_id,
+        }))
+        return
+    actor.resources[res_key] = uses - 1
+    handler(actor, target, options, encounter, grid, roller, events)
+
+
+def _target_alignment(target: Combatant) -> str:
+    """Return ``target``'s alignment string in lowercase (e.g.
+    ``"lawful_evil"``). For monsters, read from the template; for
+    characters, from the Character.alignment."""
+    if target.template is None:
+        return ""
+    return str(getattr(target.template, "alignment", "") or "").lower()
+
+
+def _is_evil(target: Combatant) -> bool:
+    align = _target_alignment(target)
+    if "evil" in align:
+        return True
+    # Evil-outsider / undead heuristic for monsters whose alignment
+    # field isn't filled in.
+    if target.template_kind == "monster":
+        subtypes = set(
+            getattr(target.template, "subtypes", None) or [],
+        )
+        if "evil" in subtypes:
+            return True
+    return False
+
+
+def _is_good(target: Combatant) -> bool:
+    align = _target_alignment(target)
+    return "good" in align
+
+
+def _power_heavenly_fire(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Celestial L1: ranged touch within 30 ft.
+    - Evil target: 1d4 + 1/2 sorc level divine damage (no ER/immunity).
+    - Good target: heals 1d4 + 1/2 sorc level (1/day per creature).
+    - Neutral target: no effect."""
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "heavenly_fire: no target"}))
+        return
+    if grid.distance_squares(actor.position, target.position) > 6:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "heavenly_fire: out of range"}))
+        return
+    sl = _sorcerer_level(actor)
+    bonus = sl // 2
+    if _is_good(target):
+        # Heal — uses/day restriction per-target. We track the daily
+        # cap on the target via "heavenly_fire_received_marker".
+        cur_round = encounter.round_number if encounter else 1
+        marker = target.resources.get(
+            "heavenly_fire_received_round", -1,
+        )
+        if marker >= 0:
+            events.append(TurnEvent(actor.id, "wizard_power_heavenly_fire", {
+                "power_id": "heavenly_fire",
+                "target_id": target.id,
+                "result": "good_already_benefited",
+            }))
+            return
+        heal_roll = roller.roll("1d4")
+        heal = int(heal_roll.total) + bonus
+        # Clamp at max_hp.
+        new_hp = min(target.max_hp, target.current_hp + heal)
+        actually_healed = new_hp - target.current_hp
+        target.current_hp = new_hp
+        target.resources["heavenly_fire_received_round"] = cur_round
+        events.append(TurnEvent(actor.id, "wizard_power_heavenly_fire", {
+            "power_id": "heavenly_fire",
+            "target_id": target.id,
+            "result": "healed_good",
+            "amount": actually_healed,
+            "die_roll": int(heal_roll.total),
+        }))
+        return
+    if _is_evil(target):
+        # Damage — ranged touch attack.
+        dex_mod = _ability_modifier(actor, "dex")
+        size_mod = _compute_mod(0, actor.modifiers.for_target("size_attack"))
+        attack_bonus = actor.bases.get("bab", 0) + dex_mod + size_mod
+        hit, nat, total = _roll_touch_attack(
+            actor, target, attack_bonus=attack_bonus, roller=roller,
+        )
+        detail = {
+            "power_id": "heavenly_fire",
+            "target_id": target.id,
+            "result": "damage_evil",
+            "hit": hit, "natural": nat, "total": total,
+            "touch_ac": target.ac("touch"),
+        }
+        if hit:
+            dmg_roll = roller.roll("1d4")
+            damage = int(dmg_roll.total) + bonus
+            # Divine damage bypasses ER / immunity per RAW.
+            target.take_damage(damage)
+            _apply_post_damage_state(target)
+            detail["damage"] = damage
+            detail["die_roll"] = int(dmg_roll.total)
+        events.append(TurnEvent(
+            actor.id, "wizard_power_heavenly_fire", detail,
+        ))
+        return
+    # Neutral: no effect.
+    events.append(TurnEvent(actor.id, "wizard_power_heavenly_fire", {
+        "power_id": "heavenly_fire",
+        "target_id": target.id,
+        "result": "neutral_no_effect",
+    }))
+
+
+def _power_draconic_claws(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Draconic L1: free-action grow claws. We model the daily pool
+    as rounds/day — invoking this composite "spends" one round of the
+    claws being active, replacing the actor's primary attack option
+    with a pair of claw natural attacks for the current round.
+
+    RAW: 2 claws at full BAB, 1d4+Str (1d3 if Small). At L5: magic;
+    at L7: 1d6 (1d4 if Small); at L11: +1d6 of matching energy. The
+    attack itself is up to the patron — invoking the composite just
+    sets up the claws; the actual attack happens via a normal
+    full_attack or single attack in the same turn.
+
+    For v1 we install the claw attack options on the sorcerer's
+    template-side ``attack_options`` and emit a "draconic_claws_set"
+    event. The claws persist for the current encounter round, then
+    naturally lapse when the actor's turn ticks past the marker.
+    """
+    sl = _sorcerer_level(actor)
+    size = (actor.size or "medium").lower()
+    cur_round = encounter.round_number if encounter else 1
+    # Damage scaling by size and level.
+    if sl >= 7:
+        damage_by_size = {"small": "1d4", "medium": "1d6", "large": "1d8"}
+    else:
+        damage_by_size = {"small": "1d3", "medium": "1d4", "large": "1d6"}
+    damage = damage_by_size.get(size, "1d4")
+    str_mod = _ability_modifier(actor, "str")
+    # Build the two claw attack options.
+    claw_proto = {
+        "type": "melee",
+        "name": "claw (draconic)",
+        "weapon_id": "draconic_claw",
+        "weapon_category": "natural",
+        "attack_bonus": actor.bases.get("bab", 0) + str_mod,
+        "damage": damage,
+        "damage_bonus": str_mod,
+        "damage_type": "S",
+        "crit_range": [20, 20],
+        "crit_multiplier": 2,
+        "range_increment": 0,
+        "wield": "natural",
+        "is_natural": True,
+    }
+    # Replace any prior claw entries (idempotent on re-invocation).
+    actor.attack_options = [a for a in actor.attack_options
+                            if a.get("weapon_id") != "draconic_claw"]
+    actor.attack_options.insert(0, dict(claw_proto))
+    actor.attack_options.insert(1, dict(claw_proto))
+    actor.resources["draconic_claws_active_round"] = cur_round
+    events.append(TurnEvent(actor.id, "wizard_power_draconic_claws", {
+        "power_id": "draconic_claws",
+        "result": "claws_grown",
+        "damage_dice_per_claw": damage,
+        "claw_count": 2,
+        "round_active": cur_round,
+    }))
+
+
+def _power_laughing_touch(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Fey L1: melee touch. On hit, target gets ``laughing`` for 1
+    round (only move-action allowed). Mind-affecting; 24h immunity
+    deferred."""
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "laughing_touch: no target"}))
+        return
+    if not grid.is_adjacent(actor, target):
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "laughing_touch: target not adjacent",
+        }))
+        return
+    attack_bonus = (actor.bases.get("bab", 0)
+                    + _ability_modifier(actor, "str"))
+    hit, nat, total = _roll_touch_attack(
+        actor, target, attack_bonus=attack_bonus, roller=roller,
+    )
+    detail = {
+        "power_id": "laughing_touch", "target_id": target.id,
+        "hit": hit, "natural": nat, "total": total,
+        "touch_ac": target.ac("touch"),
+    }
+    if hit:
+        # Mind-affecting immunity check.
+        if "mindless" in target.condition_immunities:
+            detail["condition"] = "mind_affecting_immune"
+        else:
+            cur_round = encounter.round_number if encounter else 1
+            target.add_condition("laughing")
+            target.modifiers.add(Modifier(
+                value=0, type="untyped", target="_marker",
+                source=f"laughing_touch:{actor.id}",
+                expires_round=cur_round + 1,
+            ))
+            detail["condition"] = "laughing"
+    events.append(TurnEvent(
+        actor.id, "wizard_power_laughing_touch", detail,
+    ))
+
+
+def _power_corrupting_touch(
+    actor: Combatant, target: Combatant | None, opts: dict,
+    encounter, grid: Grid, roller: Roller, events: list[TurnEvent],
+) -> None:
+    """Infernal L1: melee touch. On hit, target gets ``shaken`` for
+    max(1, sorc_lvl // 2) rounds. Multiple touches add to duration."""
+    if target is None:
+        events.append(TurnEvent(actor.id, "skip",
+                                {"reason": "corrupting_touch: no target"}))
+        return
+    if not grid.is_adjacent(actor, target):
+        events.append(TurnEvent(actor.id, "skip", {
+            "reason": "corrupting_touch: target not adjacent",
+        }))
+        return
+    attack_bonus = (actor.bases.get("bab", 0)
+                    + _ability_modifier(actor, "str"))
+    hit, nat, total = _roll_touch_attack(
+        actor, target, attack_bonus=attack_bonus, roller=roller,
+    )
+    detail = {
+        "power_id": "corrupting_touch", "target_id": target.id,
+        "hit": hit, "natural": nat, "total": total,
+        "touch_ac": target.ac("touch"),
+    }
+    if hit:
+        sl = _sorcerer_level(actor)
+        new_duration = max(1, sl // 2)
+        cur_round = encounter.round_number if encounter else 1
+        src = f"corrupting_touch:{actor.id}"
+        # RAW: multiple touches don't stack but add to duration. Find
+        # the prior marker's remaining duration before clearing.
+        existing = [m for m in target.modifiers.for_target("_marker")
+                    if m.source == src]
+        prior_remaining = 0
+        for m in existing:
+            prior_remaining = max(prior_remaining,
+                                  (m.expires_round or cur_round)
+                                  - cur_round)
+        target.modifiers.remove_by_source(src)
+        total_duration = prior_remaining + new_duration
+        target.add_condition("shaken")
+        target.modifiers.add(Modifier(
+            value=0, type="untyped", target="_marker",
+            source=src, expires_round=cur_round + total_duration,
+        ))
+        detail["condition"] = "shaken"
+        detail["duration_rounds"] = total_duration
+    events.append(TurnEvent(
+        actor.id, "wizard_power_corrupting_touch", detail,
+    ))
+
+
+_BLOODLINE_POWER_HANDLERS = {
+    "heavenly_fire": _power_heavenly_fire,
+    "draconic_claws": _power_draconic_claws,
+    "laughing_touch": _power_laughing_touch,
+    "corrupting_touch": _power_corrupting_touch,
+}
+
+
 def _character_level(actor: Combatant) -> int:
     """Total character level for the actor; 1 for monsters / unknowns."""
     if actor.template_kind != "character" or actor.template is None:
